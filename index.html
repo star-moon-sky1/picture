@@ -1,37 +1,99 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <title>星月集</title>
+    <meta charset="UTF-8">
+    <title>星月集 - 个人主页</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.8;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; 
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+        }
+
+        img {
+            border-radius: 50%;
+            border: 4px solid #e0e0e0;
+            transition: transform 0.3s ease; 
+            object-fit: cover;
+        }
+
+        img:hover {
+            transform: scale(1.05);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: #eee;
+            margin: 20px 0;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #e8f0fe;
+            color: #4285f4;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            margin: 5px;
+            font-weight: bold;
+        }
+
+        .contact-info {
+            font-size: 0.95em;
+            color: #666;
+            text-align: left;
+            display: inline-block;
+        }
+    </style>
 </head>
-<meta charset="UTF-8">
-<style>
-  body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    line-height: 1.6;
-    color: #444;
-    max-width: 600px;
-    margin: 40px auto;
-    padding: 20px;
-    background-color: #fafafa;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1); /* 给网页加个淡淡的阴影 */
-  }
-  img {
-    border: 5px solid white;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-  }
-</style>
 <body>
-    <h1>星月集</h1>
-    <hr>
-    <p>这里是星月集创建的第一个个人网页</p>
-    <p>欢迎访问！</p>
 
-    <p><strong>联系方式：+44 7516276294</strong></p>
-    <p><strong>邮箱：xingyueji8@gmail.com</strong></p>
-    <hr>
-   <img src="https://picui.ogmua.cn/s1/2026/03/11/69b167a5627e6.webp" alt="星月集.png" title="星月集.png"  width="200" height="200"/>
-    <h3>我正在学习的语言</h3>
-    <p>python、C、html</p>
+    <div class="container">
+        <img src="https://picui.ogmua.cn/s1/2026/03/11/69b167a5627e6.webp" alt="星月集" width="150" height="150"/>
+        
+        <h1>星月集</h1>
+        <p style="color: #888;">这里是星月集创建的第一个个人网页</p>
+        <p>✨ 欢迎访问！ ✨</p>
+        <p>随着本人所学知识逐渐深入，此网站将不断更新，欢迎持续关注！</p>
+        
+        <hr>
+
+        <div class="contact-info">
+            <p>📧 <strong>邮箱：</strong>1598116329@qq.com(国内) xingyueji8@gmail.com（国际）</p>
+            <p>📞 <strong>电话：</strong>+86 15010798669</p>
+        </div>
+        <img src="https://picui.ogmua.cn/s1/2026/03/11/69b176b02afc9.webp" alt="卡通形象.jpg" title="卡通形象.jpg" width="200" height="200" />
+        <hr>
+
+        <h3>我正在学习的语言</h3>
+        <div>
+            <span class="badge">Python</span>
+            <span class="badge">C</span>
+            <span class="badge">HTML</span>
+        </div>
+    </div>
+
 </body>
-
 </html>
