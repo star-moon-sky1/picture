@@ -5,8 +5,8 @@
     <title>星月集 - 个人主页</title>
     <style>
         body {
-            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            background-color: #f4f7f6;
+            font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: #f0f2f5;
             color: #333;
             line-height: 1.8;
             margin: 0;
@@ -18,86 +18,135 @@
 
         .container {
             background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            max-width: 450px;
+            padding: 50px 40px;
+            border-radius: 24px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.05);
+            max-width: 480px;
             width: 90%;
             text-align: center;
         }
 
         img {
             border-radius: 50%;
-            border: 4px solid #e0e0e0;
-            transition: transform 0.3s ease; 
+            border: 4px solid #fff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
             object-fit: cover;
         }
 
         img:hover {
-            transform: scale(1.05);
+            transform: scale(1.08) rotate(3deg);
         }
 
         h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
+            color: #1a1a1a;
+            font-size: 2em;
+            letter-spacing: 2px; 
+            margin: 20px 0 10px 0;
+            font-weight: 600;
+        }
+
+        .slogan {
+            color: #888;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .intro-text {
+            font-size: 0.95em;
+            color: #555;
+            padding: 0 10px;
+            margin-bottom: 25px;
         }
 
         hr {
             border: 0;
             height: 1px;
-            background: #eee;
-            margin: 20px 0;
+            background: linear-gradient(to right, transparent, #eee, transparent); 
+            margin: 30px 0;
+        }
+
+        .contact-info {
+            font-size: 0.92em;
+            color: #444;
+            text-align: left;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .contact-info p {
+            margin: 12px 0;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .contact-info strong {
+            color: #2c3e50;
+            min-width: 80px; 
+            display: inline-block;
+        }
+
+        .school-tag {
+            color: #a71d2a; 
+            font-weight: bold;
+        }
+
+        h3 {
+            font-size: 1.1em;
+            color: #2c3e50;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
         }
 
         .badge {
             display: inline-block;
-            background: #e8f0fe;
-            color: #4285f4;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.9em;
+            background: #f1f3f4;
+            color: #5f6368;
+            padding: 6px 16px;
+            border-radius: 8px; 
+            font-size: 0.85em;
             margin: 5px;
-            font-weight: bold;
+            font-weight: 500;
+            transition: all 0.3s;
         }
 
-        .contact-info {
-            font-size: 0.95em;
-            color: #666;
-            text-align: left;
-            display: inline-block;
+        .badge:hover {
+            background: #2c3e50;
+            color: white;
+            transform: translateY(-2px);
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <img src="https://picui.ogmua.cn/s1/2026/03/11/69b176b02afc9.webp" alt="星月集" width="150" height="150"/>
+        <img src="https://picui.ogmua.cn/s1/2026/03/11/69b176b02afc9.webp" alt="星月集" width="130" height="130"/>
         
         <h1>星月集</h1>
-        <p style="color: #888;">这里是星月集创建的第一个个人网页</p>
-        <p>✨ 欢迎访问！ ✨</p>
-        <p>随着本人所学知识逐渐深入，此网站将不断更新，欢迎持续关注！</p>
-        
-        <hr>
-
-        <div class="contact-info">
-            <p>📧 <strong>邮箱：</strong>1598116329@qq.com(国内) <br> xingyueji8@gmail.com（国际）</p>
-            <p>📞 <strong>电话：</strong>+86 15010798669</p>
-            <p> <strong>就读院校：北京理工大学 睿信书院 </strong> </p>
+        <p class="slogan">XING YUE JI · FIRST STEP</p>
+        <div class="intro-text">
+            <p>这里是星月集创建的第一个个人网页。✨</p>
+            <p style="font-size: 0.85em; opacity: 0.8;">随着所学知识逐渐深入，此网站将不断更新，欢迎持续关注！</p>
         </div>
         
         <hr>
 
-        <h3>我正在学习的语言</h3>
+        <div class="contact-info">
+            <p><span><strong>📧 邮箱</strong></span> <span>1598116329@qq.com (国内)<br>xingyueji8@gmail.com (国际)</span></p>
+            <p><span><strong>📞 电话</strong></span> <span>+86 15010798669</span></p>
+            <p><span><strong>🏫 院校</strong></span> <span class="school-tag">北京理工大学 · 睿信书院</span></p>
+        </div>
+        
+        <hr>
+
+        <h3>正在学习的语言</h3>
         <div>
             <span class="badge">Python</span>
-            <span class="badge">C</span>
-            <span class="badge">HTML</span>
+            <span class="badge">C Language</span>
+            <span class="badge">HTML / CSS</span>
         </div>
     </div>
 
 </body>
 </html>
-
-
-
