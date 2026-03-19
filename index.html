@@ -6,25 +6,22 @@
     <title>星月集 - 个人主页</title>
     <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
     <style>
-        /* ── 定义全局变量，方便统一修改风格 ── */
         :root {
-            --bg-color: #f4f7f6; /* 更柔和的背景色 */
+            --bg-color: #f4f7f6; 
             --card-bg: #ffffff;
-            --text-main: #2c3e50; /* 深青灰色，比纯黑更有质感 */
+            --text-main: #2c3e50; 
             --text-sub: #7f8c8d;
-            --accent-color: #16a085; /* 主题色：深青色，代表睿智与科技 */
+            --accent-color: #16a085;
             --school-color: #a71d2a;
             --shadow-soft: 0 10px 30px rgba(0,0,0,0.05);
             --shadow-hover: 0 20px 40px rgba(0,0,0,0.1);
             --transition-base: all 0.3s ease;
-            --transition-cubic: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); /* 灵动的回弹效果 */
+            --transition-cubic: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
         }
 
-        /* ── 核心布局 ── */
         body {
             font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
             background-color: var(--bg-color);
-            /* 增加一个极其微妙的渐变背景，增加视差层次 */
             background-image: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
             color: var(--text-main);
             line-height: 1.8;
@@ -35,7 +32,6 @@
             min-height: 100vh; 
         }
 
-        /* ── 入场动画定义 ── */
         @keyframes slideInUp {
             from { opacity: 0; transform: translateY(30px); }
             to { opacity: 1; transform: translateY(0); }
@@ -45,60 +41,52 @@
             to { opacity: 1; }
         }
 
-        /* ── 主容器：增加毛玻璃和浮动阴影 ── */
         .container {
             background: var(--card-bg);
-            padding: 60px 45px; /* 略微增加内边距，更透气 */
-            border-radius: 30px; /* 更圆润 */
+            padding: 60px 45px; 
+            border-radius: 30px;
             box-shadow: var(--shadow-soft);
             max-width: 480px;
             width: 90%;
             text-align: center;
             position: relative;
             overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.6); /* 增加微妙的高光边框 */
-            
-            /* 应用入场动画 */
+            border: 1px solid rgba(255,255,255,0.6);
             animation: slideInUp 0.8s ease-out both;
             
             transition: var(--shadow-hover), transform 0.3s ease;
         }
 
-        /* 卡片悬停时的灵动浮起效果 */
         .container:hover {
             box-shadow: var(--shadow-hover);
             transform: translateY(-5px);
         }
 
-        /* ── 头像部分 ── */
         .avatar-wrapper {
             position: relative;
             display: inline-block;
             margin-bottom: 10px;
-            animation: fadeIn 1s ease-out 0.3s both; /* 延迟淡入 */
+            animation: fadeIn 1s ease-out 0.3s both;
         }
 
         img {
             border-radius: 50%;
-            border: 5px solid #fff; /* 略微拉大白色边框 */
+            border: 5px solid #fff;
             box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-            /* 使用更灵动的回弹过渡 */
             transition: var(--transition-cubic); 
             object-fit: cover;
-            display: block; /* 消除底部空隙 */
+            display: block; 
         }
-
-        /* 保留并微调你的头像悬停效果 */
+        
         .avatar-wrapper:hover img {
             transform: scale(1.1) rotate(5deg);
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
         }
 
-        /* ── 文本层级 ── */
         h1 {
             color: #1a1a1a;
-            font-size: 2.2em; /* 略微放大，拉开层级 */
-            letter-spacing: 3px; /* 增加字间距，更有呼吸感 */
+            font-size: 2.2em; 
+            letter-spacing: 3px; 
             margin: 15px 0 5px 0;
             font-weight: 600;
             animation: fadeIn 1s ease-out 0.5s both;
@@ -106,10 +94,10 @@
 
         .slogan {
             color: var(--text-sub);
-            font-size: 0.85em; /* 略微缩小，作为副标题 */
+            font-size: 0.85em;
             letter-spacing: 2px;
             margin-bottom: 20px;
-            text-transform: uppercase; /* 强制大写，更有设计感 */
+            text-transform: uppercase; 
             opacity: 0.7;
             animation: fadeIn 1s ease-out 0.6s both;
         }
@@ -126,10 +114,9 @@
             font-size: 0.82em; 
             opacity: 0.7; 
             color: var(--text-sub);
-            font-style: italic; /* 意大利斜体，标记为附注 */
+            font-style: italic; 
         }
 
-        /* ── 极具层次感的分割线 ── */
         .separator-wrap {
             position: relative;
             margin: 35px 0;
@@ -139,25 +126,22 @@
         hr {
             border: 0;
             height: 1px;
-            /* 使用更柔和的渐变 */
             background: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.05), rgba(0,0,0,0)); 
         }
         
-        /* 在分割线中间增加一个小装饰点，增加视觉视觉中心 */
         .separator-wrap::after {
-            content: '✦'; /* 或者用你的星月符号 */
+            content: '✦'; 
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             background: var(--card-bg);
             padding: 0 10px;
-            color: var(--accent-color); /* 使用主题色修饰 */
+            color: var(--accent-color); 
             font-size: 0.9em;
             opacity: 0.5;
         }
 
-        /* ── 联系信息与院校 ── */
         .contact-info {
             font-size: 0.92em;
             color: #444;
@@ -168,7 +152,7 @@
         }
 
         .contact-info p {
-            margin: 15px 0; /* 略微拉开行距 */
+            margin: 15px 0;
             display: flex;
             align-items: flex-start;
             border-radius: 8px;
@@ -176,26 +160,24 @@
             padding: 5px;
         }
         
-        /* 悬停时背景轻微变色，增加交互感 */
         .contact-info p:hover {
             background-color: rgba(22, 160, 133, 0.03);
         }
 
         .contact-info strong {
             color: var(--text-main);
-            min-width: 90px; /* 略微拉宽，适应加粗图标 */
+            min-width: 90px; 
             display: inline-block;
             font-weight: 500;
         }
 
         .school-tag {
             color: var(--school-color); 
-            font-weight: 600; /* 加深字重 */
+            font-weight: 600; 
             position: relative;
             display: inline-block;
         }
         
-        /* 院校标签下方增加一条微妙的下划线高光 */
         .school-tag::after {
             content: '';
             position: absolute;
@@ -207,7 +189,6 @@
             border-radius: 2px;
         }
 
-        /* ── 标签部分 ── */
         h3 {
             font-size: 1.15em;
             color: var(--text-main);
@@ -226,26 +207,23 @@
             display: inline-block;
             background: #f1f3f4;
             color: var(--text-sub);
-            padding: 7px 18px; /* 增加内边距 */
-            border-radius: 10px; /* 对应容器圆角 */
+            padding: 7px 18px;
+            border-radius: 10px; 
             font-size: 0.85em;
             margin: 6px;
             font-weight: 500;
-            /* 使用灵动回弹过渡 */
             transition: var(--transition-cubic); 
             border: 1px solid transparent;
         }
 
-        /* 优化悬停效果 */
         .badge:hover {
-            background: var(--text-main); /* 悬停变为深青灰色 */
+            background: var(--text-main); 
             color: white;
-            transform: translateY(-3px) scale(1.05); /* 灵动浮起并微放大 */
+            transform: translateY(-3px) scale(1.05);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             border-color: rgba(255,255,255,0.1);
         }
         
-        /* 响应式微调 */
         @media (max-width: 400px) {
             .container {
                 padding: 40px 25px;
