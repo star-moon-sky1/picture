@@ -234,6 +234,64 @@
             .contact-info strong {
                 min-width: 75px;
             }
+            .script-entry-section {
+    padding: 60px 20px;
+    text-align: center;
+    background: transparent; 
+}
+
+.script-wrapper {
+    display: inline-block;
+    border-bottom: 1px solid rgba(199, 160, 64, 0.2); 
+    padding-bottom: 20px;
+}
+
+.script-prefix {
+    display: block;
+    font-size: 12px;
+    color: #c7a040;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+    opacity: 0.8;
+}
+
+.script-title-link {
+    font-family: "Noto Serif SC", serif; 
+    font-size: 32px;
+    color: #e8e0d0; 
+    text-decoration: none;
+    position: relative;
+    transition: all 0.4s ease;
+    display: inline-block;
+}
+.script-title-link:hover {
+    color: #ffffff;
+    text-shadow: 0 0 15px rgba(199, 160, 64, 0.5);
+    transform: translateY(-3px);
+}
+.script-title-link::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 1px;
+    bottom: -5px;
+    left: 50%;
+    background-color: #c7a040;
+    transition: all 0.4s ease;
+    transform: translateX(-50%);
+}
+
+.script-title-link:hover::after {
+    width: 100%;
+}
+
+.script-subtitle {
+    margin-top: 15px;
+    font-size: 14px;
+    color: rgba(232, 224, 208, 0.5);
+    font-style: italic;
+    letter-spacing: 1px;
+}
         }
     </style>
      
@@ -272,12 +330,13 @@
             <span class="badge">C Language</span>
             <span class="badge">HTML / CSS</span>
 
-            <section class="work-section">
-    <div class="project-card">
-        <div class="card-content">
-            <p>卢沟桥微电影剧本</p>
-            <a href="/Lugoubridge-screenplay.html" class="enter-btn">点击阅读</a>
-        </div>
+          <section class="script-entry-section">
+    <div class="script-wrapper">
+        <span class="script-prefix">作品展映 //</span>
+        <a href="/Lugoubridge-screenplay.html" class="script-title-link">
+            卢沟桥微电影剧本
+        </a>
+        <p class="script-subtitle">Bridge: From Lugou to the Peace</p>
     </div>
 </section>
         </div>
