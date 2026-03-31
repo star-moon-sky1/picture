@@ -7,8 +7,7 @@
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <style>
-    /* 原有基础样式 */
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+ { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
       --cream: #faf8f4;
       --sage: #73dbeb;
@@ -130,6 +129,7 @@
       <li><a onclick="showSection('about')" id="nav-about">关于我</a></li>
       <li><a onclick="showSection('portfolio')" id="nav-portfolio">作品集</a></li>
       <li><a onclick="showSection('contact')" id="nav-contact">联系方式</a></li>
+      <li><a onclick="showSection('ai-helper')" id="nav-ai-helper">AI 助手</a></li>
     </ul>
   </div>
 
@@ -142,6 +142,29 @@
         <p style="color: var(--warm-gray); font-size: .85rem; margin-top: .4rem;">此网站将不断更新新的内容，欢迎持续关注！</p>
       </div>
     </section>
+
+    <section id="ai-helper" class="content-section">
+  <h1>AI 助手</h1>
+  <p class="slogan">POWERED BY QWEN</p>
+  <div class="divider"><hr></div>
+  
+  <div id="chat-container" style="background: var(--sand); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid rgba(0,0,0,0.05);">
+    <div id="chat-messages" style="height: 300px; overflow-y: auto; margin-bottom: 1rem; font-size: 0.9rem; line-height: 1.6; display: flex; flex-direction: column; gap: 12px; padding-right: 5px;">
+      <div style="background: white; padding: 10px 14px; border-radius: 12px 12px 12px 2px; align-self: flex-start; color: var(--charcoal); box-shadow: 0 2px 4px rgba(0,0,0,0.03);">
+        你好！我是星月集的 AI 助手。你可以问我关于网站的任何问题。
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <input type="text" id="user-input" placeholder="输入问题..." 
+             style="flex: 1; padding: 0.8rem 1rem; border: 1px solid transparent; border-radius: 8px; font-family: inherit; outline: none; background: white;">
+      <button onclick="askQwen()" id="send-btn" 
+              style="background: var(--sage-dark); color: white; border: none; padding: 0 1.5rem; border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s;">
+        发送
+      </button>
+    </div>
+  </div>
+</section>
 
     <section id="about" class="content-section">
       <h1>关于我</h1>
@@ -186,6 +209,59 @@
       document.getElementById(sectionId).classList.add('active');
       document.getElementById('nav-' + sectionId).classList.add('active');
     }
+    
+    async function askQwen() {
+  const input = document.getElementById('user-input');
+  const messages = document.getElementById('chat-messages');
+  const btn = document.getElementById('send-btn');
+  const text = input.value.trim();
+
+  if (!text) return;
+
+  // 1. 立即显示用户消息
+  messages.innerHTML += `
+    <div style="background: var(--sage-dark); color: white; padding: 10px 14px; border-radius: 12px 12px 2px 12px; align-self: flex-end; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      ${text}
+    </div>`;
+  
+  input.value = '';
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+  btn.innerText = '...';
+
+  try {
+    // 2. 调用你刚刚部署的 Cloudflare Worker 接口
+    const response = await fetch("https://qwen-ai.1598116329.workers.dev", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: text })
+    });
+
+    if (!response.ok) throw new Error('API 请求失败');
+
+    const data = await response.json();
+    const aiResult = data.output.choices[0].message.content;
+
+    // 3. 显示 AI 的回答
+    messages.innerHTML += `
+      <div style="background: white; padding: 10px 14px; border-radius: 12px 12px 12px 2px; align-self: flex-start; color: var(--charcoal); border: 1px solid var(--sand); box-shadow: 0 2px 4px rgba(0,0,0,0.03);">
+        ${aiResult}
+      </div>`;
+  } catch (err) {
+    messages.innerHTML += `<div style="color: var(--accent); font-size: 0.8rem; text-align: center; margin-top: 10px;">暂时无法连接 AI，请检查网络或稍后再试。</div>`;
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.innerText = '发送';
+    messages.scrollTop = messages.scrollHeight; // 自动滚动到底部
+  }
+}
+
+// 绑定回车键发送
+document.getElementById('user-input').addEventListener('keypress', function (e) {
+  if (e.key === 'Enter') askQwen();
+});
   </script>
 
 </body>
