@@ -7,7 +7,7 @@
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <style>
- { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
       --cream: #faf8f4;
       --sage: #73dbeb;
@@ -95,8 +95,16 @@
     .sidebar-nav { list-style: none; width: 100%; margin-bottom: auto; }
     .sidebar-nav li { margin-bottom: .2rem; }
     .sidebar-nav a {
-      display: block; padding: .5rem .7rem; text-decoration: none;
-      color: var(--warm-gray); font-size: .83rem; border-radius: 6px; transition: all .18s; cursor: pointer;
+      display: block;
+      width: 100%;
+      overflow: hidden;
+      padding: .5rem .7rem;
+      text-decoration: none;
+      color: var(--warm-gray);
+      font-size: .83rem; 
+      border-radius: 6px; 
+      transition: all .18s;
+      cursor: pointer;
     }
     .sidebar-nav a:hover { background: var(--sand); color: var(--charcoal); }
     .sidebar-nav a.active { background: var(--sage-dark); color: #fff; }
