@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="星月集个人网站：文章、图片、北京旅行指南与版本更新。">
+  <title>星月集 - 个人主页</title>
+  <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --cream: #faf8f4;
+      --paper: #ffffff;
+      --ink: #203037;
+      --muted: #718087;
+      --line: #e4e7e4;
+      --blue: #217fba;
+      --cyan: #31bfc8;
+      --cyan-soft: #e2f7f8;
+      --sand: #eee8dd;
+      --accent: #c4735a;
+      --shadow: 0 18px 50px rgba(28, 52, 60, .10);
+      --radius: 18px;
+    }
+
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 80% 5%, rgba(49,191,200,.12), transparent 32%),
+        var(--cream);
+      overflow: hidden;
+    }
+    button, input, textarea, select { font: inherit; }
+    button { color: inherit; }
+    a { color: var(--blue); }
+
+    .app-shell { display: flex; min-height: 100dvh; height: 100dvh; }
+    .sidebar {
+      width: 250px;
+      flex: 0 0 250px;
+      height: 100dvh;
+      padding: 34px 22px 24px;
+      border-right: 1px solid var(--line);
+      background: rgba(250, 248, 244, .92);
+      backdrop-filter: blur(18px);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 28px; }
+    .avatar {
+      width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
+      border: 3px solid var(--paper); box-shadow: 0 0 0 2px var(--cyan);
+      transition: transform .2s ease;
+    }
+    .avatar:hover { transform: scale(1.04) rotate(-2deg); }
+    .brand h2 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: 1.28rem; }
+    .brand small { color: var(--muted); letter-spacing: .12em; }
+    .nav { display: grid; gap: 7px; }
+    .nav button {
+      width: 100%; border: 0; border-radius: 11px; background: transparent;
+      padding: 11px 13px; text-align: left; cursor: pointer; color: var(--muted);
+      transition: .18s ease;
+    }
+    .nav button:hover { background: var(--sand); color: var(--ink); }
+    .nav button.active { background: linear-gradient(135deg, var(--blue), var(--cyan)); color: white; box-shadow: 0 8px 18px rgba(33,127,186,.22); }
+    .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
+    .studio-link { display: inline-block; margin-top: 9px; color: var(--muted); text-decoration: none; }
+    .studio-link:hover { color: var(--blue); }
+
+    .main { flex: 1; min-width: 0; height: 100dvh; overflow: hidden; }
+    .content-section {
+      display: none;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      padding: clamp(34px, 6vw, 78px) clamp(24px, 7vw, 94px) 80px;
+      scrollbar-gutter: stable;
+    }
+    .content-section.active { display: block; animation: rise .35s ease; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .section-inner { width: min(980px, 100%); margin: 0 auto; }
+    .eyebrow { margin: 0 0 9px; color: var(--blue); font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(2.2rem, 6vw, 4.8rem); line-height: 1.06; font-weight: 500; }
+    .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
+    .divider { height: 1px; background: var(--line); margin: 30px 0; }
+    .section-title { font: 500 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
+    .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
+
+    .hero-card {
+      margin-top: 38px; padding: clamp(24px, 5vw, 46px); border-radius: 26px;
+      color: white; background: linear-gradient(135deg, #186ea5, #32c6c9);
+      box-shadow: var(--shadow); position: relative; overflow: hidden;
+    }
+    .hero-card::after { content: "✦"; position: absolute; right: 5%; top: -24px; font-size: 9rem; opacity: .12; transform: rotate(14deg); }
+    .hero-card p { position: relative; z-index: 1; margin: 0; max-width: 620px; line-height: 1.9; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; position: relative; z-index: 1; }
+    .btn {
+      border: 0; border-radius: 999px; padding: 10px 17px; cursor: pointer;
+      background: var(--ink); color: white; text-decoration: none; display: inline-flex;
+      align-items: center; justify-content: center; gap: 7px; transition: .18s ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.13); }
+    .btn.light { background: white; color: var(--blue); }
+    .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    .btn.small { padding: 7px 12px; font-size: .84rem; }
+
+    .updates { margin-top: 54px; }
+    .timeline { margin-top: 25px; display: grid; gap: 15px; }
+    .timeline-item {
+      display: grid; grid-template-columns: 110px 1fr; gap: 24px; padding: 23px;
+      border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.72);
+    }
+    .version { color: var(--blue); font-weight: 800; }
+    .date { margin-top: 7px; color: var(--muted); font-size: .75rem; }
+    .timeline-item h3 { margin: 0 0 8px; font-size: 1.06rem; }
+    .timeline-item p { margin: 0; white-space: pre-wrap; color: var(--muted); line-height: 1.75; }
+
+    .profile-grid { margin-top: 34px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .info-card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.75); }
+    .info-card span { display: block; color: var(--muted); font-size: .78rem; margin-bottom: 8px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
+    .badge { padding: 7px 13px; background: var(--cyan-soft); color: #176f79; border-radius: 999px; font-size: .84rem; }
+
+    .portfolio-tabs, .album-tabs { display: flex; gap: 9px; flex-wrap: wrap; margin: 28px 0; }
+    .tab-button { border: 1px solid var(--line); background: white; padding: 9px 15px; border-radius: 999px; cursor: pointer; }
+    .tab-button.active { color: white; border-color: transparent; background: var(--blue); }
+    .portfolio-panel { display: none; }
+    .portfolio-panel.active { display: block; }
+    .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .content-card {
+      min-height: 210px; padding: 24px; border-radius: var(--radius); border: 1px solid var(--line);
+      background: var(--paper); display: flex; flex-direction: column; cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .content-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+    .content-card .kind { color: var(--blue); font-size: .75rem; font-weight: 700; letter-spacing: .12em; }
+    .content-card h3 { margin: 15px 0 10px; font-family: Georgia, "Songti SC", serif; font-size: 1.35rem; }
+    .content-card p { margin: 0; color: var(--muted); line-height: 1.7; }
+    .card-meta { margin-top: auto; padding-top: 19px; display: flex; justify-content: space-between; color: var(--muted); font-size: .76rem; }
+    .empty { padding: 38px; border: 1px dashed #b9c7ca; border-radius: var(--radius); color: var(--muted); text-align: center; line-height: 1.8; }
+
+    .gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+    .photo-card { position: relative; aspect-ratio: 4/3; border-radius: 15px; overflow: hidden; background: var(--sand); cursor: zoom-in; }
+    .photo-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
+    .photo-card:hover img { transform: scale(1.045); }
+    .photo-card .caption { position: absolute; inset: auto 0 0; padding: 30px 12px 10px; color: white; background: linear-gradient(transparent, rgba(0,0,0,.64)); font-size: .82rem; }
+
+    .chat-shell { margin-top: 30px; border: 1px solid var(--line); border-radius: 22px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
+    .chat-messages { height: min(52vh, 470px); overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 12px; background: #f4f7f6; }
+    .bubble { max-width: min(82%, 670px); padding: 11px 14px; border-radius: 16px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bubble.ai { align-self: flex-start; background: white; border-bottom-left-radius: 4px; }
+    .bubble.user { align-self: flex-end; background: linear-gradient(135deg,var(--blue),var(--cyan)); color: white; border-bottom-right-radius: 4px; }
+    .chat-form { display: flex; gap: 10px; padding: 15px; }
+    .chat-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; outline: none; }
+    .chat-form input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(49,191,200,.13); }
+    .chat-status { padding: 0 18px 12px; min-height: 22px; color: var(--muted); font-size: .78rem; }
+
+    dialog { border: 0; padding: 0; border-radius: 22px; box-shadow: 0 30px 100px rgba(0,0,0,.28); }
+    dialog::backdrop { background: rgba(18,30,34,.68); backdrop-filter: blur(4px); }
+    .reader-dialog { width: min(900px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+    .reader-wrap { max-height: calc(100dvh - 24px); overflow-y: auto; padding: clamp(22px,5vw,55px); background: var(--paper); }
+    .dialog-top { display: flex; justify-content: flex-end; gap: 8px; position: sticky; top: 0; z-index: 3; }
+    .icon-button { border: 1px solid var(--line); background: white; border-radius: 999px; min-width: 38px; height: 38px; cursor: pointer; }
+    .reader-header { margin: 20px 0 28px; }
+    .reader-header h2 { font: 500 clamp(2rem,6vw,3.5rem)/1.15 Georgia,"Songti SC",serif; margin: 8px 0 12px; }
+    .reader-meta { color: var(--muted); font-size: .85rem; }
+    .reader-body { font-family: Georgia, "Songti SC", serif; font-size: 1.06rem; line-height: 2; }
+    .reader-body img { display: block; max-width: 100%; height: auto; margin: 24px auto; border-radius: 12px; }
+    .reader-body blockquote { margin: 24px 0; padding: 4px 0 4px 18px; border-left: 4px solid var(--cyan); color: var(--muted); }
+    .reader-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 25px 0; border-block: 1px solid var(--line); margin-top: 34px; }
+    .comments { margin-top: 34px; }
+    .comment-form { display: grid; grid-template-columns: 150px 1fr auto; gap: 9px; margin: 16px 0 24px; }
+    .comment-form input, .comment-form textarea { border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; }
+    .comment-form textarea { min-height: 46px; resize: vertical; }
+    .comment { padding: 16px 0; border-top: 1px solid var(--line); }
+    .comment.reply { margin-left: 32px; padding-left: 15px; border-left: 2px solid var(--cyan-soft); }
+    .comment-head { display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; }
+    .comment-name { font-weight: 700; }
+    .comment-date { color: var(--muted); }
+    .comment-body { margin: 8px 0; white-space: pre-wrap; line-height: 1.65; }
+    .comment-actions { display: flex; gap: 8px; }
+    .text-button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 3px; font-size: .78rem; }
+    .reply-form { margin: 10px 0 0 32px; display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; }
+    .reply-form input { border: 1px solid var(--line); border-radius: 9px; padding: 8px; }
+
+    .image-dialog { width: min(1100px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); background: #111; color: white; }
+    .image-view { padding: 18px; text-align: center; }
+    .image-view img { max-width: 100%; max-height: calc(100dvh - 130px); object-fit: contain; }
+    .image-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; text-align: left; }
+
+    .notice { color: var(--accent); font-size: .85rem; min-height: 20px; }
+    .loading { color: var(--muted); }
+
+    @media (max-width: 760px) {
+      body { overflow: hidden; }
+      .app-shell { flex-direction: column; }
+      .sidebar {
+        width: 100%; height: auto; flex: 0 0 auto; padding: max(12px, env(safe-area-inset-top)) 13px 10px;
+        border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
+      }
+      .brand { margin: 0 0 10px; gap: 9px; }
+      .avatar { width: 39px; height: 39px; border-width: 2px; }
+      .brand h2 { font-size: 1rem; }
+      .brand small, .sidebar-note { display: none; }
+      .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+      .nav::-webkit-scrollbar { display: none; }
+      .nav button { flex: 0 0 auto; width: auto; padding: 8px 12px; text-align: center; font-size: .82rem; }
+      .main { height: auto; flex: 1 1 auto; min-height: 0; }
+      .content-section { height: 100%; padding: 28px 17px max(55px, env(safe-area-inset-bottom)); }
+      .profile-grid, .content-grid { grid-template-columns: 1fr; }
+      .gallery { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .timeline-item { grid-template-columns: 1fr; gap: 10px; }
+      .comment-form { grid-template-columns: 1fr; }
+      .reply-form { margin-left: 15px; grid-template-columns: 1fr; }
+      .chat-form { flex-wrap: wrap; }
+      .chat-form button { width: 100%; }
+      .bubble { max-width: 92%; }
+    }
+
+    @media print {
+      body.printing * { visibility: hidden !important; }
+      body.printing #reader-dialog,
+      body.printing #reader-dialog * { visibility: visible !important; }
+      body.printing #reader-dialog { position: absolute; inset: 0; width: 100%; max-height: none; box-shadow: none; }
+      body.printing .reader-wrap { max-height: none; overflow: visible; padding: 0; }
+      body.printing .dialog-top,
+      body.printing .reader-actions,
+      body.printing .comments { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
+        <div><h2 id="brand-title">星月集</h2><small>XINGYUEJI</small></div>
+      </div>
+      <nav class="nav" aria-label="主要导航">
+        <button class="active" data-section="home">主页</button>
+        <button data-section="portfolio">作品集</button>
+        <button data-section="about">关于我</button>
+        <button data-section="contact">联系方式</button>
+        <button data-section="ai-helper">AI 助手</button>
+      </nav>
+      <div class="sidebar-note">
+        以文字、图片与路线收藏生活。
+        <br><a class="studio-link" href="/studio">站长后台 →</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="home" class="content-section active">
+        <div class="section-inner">
+          <p class="eyebrow">PERSONAL ARCHIVE</p>
+          <h1 id="home-title">星月集</h1>
+          <p class="lead" id="home-intro">这里是星月集的个人网站。记录学习、创作、影像与北京旅行路线。</p>
+          <div class="hero-card">
+            <p>网站将持续更新文章、相册与旅行指南。所有历史更新日志都会保留，可以随时回溯。</p>
+            <div class="hero-actions">
+              <button class="btn light" data-jump="portfolio">浏览作品集</button>
+              <button class="btn ghost" style="color:white;border-color:rgba(255,255,255,.5)" data-jump="ai-helper">询问 AI</button>
+            </div>
+          </div>
+          <div class="updates">
+            <p class="eyebrow">CHANGELOG</p>
+            <h2 class="section-title">版本更新说明</h2>
+            <p class="section-desc">每次更新都会追加在这里，旧版本不会被覆盖。</p>
+            <div id="timeline" class="timeline"><p class="loading">正在读取更新记录…</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="portfolio" class="content-section">
+        <div class="section-inner">
+          <p class="eyebrow">PORTFOLIO</p>
+          <h1>作品集</h1>
+          <p class="lead">文章、图片与北京旅行指南，集中收录在三个专栏中。</p>
+          <div class="portfolio-tabs" role="tablist">
+            <button class="tab-button active" data-portfolio-tab="articles">文章</button>
+            <button class="tab-button" data-portfolio-tab="photos">图片</button>
+            <button class="tab-button" data-portfolio-tab="guides">北京旅行指南</button>
+          </div>
+          <div id="panel-articles" class="portfolio-panel active"><div id="article-grid" class="content-grid"></div></div>
+          <div id="panel-photos" class="portfolio-panel">
+            <div id="album-tabs" class="album-tabs"></div>
+            <div id="photo-gallery" class="gallery"></div>
+          </div>
+          <div id="panel-guides" class="portfolio-panel"><div id="guide-grid" class="content-grid"></div></div>
+        </div>
+      </section>
+
+      <section id="about" class="content-section">
+        <div class="section-inner">
+          <p class="eyebrow">ABOUT</p>
+          <h1>关于我</h1>
+          <p class="lead">在学习与实践中持续搭建自己的知识系统，也把值得保留的片段整理在这里。</p>
+          <div class="profile-grid">
+            <div class="info-card"><span>网站主人</span><strong id="about-owner">星月集</strong></div>
+            <div class="info-card"><span>就读院校</span><strong id="about-school">北京理工大学 计算机学院</strong></div>
+          </div>
+          <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony</span></div>
+        </div>
+      </section>
+
+      <section id="contact" class="content-section">
+        <div class="section-inner">
+          <p class="eyebrow">CONTACT</p>
+          <h1>联系方式</h1>
+          <p class="lead">如果你希望交流网站内容、项目或学习经验，可以通过邮箱联系。</p>
+          <div class="profile-grid">
+            <div class="info-card"><span>国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
+            <div class="info-card"><span>国际邮箱</span><a href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ai-helper" class="content-section">
+        <div class="section-inner">
+          <p class="eyebrow">CUSTOM AI</p>
+          <h1>AI 助手</h1>
+          <p class="lead">可以回答一般问题，也会依据本站已经发布的文章、旅行指南和更新记录回答网站相关问题。</p>
+          <div class="chat-shell">
+            <div id="chat-messages" class="chat-messages" aria-live="polite">
+              <div class="bubble ai">你好！我是星月集的 AI 助手。你想了解什么？</div>
+            </div>
+            <form id="chat-form" class="chat-form">
+              <input id="chat-input" maxlength="3000" autocomplete="off" placeholder="输入问题…" aria-label="输入问题">
+              <button class="btn" type="submit">发送</button>
+            </form>
+            <div id="chat-status" class="chat-status"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="reader-dialog" class="reader-dialog">
+    <div class="reader-wrap">
+      <div class="dialog-top">
+        <button id="reader-print" class="icon-button" title="下载 PDF">PDF</button>
+        <button class="icon-button" data-close-dialog="reader-dialog" title="关闭">✕</button>
+      </div>
+      <article>
+        <header class="reader-header">
+          <p id="reader-kind" class="eyebrow"></p>
+          <h2 id="reader-title"></h2>
+          <div id="reader-meta" class="reader-meta"></div>
+        </header>
+        <div id="reader-body" class="reader-body"></div>
+        <div class="reader-actions">
+          <button id="content-like" class="btn small ghost">👍 <span>0</span></button>
+          <button id="content-dislike" class="btn small ghost">👎 <span>0</span></button>
+          <button id="content-pdf" class="btn small ghost">转成 PDF</button>
+        </div>
+      </article>
+      <section class="comments">
+        <h3>评论</h3>
+        <form id="comment-form" class="comment-form">
+          <input id="guest-name" maxlength="30" required placeholder="游客署名">
+          <textarea id="comment-body" maxlength="1000" required placeholder="写下评论…"></textarea>
+          <button class="btn small" type="submit">发表</button>
+        </form>
+        <p id="comment-notice" class="notice"></p>
+        <div id="comment-list"></div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="image-dialog" class="image-dialog">
+    <div class="image-view">
+      <img id="image-preview" alt="图片预览">
+      <div class="image-toolbar">
+        <span id="image-caption"></span>
+        <div>
+          <a id="image-download" class="btn small light" href="#" download>下载原片</a>
+          <button class="btn small ghost" style="color:white" data-close-dialog="image-dialog">关闭</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const state = { data: null, currentContent: null, comments: [], activeAlbum: "all" };
+
+    function randomId() {
+      return globalThis.crypto?.randomUUID?.() || `v-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    const visitorId = (() => {
+      let value = localStorage.getItem("xyj_visitor_id");
+      if (!value) { value = randomId(); localStorage.setItem("xyj_visitor_id", value); }
+      return value;
+    })();
+
+    function formatDate(value) {
+      if (!value) return "";
+      return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date(value));
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, options);
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json") ? await response.json() : null;
+      if (!response.ok) throw new Error(data?.error || `请求失败（${response.status}）`);
+      return data;
+    }
+
+    function empty(message) {
+      const box = document.createElement("div");
+      box.className = "empty";
+      box.textContent = message;
+      return box;
+    }
+
+    function showSection(id) {
+      document.querySelectorAll(".content-section").forEach((section) => section.classList.toggle("active", section.id === id));
+      document.querySelectorAll(".nav button").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
+      document.getElementById(id)?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function renderChangelogs() {
+      const timeline = document.getElementById("timeline");
+      timeline.replaceChildren();
+      const logs = state.data?.changelogs || [];
+      if (!logs.length) { timeline.append(empty("还没有更新记录。")); return; }
+      logs.forEach((log) => {
+        const item = document.createElement("article"); item.className = "timeline-item";
+        const side = document.createElement("div");
+        const version = document.createElement("div"); version.className = "version"; version.textContent = `v${log.version}`;
+        const date = document.createElement("div"); date.className = "date"; date.textContent = formatDate(log.published_at);
+        side.append(version, date);
+        const main = document.createElement("div");
+        const title = document.createElement("h3"); title.textContent = log.title;
+        const body = document.createElement("p"); body.textContent = log.body;
+        main.append(title, body); item.append(side, main); timeline.append(item);
+      });
+    }
+
+    function contentCard(item) {
+      const card = document.createElement("article"); card.className = "content-card"; card.tabIndex = 0;
+      const kind = document.createElement("span"); kind.className = "kind"; kind.textContent = item.type === "guide" ? "BEIJING GUIDE" : "ARTICLE";
+      const title = document.createElement("h3"); title.textContent = item.title;
+      const excerpt = document.createElement("p"); excerpt.textContent = item.excerpt || "点击阅读全文";
+      const meta = document.createElement("div"); meta.className = "card-meta";
+      const date = document.createElement("span"); date.textContent = formatDate(item.published_at);
+      const reactions = document.createElement("span"); reactions.textContent = `👍 ${item.like_count} · 👎 ${item.dislike_count}`;
+      meta.append(date, reactions); card.append(kind, title, excerpt, meta);
+      card.addEventListener("click", () => openContent(item.id));
+      card.addEventListener("keydown", (event) => { if (event.key === "Enter") openContent(item.id); });
+      return card;
+    }
+
+    function renderContent() {
+      const articles = (state.data?.content || []).filter((item) => item.type === "article");
+      const guides = (state.data?.content || []).filter((item) => item.type === "guide");
+      const articleGrid = document.getElementById("article-grid");
+      const guideGrid = document.getElementById("guide-grid");
+      articleGrid.replaceChildren(); guideGrid.replaceChildren();
+      if (!articles.length) articleGrid.append(empty("文章专栏尚未发布内容，站长可以通过后台直接撰写。"));
+      else articles.forEach((item) => articleGrid.append(contentCard(item)));
+      if (!guides.length) guideGrid.append(empty("北京旅行指南尚未发布内容。"));
+      else guides.forEach((item) => guideGrid.append(contentCard(item)));
+    }
+
+    function renderAlbums() {
+      const tabs = document.getElementById("album-tabs"); tabs.replaceChildren();
+      const all = document.createElement("button"); all.className = `tab-button${state.activeAlbum === "all" ? " active" : ""}`; all.textContent = "全部";
+      all.addEventListener("click", () => { state.activeAlbum = "all"; renderAlbums(); renderPhotos(); }); tabs.append(all);
+      (state.data?.albums || []).forEach((album) => {
+        const button = document.createElement("button"); button.className = `tab-button${state.activeAlbum === album.id ? " active" : ""}`; button.textContent = album.name;
+        button.title = album.description || album.name;
+        button.addEventListener("click", () => { state.activeAlbum = album.id; renderAlbums(); renderPhotos(); }); tabs.append(button);
+      });
+    }
+
+    function renderPhotos() {
+      const gallery = document.getElementById("photo-gallery"); gallery.replaceChildren();
+      const photos = (state.data?.media || []).filter((item) => state.activeAlbum === "all" || item.album_id === state.activeAlbum);
+      if (!photos.length) { gallery.append(empty("这个图片板块还没有上传图片。")); return; }
+      photos.forEach((photo) => {
+        const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
+        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.url; image.alt = photo.caption || photo.filename;
+        const caption = document.createElement("div"); caption.className = "caption"; caption.textContent = photo.caption || photo.filename;
+        card.append(image, caption); card.addEventListener("click", () => openImage(photo));
+        card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo); }); gallery.append(card);
+      });
+    }
+
+    function openImage(photo) {
+      document.getElementById("image-preview").src = photo.url;
+      document.getElementById("image-caption").textContent = photo.caption || photo.filename;
+      document.getElementById("image-download").href = photo.downloadUrl;
+      document.getElementById("image-dialog").showModal();
+    }
+
+    function applySettings() {
+      const settings = state.data?.settings || {};
+      const title = settings.site_title || "星月集";
+      document.title = `${title} - 个人主页`;
+      document.getElementById("brand-title").textContent = title;
+      document.getElementById("home-title").textContent = title;
+      document.getElementById("home-intro").textContent = settings.intro || "这里是星月集的个人网站。";
+      document.getElementById("about-owner").textContent = settings.owner_name || title;
+      document.getElementById("about-school").textContent = settings.school || "北京理工大学 计算机学院";
+      const email = settings.contact_email || "1598116329@qq.com";
+      const contact = document.getElementById("contact-email"); contact.textContent = email; contact.href = `mailto:${email}`;
+    }
+
+    async function openContent(id) {
+      const dialog = document.getElementById("reader-dialog");
+      document.getElementById("reader-title").textContent = "正在读取…";
+      document.getElementById("reader-body").replaceChildren();
+      dialog.showModal();
+      try {
+        const [content, commentsData] = await Promise.all([
+          api(`/api/content/${encodeURIComponent(id)}`),
+          api(`/api/comments?contentId=${encodeURIComponent(id)}`),
+        ]);
+        state.currentContent = content; state.comments = commentsData.comments || [];
+        document.getElementById("reader-kind").textContent = content.type === "guide" ? "BEIJING TRAVEL GUIDE" : "ARTICLE";
+        document.getElementById("reader-title").textContent = content.title;
+        document.getElementById("reader-meta").textContent = `${formatDate(content.published_at)} · ${content.type === "guide" ? "北京旅行指南" : "文章"}`;
+        document.getElementById("reader-body").innerHTML = content.body_html || "<p>暂无正文。</p>";
+        document.querySelector("#content-like span").textContent = content.like_count;
+        document.querySelector("#content-dislike span").textContent = content.dislike_count;
+        renderComments();
+      } catch (error) {
+        document.getElementById("reader-title").textContent = "无法读取内容";
+        document.getElementById("reader-body").textContent = error.message;
+      }
+    }
+
+    async function sendReaction(targetType, targetId, value, button) {
+      try {
+        button.disabled = true;
+        const result = await api("/api/reactions", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetType, targetId, value, visitorId }),
+        });
+        if (targetType === "content") {
+          document.querySelector("#content-like span").textContent = result.like_count;
+          document.querySelector("#content-dislike span").textContent = result.dislike_count;
+        } else {
+          const comment = state.comments.find((item) => item.id === targetId);
+          if (comment) { comment.like_count = result.like_count; comment.dislike_count = result.dislike_count; renderComments(); }
+        }
+      } catch (error) { alert(error.message); }
+      finally { button.disabled = false; }
+    }
+
+    function commentNode(comment, isReply = false) {
+      const wrap = document.createElement("article"); wrap.className = `comment${isReply ? " reply" : ""}`;
+      const head = document.createElement("div"); head.className = "comment-head";
+      const name = document.createElement("span"); name.className = "comment-name"; name.textContent = comment.guest_name;
+      const date = document.createElement("span"); date.className = "comment-date"; date.textContent = formatDate(comment.created_at);
+      head.append(name, date);
+      const body = document.createElement("div"); body.className = "comment-body"; body.textContent = comment.body;
+      const actions = document.createElement("div"); actions.className = "comment-actions";
+      const like = document.createElement("button"); like.className = "text-button"; like.textContent = `👍 ${comment.like_count}`;
+      const dislike = document.createElement("button"); dislike.className = "text-button"; dislike.textContent = `👎 ${comment.dislike_count}`;
+      like.addEventListener("click", () => sendReaction("comment", comment.id, 1, like));
+      dislike.addEventListener("click", () => sendReaction("comment", comment.id, -1, dislike));
+      actions.append(like, dislike);
+      if (!isReply) {
+        const reply = document.createElement("button"); reply.className = "text-button"; reply.textContent = "回复";
+        reply.addEventListener("click", () => showReplyForm(wrap, comment.id)); actions.append(reply);
+      }
+      wrap.append(head, body, actions); return wrap;
+    }
+
+    function renderComments() {
+      const list = document.getElementById("comment-list"); list.replaceChildren();
+      const parents = state.comments.filter((item) => !item.parent_id);
+      if (!parents.length) { list.append(empty("还没有评论，欢迎留下第一条留言。")); return; }
+      parents.forEach((parent) => {
+        const node = commentNode(parent); list.append(node);
+        state.comments.filter((item) => item.parent_id === parent.id).forEach((reply) => list.append(commentNode(reply, true)));
+      });
+    }
+
+    function showReplyForm(parentNode, parentId) {
+      document.querySelectorAll(".reply-form").forEach((form) => form.remove());
+      const form = document.createElement("form"); form.className = "reply-form";
+      const name = document.createElement("input"); name.required = true; name.maxLength = 30; name.placeholder = "游客署名"; name.value = localStorage.getItem("xyj_guest_name") || "";
+      const body = document.createElement("input"); body.required = true; body.maxLength = 1000; body.placeholder = "回复内容";
+      const submit = document.createElement("button"); submit.className = "btn small"; submit.type = "submit"; submit.textContent = "回复";
+      form.append(name, body, submit);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault(); submit.disabled = true;
+        try {
+          localStorage.setItem("xyj_guest_name", name.value.trim());
+          await api("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentId: state.currentContent.id, parentId, guestName: name.value, body: body.value }) });
+          const data = await api(`/api/comments?contentId=${encodeURIComponent(state.currentContent.id)}`); state.comments = data.comments; renderComments();
+        } catch (error) { alert(error.message); } finally { submit.disabled = false; }
+      });
+      parentNode.append(form); body.focus();
+    }
+
+    function printCurrentContent() {
+      if (!state.currentContent) return;
+      document.body.classList.add("printing");
+      window.print();
+      setTimeout(() => document.body.classList.remove("printing"), 500);
+    }
+
+    function addBubble(role, text) {
+      const bubble = document.createElement("div"); bubble.className = `bubble ${role}`; bubble.textContent = text;
+      const messages = document.getElementById("chat-messages"); messages.append(bubble); messages.scrollTop = messages.scrollHeight; return bubble;
+    }
+
+    async function boot() {
+      try {
+        state.data = await api("/api/bootstrap");
+        applySettings(); renderChangelogs(); renderContent(); renderAlbums(); renderPhotos();
+      } catch (error) {
+        document.getElementById("timeline").replaceChildren(empty(`网站数据暂时无法读取：${error.message}`));
+        document.getElementById("article-grid").append(empty("数据服务尚未完成部署。"));
+        document.getElementById("guide-grid").append(empty("数据服务尚未完成部署。"));
+        document.getElementById("photo-gallery").append(empty("数据服务尚未完成部署。"));
+      }
+    }
+
+    document.querySelectorAll(".nav button").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.section)));
+    document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.jump)));
+    document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
+    document.querySelectorAll(".tab-button[data-portfolio-tab]").forEach((button) => button.addEventListener("click", () => {
+      document.querySelectorAll(".tab-button[data-portfolio-tab]").forEach((item) => item.classList.toggle("active", item === button));
+      document.querySelectorAll(".portfolio-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${button.dataset.portfolioTab}`));
+    }));
+    document.getElementById("content-like").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, 1, event.currentTarget));
+    document.getElementById("content-dislike").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, -1, event.currentTarget));
+    document.getElementById("content-pdf").addEventListener("click", printCurrentContent);
+    document.getElementById("reader-print").addEventListener("click", printCurrentContent);
+
+    document.getElementById("guest-name").value = localStorage.getItem("xyj_guest_name") || "";
+    document.getElementById("comment-form").addEventListener("submit", async (event) => {
+      event.preventDefault(); if (!state.currentContent) return;
+      const name = document.getElementById("guest-name"); const body = document.getElementById("comment-body"); const notice = document.getElementById("comment-notice");
+      notice.textContent = "正在发表…";
+      try {
+        localStorage.setItem("xyj_guest_name", name.value.trim());
+        await api("/api/comments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentId: state.currentContent.id, guestName: name.value, body: body.value }) });
+        body.value = ""; notice.textContent = "评论已发表。";
+        const data = await api(`/api/comments?contentId=${encodeURIComponent(state.currentContent.id)}`); state.comments = data.comments; renderComments();
+      } catch (error) { notice.textContent = error.message; }
+    });
+
+    document.getElementById("chat-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const input = document.getElementById("chat-input"); const status = document.getElementById("chat-status"); const submit = event.currentTarget.querySelector("button");
+      const question = input.value.trim(); if (!question) return;
+      addBubble("user", question); input.value = ""; submit.disabled = true; status.textContent = "AI 正在思考，通常需要数秒…";
+      try { const result = await api("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }); addBubble("ai", result.answer); status.textContent = ""; }
+      catch (error) { addBubble("ai", `暂时无法回答：${error.message}`); status.textContent = ""; }
+      finally { submit.disabled = false; input.focus(); }
+    });
+
+    [document.getElementById("reader-dialog"), document.getElementById("image-dialog")].forEach((dialog) => dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    }));
+
+    boot();
+  </script>
+</body>
+</html>
