@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="星月集个人网站：文章、图片、北京旅行指南与版本更新。">
+  <meta name="description" content="星月集个人网站">
   <title>星月集 - 个人主页</title>
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <style>
@@ -50,12 +50,26 @@
       overflow-y: auto;
     }
     .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 28px; }
-    .avatar {
-      width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
-      border: 3px solid var(--paper); box-shadow: 0 0 0 2px var(--cyan);
-      transition: transform .2s ease;
+    .avatar-refresh {
+      width: 62px; height: 62px; flex: 0 0 62px; padding: 0;
+      border: 3px solid var(--paper); border-radius: 50%; overflow: hidden;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      box-shadow: 0 0 0 2px var(--cyan); cursor: pointer;
+      transition: transform .2s cubic-bezier(.175,.885,.32,1.275);
+      user-select: none; -webkit-tap-highlight-color: transparent;
     }
-    .avatar:hover { transform: scale(1.04) rotate(-2deg); }
+    .avatar-refresh:hover { transform: scale(1.05); }
+    .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
+    .avatar-refresh.jelly { animation: jelly .52s ease; }
+    .avatar { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
+    @keyframes jelly {
+      0%,100% { transform: scale(1,1); }
+      30% { transform: scale(1.25,.75); }
+      40% { transform: scale(.75,1.25); }
+      50% { transform: scale(1.15,.85); }
+      65% { transform: scale(.95,1.05); }
+      75% { transform: scale(1.05,.95); }
+    }
     .brand h2 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: 1.28rem; }
     .brand small { color: var(--muted); letter-spacing: .12em; }
     .nav { display: grid; gap: 7px; }
@@ -203,7 +217,7 @@
         border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
       }
       .brand { margin: 0 0 10px; gap: 9px; }
-      .avatar { width: 39px; height: 39px; border-width: 2px; }
+      .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; border-width: 2px; }
       .brand h2 { font-size: 1rem; }
       .brand small, .sidebar-note { display: none; }
       .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
@@ -237,7 +251,9 @@
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
+        <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
+          <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
+        </button>
         <div><h2 id="brand-title">星月集</h2><small>XINGYUEJI</small></div>
       </div>
       <nav class="nav" aria-label="主要导航">
@@ -248,7 +264,7 @@
         <button data-section="ai-helper">AI 助手</button>
       </nav>
       <div class="sidebar-note">
-       <a class="studio-link" href="/studio">站长后台 →</a>
+        <a class="studio-link" href="/studio">站长后台 →</a>
       </div>
     </aside>
 
@@ -257,9 +273,8 @@
         <div class="section-inner">
           <p class="eyebrow">PERSONAL ARCHIVE</p>
           <h1 id="home-title">星月集</h1>
-          <p class="lead" id="home-intro">这里是星月集的个人网站。</p>
           <div class="hero-card">
-            <p>网站将不定期地更新文章、相册与旅行指南。</p>
+            <p>网站将不定时地更新内容，欢迎大家持续关注！</p>
             <div class="hero-actions">
               <button class="btn light" data-jump="portfolio">浏览作品集</button>
               <button class="btn ghost" style="color:white;border-color:rgba(255,255,255,.5)" data-jump="ai-helper">询问 AI</button>
@@ -297,6 +312,9 @@
           <h1>关于我</h1>
           <div class="profile-grid">
             <div class="info-card"><span>就读院校</span><strong id="about-school">北京理工大学 计算机学院</strong></div>
+          </div>
+          <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony</span></div>
+        </div>
       </section>
 
       <section id="contact" class="content-section">
@@ -314,7 +332,6 @@
         <div class="section-inner">
           <p class="eyebrow">CUSTOM AI</p>
           <h1>AI 助手</h1>
-          <p class="lead">欢迎提问站内站外相关问题！</p>
           <div class="chat-shell">
             <div id="chat-messages" class="chat-messages" aria-live="polite">
               <div class="bubble ai">你好！我是星月集的 AI 助手。你想了解什么？</div>
@@ -617,6 +634,15 @@
     }
 
     document.querySelectorAll(".nav button").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.section)));
+    document.getElementById("avatar-refresh").addEventListener("click", (event) => {
+      const avatar = event.currentTarget;
+      if (avatar.dataset.reloading === "true") return;
+      avatar.dataset.reloading = "true";
+      avatar.classList.remove("jelly");
+      void avatar.offsetWidth;
+      avatar.classList.add("jelly");
+      window.setTimeout(() => location.reload(), 520);
+    });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
     document.querySelectorAll(".tab-button[data-portfolio-tab]").forEach((button) => button.addEventListener("click", () => {
