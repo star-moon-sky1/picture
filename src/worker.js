@@ -300,6 +300,22 @@ async function ensureSchema(env) {
     ).run();
   }
 
+  /*
+   * 早期初始化脚本曾把系统默认日志写成 2.0.0，而网站实际版本以 1.8.8.0 为准。
+   * 这里同时匹配旧版本、标题和正文，只迁移那条系统默认数据，不会改动站长自建日志。
+   */
+  await env.DB.prepare(`
+    UPDATE changelogs
+    SET version = ?, updated_at = ?
+    WHERE version = ? AND title = ? AND body = ?
+  `).bind(
+    "1.8.8.0",
+    timestamp,
+    "2.0.0",
+    "全站功能升级",
+    "新增版本更新说明、作品集专栏、游客评论与反应功能，并为后续后台发布系统做好准备。",
+  ).run();
+
   schemaReady = true;
 }
 
