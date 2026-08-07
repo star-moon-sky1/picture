@@ -4,7 +4,7 @@
  * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.1.1";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const MAX_RICH_TEXT_LENGTH = 120_000;
