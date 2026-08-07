@@ -86,10 +86,10 @@
     .avatar { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
     @keyframes avatar-jelly-refresh {
       0%   { transform: translateY(0) scale(1,1) rotate(0); }
-      15%  { transform: translateY(5px) scale(1.40,.64) rotate(-9deg); }
-      30%  { transform: translateY(-13px) scale(.68,1.35) rotate(8deg); }
-      45%  { transform: translateY(3px) scale(1.28,.78) rotate(-6deg); }
-      60%  { transform: translateY(-6px) scale(.86,1.20) rotate(4deg); }
+      15%  { transform: translateY(5px) scale(1.32,.70) rotate(-9deg); }
+      30%  { transform: translateY(-13px) scale(.78,1.28) rotate(8deg); }
+      45%  { transform: translateY(3px) scale(1.21,.82) rotate(-6deg); }
+      60%  { transform: translateY(-6px) scale(.88,1.16) rotate(4deg); }
       75%  { transform: translateY(1px) scale(1.12,.90) rotate(-2deg); }
       88%  { transform: translateY(-2px) scale(.96,1.06) rotate(1deg); }
       100% { transform: translateY(0) scale(1,1) rotate(0); }
@@ -101,11 +101,11 @@
     .nav { display: grid; gap: 7px; }
     .nav button {
       width: 100%; border: 0; border-radius: 13px; background: transparent;
-      padding: 11px 13px; text-align: left; cursor: pointer; color: #9AAFC7;
+      padding: 11px 13px; text-align: left; cursor: pointer; color: var(--ink);
       transition: .18s ease;
     }
     .nav button:hover { background: #ADC2D1; color: var(--ink); }
-    .nav button.active { background: linear-gradient(135deg, var(--blue), var(--cyan)); color: white; box-shadow: 0 8px 18px rgba(154,175,199,.22); }
+    .nav button.active { background: linear-gradient(135deg, #AEC3D1, #AFB5B9); color: white; box-shadow: 0 8px 18px rgba(154,175,199,.22); }
     .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
     .studio-link { display: inline-block; margin-top: 9px; color: var(--muted); text-decoration: none; }
     .studio-link:hover { color: #D1C0B7; }
@@ -128,8 +128,9 @@
     .content-section.active { display: block; animation: rise .35s ease; }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .section-inner { width: min(980px, 100%); margin: 0 auto; }
-    h1 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(2.2rem, 6vw, 4.8rem); line-height: 1.06; font-weight: 500; }
+    h1 { margin: 0; font-family: KaiTi, "Songti SC", serif; font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.06; font-weight: 700; }
     .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
+    .intro{ max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
     .divider { height: 1px; background: var(--line); margin: 30px 0; }
     .section-title { font: 400 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
     .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
@@ -155,7 +156,7 @@
     .info-card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.75); }
     .info-card span { display: block; color: var(--muted); font-size: .78rem; margin-bottom: 8px; }
     .badges { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 26px; }
-    .badge { padding: 7px 13px; background: var(--cyan-soft); color: #176f79; border-radius: 999px; font-size: .84rem; }
+    .badge { padding: 7px 13px; background: #E1C8B6; color: #176f79; border-radius: 999px; font-size: .84rem; }
 
     /* =========================================================
        06. 作品集：文章、图片、北京旅行指南
@@ -323,9 +324,16 @@
       <!-- ==================== 主页 ==================== -->
       <section id="home" class="content-section active">
         <div class="section-inner">
-          <h1 id="home-title">星月集</h1>
+          <h1 id="home-title">星月集的个人网站</h1>
           <!-- 主页介绍可在后台“网站设置”中修改；前端会写入 #home-intro。 -->
           <p class="lead" id="home-intro" hidden></p>
+          <div class="intro">
+            <strong>本站使用说明</strong>
+            <p>  欢迎来到星月集的网站！
+            <br>  本站为星月集的个人空间，可视作朋友圈/QQ空间的平替。不论是生活中的感悟，还是学术上的探索，抑或是一些文章随笔，日后都将在该网站上进行发表，朋友圈/QQ空间除特殊事件以外，将逐步停更。
+            <br>  同时，该网站目前仍处于建设状态，网站功能将持续丰富。受限于掌握知识有限，目前该网站仍由chatGPT参与建设。随着前端学习的深入，GPT将逐渐退出建设者的角色。
+            <br>  本站托管在海外平台，故建议浏览者使用非公用网络进行登陆，以防被拦截从而导致浏览失败。若有更多关于网站建设的想法，也欢迎与星月集进行联系沟通！</p>
+          </div>
           <div class="updates">
             <h2 class="section-title">版本更新说明</h2>
             <!-- #timeline 由 JavaScript 根据 D1 中的更新日志自动生成。 -->
@@ -359,8 +367,8 @@
           <h1>关于我</h1>
           <div class="profile-grid">
             <div class="info-card"><span>就读院校与专业</span><strong id="about-school">北京理工大学 计算机学院 计算机科学与技术</strong></div>
-            <h2>目前学习方向</h2>
           </div>
+          <h2>目前学习方向</h2>
           <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony开发</span></div>
         </div>
       </section>
@@ -382,7 +390,7 @@
           <h1>AI 助手</h1>
           <div class="chat-shell">
             <div id="chat-messages" class="chat-messages" aria-live="polite">
-              <div class="bubble ai">你好！欢迎来到星月集的网站，我是AI助手。你想了解什么？</div>
+              <div class="bubble ai">你好！欢迎来到星月集的网站，我是AI助手，除了日常问题，我还了解网站内内容，欢迎提问！</div>
             </div>
             <form id="chat-form" class="chat-form">
               <input id="chat-input" maxlength="3000" autocomplete="off" placeholder="输入问题…" aria-label="输入问题">
