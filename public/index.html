@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="星月集个人网站">
-  <meta name="xingyueji-version" content="2.1.0">
+  <meta name="xingyueji-version" content="2.1.1">
   <title>星月集 - 个人主页</title>
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <style>
@@ -334,7 +334,7 @@
       </nav>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台 →</a>
-        <br><small>网站版本 v2.1.0</small>
+        <br><small>网站版本 v2.1.1</small>
       </div>
     </aside>
 
@@ -836,10 +836,32 @@
       try {
         await streamAiAnswer(question, answerBubble);
         status.textContent = "";
-      } catch (error) {
+      } catch (streamError) {
         const partial = answerBubble.textContent.trim();
-        answerBubble.textContent = partial ? `${partial}\n\n[回答中断：${error.message}]` : `暂时无法回答：${error.message}`;
-        status.textContent = "";
+        if (partial) {
+          // 已收到部分内容时保留现场，避免重新请求后出现两份重复回答。
+          answerBubble.textContent = `${partial}\n\n[回答中断：${streamError.message}]`;
+          status.textContent = "";
+        } else {
+          /*
+           * 某些浏览器、校园网或代理会拦截长连接，但普通 JSON 请求仍然可用。
+           * 流式连接在首段文字到达前失败时，自动使用非流式接口重试一次，
+           * 访客无需理解网络差异，也不会只看到“服务器错误”。
+           */
+          status.textContent = "流式连接不可用，正在自动切换兼容模式…";
+          try {
+            const result = await api("/api/ai", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ question }),
+            });
+            answerBubble.textContent = result.answer || "AI 暂时没有返回内容。";
+            status.textContent = "";
+          } catch (fallbackError) {
+            answerBubble.textContent = `暂时无法回答：${fallbackError.message}`;
+            status.textContent = "";
+          }
+        }
       } finally {
         answerBubble.classList.remove("streaming"); submit.disabled = false; input.focus();
       }
