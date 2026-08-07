@@ -4,7 +4,7 @@
  * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "2.1.1";
+const APP_VERSION = "1.8.8.0";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const MAX_RICH_TEXT_LENGTH = 120_000;
@@ -291,7 +291,7 @@ async function ensureSchema(env) {
       "INSERT INTO changelogs (id, version, title, body, published_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       crypto.randomUUID(),
-      "2.0.0",
+      "1.8.8.0",
       "全站功能升级",
       "新增版本更新说明、作品集专栏、游客评论与反应功能，并为后续后台发布系统做好准备。",
       timestamp,
