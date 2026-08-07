@@ -4,7 +4,7 @@
  * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.0.4";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const MAX_RICH_TEXT_LENGTH = 120_000;
@@ -157,13 +157,21 @@ async function ensureSchema(env) {
   if (schemaReady) return;
   if (!env.DB) throw new HttpError(503, "D1 数据库尚未绑定");
 
-  await env.DB.exec(`
+  /*
+   * D1 的 exec() 会把传入文本按换行拆成多条 SQL。建表语句本身是多行时，
+   * 第一行 "CREATE TABLE ... (" 会被单独执行，从而报 incomplete input。
+   * 因此这里把每张表和每个索引定义成一条完整的 PreparedStatement，再由
+   * batch() 按顺序执行。SQL 仍保留多行排版，方便以后查找和修改字段。
+   */
+  const schemaStatements = [
+    `
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS changelogs (
       id TEXT PRIMARY KEY,
       version TEXT NOT NULL,
@@ -172,8 +180,9 @@ async function ensureSchema(env) {
       published_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS albums (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -181,8 +190,9 @@ async function ensureSchema(env) {
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY,
       object_key TEXT NOT NULL UNIQUE,
@@ -194,8 +204,9 @@ async function ensureSchema(env) {
       kind TEXT NOT NULL DEFAULT 'photo',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS content (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL CHECK(type IN ('article', 'guide')),
@@ -210,8 +221,9 @@ async function ensureSchema(env) {
       dislike_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS comments (
       id TEXT PRIMARY KEY,
       content_id TEXT NOT NULL,
@@ -224,8 +236,9 @@ async function ensureSchema(env) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(content_id) REFERENCES content(id) ON DELETE CASCADE
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS reactions (
       id TEXT PRIMARY KEY,
       visitor_id TEXT NOT NULL,
@@ -235,19 +248,21 @@ async function ensureSchema(env) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE(visitor_id, target_type, target_id)
-    );
-
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS rate_limits (
       key TEXT PRIMARY KEY,
       count INTEGER NOT NULL,
       reset_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at);
-    CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id);
-  `);
+    )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at)",
+    "CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id)",
+  ];
+  await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
 
   const timestamp = nowIso();
   await env.DB.batch([
