@@ -4,11 +4,19 @@
  * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+// 当 D1 暂时不可用时，AI 仍可依靠这份最小公开资料回答，不会整块瘫痪。
+const FALLBACK_AI_CONTEXT = [
+  "网站名称：星月集（xingyueji）",
+  "网站性质：个人网站，收录文章、图片、北京旅行指南和历史版本更新说明。",
+  "网站主人就读于北京理工大学计算机学院。",
+  "网站包含游客评论、回复、点赞、点踩、文章 PDF 和原图下载功能。",
+].join("\n");
 
 let schemaReady = false;
 
@@ -614,11 +622,23 @@ async function fetchAiJson(url, options, unavailableMessage) {
 }
 
 async function askAi(request, env) {
-  await consumeRateLimit(env, await clientRateKey(request, "ai"), 40, 60 * 60);
   const body = await readJson(request);
   const question = clampText(body.question || body.prompt, 3000);
   if (!question) throw new HttpError(400, "请输入问题");
-  const context = await buildAiContext(env);
+
+  // AI 与 D1 解耦：数据库正常时使用完整站内资料；异常时使用最小资料继续回答。
+  let context = FALLBACK_AI_CONTEXT;
+  try {
+    await ensureSchema(env);
+    await consumeRateLimit(env, await clientRateKey(request, "ai"), 40, 60 * 60);
+    context = await buildAiContext(env);
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 429) throw error;
+    console.error("AI is using fallback context because D1 context failed", {
+      message: error?.message || String(error),
+      cause: error?.cause?.message || null,
+    });
+  }
 
   if (env.DEEPSEEK_API_KEY) {
     const result = await fetchAiJson(`${(env.DEEPSEEK_API_BASE || "https://api.deepseek.com").replace(/\/$/, "")}/chat/completions`, {
@@ -963,9 +983,11 @@ async function handleAdmin(request, env, url) {
 }
 
 async function handleApi(request, env, url) {
-  // 健康检查不依赖数据表，用来确认新 Worker 是否已部署、绑定是否存在。
+  // 健康检查会同时测试绑定、D1 连通性和实际数据表初始化。
   if (url.pathname === "/api/health" && request.method === "GET") {
     let databaseReachable = false;
+    let schemaReadyForRequests = false;
+    let schemaError = null;
     if (env.DB) {
       try {
         const probe = await env.DB.prepare("SELECT 1 AS ok").first();
@@ -973,9 +995,22 @@ async function handleApi(request, env, url) {
       } catch (error) {
         console.error("D1 health check failed", error);
       }
+      if (databaseReachable) {
+        try {
+          await ensureSchema(env);
+          schemaReadyForRequests = true;
+        } catch (error) {
+          schemaError = String(error?.message || error?.cause?.message || error).slice(0, 600);
+          console.error("D1 schema health check failed", {
+            message: error?.message || String(error),
+            cause: error?.cause?.message || null,
+          });
+        }
+      }
     }
+    const ok = Boolean(env.DB && env.BUCKET && databaseReachable && schemaReadyForRequests);
     return json({
-      ok: Boolean(env.DB && env.BUCKET && databaseReachable),
+      ok,
       version: APP_VERSION,
       bindings: {
         DB: Boolean(env.DB),
@@ -983,7 +1018,14 @@ async function handleApi(request, env, url) {
         ASSETS: Boolean(env.ASSETS),
       },
       databaseReachable,
-    }, env.DB && env.BUCKET && databaseReachable ? 200 : 503);
+      schemaReady: schemaReadyForRequests,
+      ...(schemaError ? { schemaError } : {}),
+    }, ok ? 200 : 503);
+  }
+
+  // AI 路由必须位于 ensureSchema 之前，避免数据库故障阻断 AI 上游。
+  if (url.pathname === "/api/ai" && request.method === "POST") {
+    return json(await askAi(request, env));
   }
 
   await ensureSchema(env);
@@ -1005,9 +1047,6 @@ async function handleApi(request, env, url) {
   }
   if (url.pathname === "/api/reactions" && request.method === "POST") {
     return json(await react(request, env));
-  }
-  if (url.pathname === "/api/ai" && request.method === "POST") {
-    return json(await askAi(request, env));
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
     return adminLogin(request, env);
