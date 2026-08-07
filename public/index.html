@@ -77,17 +77,17 @@
       border: 3px solid var(--paper); border-radius: 50%; overflow: hidden;
       background: linear-gradient(135deg, var(--blue), var(--cyan));
       box-shadow: 0 0 0 2px var(--cyan); cursor: pointer;
-      transition: transform .2s cubic-bezier(.175,.885,.32,1.275), box-shadow .2s ease;
+      transition: transform .1s cubic-bezier(.175,.885,.32,1.275), box-shadow .1s ease;
       user-select: none; -webkit-tap-highlight-color: transparent;
     }
     .avatar-refresh:hover { transform: scale(1.09) rotate(-4deg); box-shadow: 0 0 0 4px rgba(49,191,200,.28); }
     .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
-    .avatar-refresh.jelly { animation: avatar-jelly-refresh .9s cubic-bezier(.36,.07,.19,.97); }
+    .avatar-refresh.jelly { animation: avatar-jelly-refresh .5s cubic-bezier(.36,.07,.19,.97); }
     .avatar { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
     @keyframes avatar-jelly-refresh {
       0%   { transform: translateY(0) scale(1,1) rotate(0); }
       15%  { transform: translateY(5px) scale(1.40,.64) rotate(-9deg); }
-      30%  { transform: translateY(-13px) scale(.68,1.42) rotate(8deg); }
+      30%  { transform: translateY(-13px) scale(.68,1.35) rotate(8deg); }
       45%  { transform: translateY(3px) scale(1.28,.78) rotate(-6deg); }
       60%  { transform: translateY(-6px) scale(.86,1.20) rotate(4deg); }
       75%  { transform: translateY(1px) scale(1.12,.90) rotate(-2deg); }
@@ -100,15 +100,15 @@
     .brand small { color: var(--muted); letter-spacing: .12em; }
     .nav { display: grid; gap: 7px; }
     .nav button {
-      width: 100%; border: 0; border-radius: 11px; background: transparent;
-      padding: 11px 13px; text-align: left; cursor: pointer; color: var(--muted);
+      width: 100%; border: 0; border-radius: 13px; background: transparent;
+      padding: 11px 13px; text-align: left; cursor: pointer; color: #9AAFC7;
       transition: .18s ease;
     }
-    .nav button:hover { background: var(--sand); color: var(--ink); }
-    .nav button.active { background: linear-gradient(135deg, var(--blue), var(--cyan)); color: white; box-shadow: 0 8px 18px rgba(33,127,186,.22); }
+    .nav button:hover { background: #ADC2D1; color: var(--ink); }
+    .nav button.active { background: linear-gradient(135deg, var(--blue), var(--cyan)); color: white; box-shadow: 0 8px 18px rgba(154,175,199,.22); }
     .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
     .studio-link { display: inline-block; margin-top: 9px; color: var(--muted); text-decoration: none; }
-    .studio-link:hover { color: var(--blue); }
+    .studio-link:hover { color: #D1C0B7; }
 
     /* =========================================================
        04. 主内容区与通用文字
@@ -119,7 +119,7 @@
     .content-section {
       display: none;
       height: 100%;
-      overflow-y: auto;
+      overflow: auto;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
       padding: clamp(34px, 6vw, 78px) clamp(24px, 7vw, 94px) 80px;
@@ -128,31 +128,11 @@
     .content-section.active { display: block; animation: rise .35s ease; }
     @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .section-inner { width: min(980px, 100%); margin: 0 auto; }
-    .eyebrow { margin: 0 0 9px; color: var(--blue); font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
     h1 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(2.2rem, 6vw, 4.8rem); line-height: 1.06; font-weight: 500; }
     .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
     .divider { height: 1px; background: var(--line); margin: 30px 0; }
-    .section-title { font: 500 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
+    .section-title { font: 400 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
     .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
-
-    /* 主页蓝色介绍卡片。 */
-    .hero-card {
-      margin-top: 38px; padding: clamp(24px, 5vw, 46px); border-radius: 26px;
-      color: white; background: linear-gradient(135deg, #186ea5, #32c6c9);
-      box-shadow: var(--shadow); position: relative; overflow: hidden;
-    }
-    .hero-card::after { content: "✦"; position: absolute; right: 5%; top: -24px; font-size: 9rem; opacity: .12; transform: rotate(14deg); }
-    .hero-card p { position: relative; z-index: 1; margin: 0; max-width: 620px; line-height: 1.9; }
-    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; position: relative; z-index: 1; }
-    .btn {
-      border: 0; border-radius: 999px; padding: 10px 17px; cursor: pointer;
-      background: var(--ink); color: white; text-decoration: none; display: inline-flex;
-      align-items: center; justify-content: center; gap: 7px; transition: .18s ease;
-    }
-    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.13); }
-    .btn.light { background: white; color: var(--blue); }
-    .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
-    .btn.small { padding: 7px 12px; font-size: .84rem; }
 
     /* =========================================================
        05. 首页版本更新记录
@@ -322,19 +302,19 @@
         <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
           <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
         </button>
-        <div><h2 id="brand-title">星月集</h2><small>XINGYUEJI</small></div>
+        <div><h2 id="brand-title">星月集</h2><small>xingyueji</small></div>
       </div>
       <!-- data-section 的值必须与右侧 section 的 id 一致。 -->
       <nav class="nav" aria-label="主要导航">
         <button class="active" data-section="home">主页</button>
-        <button data-section="portfolio">作品集</button>
+        <button data-section="portfolio">个人空间</button>
         <button data-section="about">关于我</button>
         <button data-section="contact">联系方式</button>
         <button data-section="ai-helper">AI 助手</button>
       </nav>
       <div class="sidebar-note">
-        <a class="studio-link" href="/studio">站长后台 →</a>
-        <br><small>网站版本 v2.1.1</small>
+        <a class="studio-link" href="/studio">站长后台</a>
+        <br><small>网站版本 v1.8.8.0</small>
       </div>
     </aside>
 
@@ -343,19 +323,10 @@
       <!-- ==================== 主页 ==================== -->
       <section id="home" class="content-section active">
         <div class="section-inner">
-          <p class="eyebrow">PERSONAL ARCHIVE</p>
           <h1 id="home-title">星月集</h1>
           <!-- 主页介绍可在后台“网站设置”中修改；前端会写入 #home-intro。 -->
           <p class="lead" id="home-intro" hidden></p>
-          <div class="hero-card">
-            <p>网站将不定时地更新内容，欢迎大家持续关注！</p>
-            <div class="hero-actions">
-              <button class="btn light" data-jump="portfolio">浏览作品集</button>
-              <button class="btn ghost" style="color:white;border-color:rgba(255,255,255,.5)" data-jump="ai-helper">询问 AI</button>
-            </div>
-          </div>
           <div class="updates">
-            <p class="eyebrow">CHANGELOG</p>
             <h2 class="section-title">版本更新说明</h2>
             <!-- #timeline 由 JavaScript 根据 D1 中的更新日志自动生成。 -->
             <div id="timeline" class="timeline"><p class="loading">正在读取更新记录…</p></div>
@@ -363,15 +334,14 @@
         </div>
       </section>
 
-      <!-- ==================== 作品集 ==================== -->
+      <!-- ==================== 个人空间 ==================== -->
       <section id="portfolio" class="content-section">
         <div class="section-inner">
-          <p class="eyebrow">PORTFOLIO</p>
-          <h1>作品集</h1>
+          <h1>个人空间</h1>
           <!-- 三个按钮分别切换下方 articles、photos、guides 面板。 -->
           <div class="portfolio-tabs" role="tablist">
-            <button class="tab-button active" data-portfolio-tab="articles">文章</button>
-            <button class="tab-button" data-portfolio-tab="photos">图片</button>
+            <button class="tab-button active" data-portfolio-tab="articles">随笔</button>
+            <button class="tab-button" data-portfolio-tab="photos">拍摄照片</button>
             <button class="tab-button" data-portfolio-tab="guides">北京旅行指南</button>
           </div>
           <div id="panel-articles" class="portfolio-panel active"><div id="article-grid" class="content-grid"></div></div>
@@ -386,19 +356,18 @@
       <!-- ==================== 关于我 ==================== -->
       <section id="about" class="content-section">
         <div class="section-inner">
-          <p class="eyebrow">ABOUT</p>
           <h1>关于我</h1>
           <div class="profile-grid">
-            <div class="info-card"><span>就读院校</span><strong id="about-school">北京理工大学 计算机学院</strong></div>
+            <div class="info-card"><span>就读院校与专业</span><strong id="about-school">北京理工大学 计算机学院 计算机科学与技术</strong></div>
+            <h2>目前学习方向</h2>
           </div>
-          <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony</span></div>
+          <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony开发</span></div>
         </div>
       </section>
 
       <!-- ==================== 联系方式 ==================== -->
       <section id="contact" class="content-section">
         <div class="section-inner">
-          <p class="eyebrow">CONTACT</p>
           <h1>联系方式</h1>
           <div class="profile-grid">
             <div class="info-card"><span>国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
@@ -410,11 +379,10 @@
       <!-- ==================== AI 助手 ==================== -->
       <section id="ai-helper" class="content-section">
         <div class="section-inner">
-          <p class="eyebrow">CUSTOM AI</p>
           <h1>AI 助手</h1>
           <div class="chat-shell">
             <div id="chat-messages" class="chat-messages" aria-live="polite">
-              <div class="bubble ai">你好！我是星月集的 AI 助手。你想了解什么？</div>
+              <div class="bubble ai">你好！欢迎来到星月集的网站，我是AI助手。你想了解什么？</div>
             </div>
             <form id="chat-form" class="chat-form">
               <input id="chat-input" maxlength="3000" autocomplete="off" placeholder="输入问题…" aria-label="输入问题">
