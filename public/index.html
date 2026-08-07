@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="星月集个人网站">
-  <meta name="xingyueji-version" content="2.0.4">
+  <meta name="xingyueji-version" content="2.1.0">
   <title>星月集 - 个人主页</title>
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <style>
@@ -216,6 +216,13 @@
     .bubble { max-width: min(82%, 670px); padding: 11px 14px; border-radius: 16px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
     .bubble.ai { align-self: flex-start; background: white; border-bottom-left-radius: 4px; }
     .bubble.user { align-self: flex-end; background: linear-gradient(135deg,var(--blue),var(--cyan)); color: white; border-bottom-right-radius: 4px; }
+    /* streaming 类只在 AI 正在生成时存在；小光标让访客能看出回答仍在继续。 */
+    .bubble.ai.streaming::after {
+      content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 4px;
+      vertical-align: -2px; border-radius: 2px; background: var(--cyan);
+      animation: stream-cursor .75s steps(1,end) infinite;
+    }
+    @keyframes stream-cursor { 50% { opacity: 0; } }
     .chat-form { display: flex; gap: 10px; padding: 15px; }
     .chat-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; outline: none; }
     .chat-form input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(49,191,200,.13); }
@@ -327,7 +334,7 @@
       </nav>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台 →</a>
-        <br><small>网站版本 v2.0.4</small>
+        <br><small>网站版本 v2.1.0</small>
       </div>
     </aside>
 
@@ -715,6 +722,50 @@
       const messages = document.getElementById("chat-messages"); messages.append(bubble); messages.scrollTop = messages.scrollHeight; return bubble;
     }
 
+    /*
+     * 流式读取 AI 回答：
+     * - fetch 收到响应头后就立即返回，不等待整段回答生成完毕；
+     * - reader.read() 每取得一小段文字，就更新同一个 AI 气泡；
+     * - TextDecoder 的 stream 选项可避免一个汉字被两个网络数据块拆开时出现乱码。
+     */
+    async function streamAiAnswer(question, bubble) {
+      const response = await fetch("/api/ai?stream=1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "text/plain" },
+        body: JSON.stringify({ question }),
+      });
+
+      if (!response.ok) {
+        const raw = await response.text();
+        let message = `请求失败（${response.status}）`;
+        try { message = JSON.parse(raw)?.error || message; } catch { if (raw.trim()) message = raw.trim(); }
+        throw new Error(message);
+      }
+
+      // 极旧浏览器没有 ReadableStream 时，退化为一次性显示，不影响基本问答功能。
+      if (!response.body?.getReader) {
+        const answer = await response.text();
+        if (!answer.trim()) throw new Error("AI 没有返回内容");
+        bubble.textContent = answer;
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const messages = document.getElementById("chat-messages");
+      let answer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        answer += decoder.decode(value, { stream: true });
+        bubble.textContent = answer;
+        messages.scrollTop = messages.scrollHeight;
+      }
+      answer += decoder.decode();
+      bubble.textContent = answer;
+      if (!answer.trim()) throw new Error("AI 没有返回内容");
+    }
+
     /* ---------- 10. 页面启动：一次读取网站公开数据并渲染各板块。 ---------- */
     async function boot() {
       try {
@@ -780,10 +831,18 @@
       event.preventDefault();
       const input = document.getElementById("chat-input"); const status = document.getElementById("chat-status"); const submit = event.currentTarget.querySelector("button");
       const question = input.value.trim(); if (!question) return;
-      addBubble("user", question); input.value = ""; submit.disabled = true; status.textContent = "AI 正在思考，通常需要数秒…";
-      try { const result = await api("/api/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }); addBubble("ai", result.answer); status.textContent = ""; }
-      catch (error) { addBubble("ai", `暂时无法回答：${error.message}`); status.textContent = ""; }
-      finally { submit.disabled = false; input.focus(); }
+      addBubble("user", question); input.value = ""; submit.disabled = true; status.textContent = "AI 正在生成回答…";
+      const answerBubble = addBubble("ai", ""); answerBubble.classList.add("streaming");
+      try {
+        await streamAiAnswer(question, answerBubble);
+        status.textContent = "";
+      } catch (error) {
+        const partial = answerBubble.textContent.trim();
+        answerBubble.textContent = partial ? `${partial}\n\n[回答中断：${error.message}]` : `暂时无法回答：${error.message}`;
+        status.textContent = "";
+      } finally {
+        answerBubble.classList.remove("streaming"); submit.disabled = false; input.focus();
+      }
     });
 
     [document.getElementById("reader-dialog"), document.getElementById("image-dialog")].forEach((dialog) => dialog.addEventListener("click", (event) => {
