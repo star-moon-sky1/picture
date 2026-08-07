@@ -28,7 +28,7 @@ picture/
 ```
 
 不要把 `worker.js` 改成 `scr`，也不要只上传文件而漏掉 `public` 文件夹。
-部署后访问 `/api/health`，看到 `version: "2.0.3"` 即表示最新 Worker 已生效。
+部署后访问 `/api/health`，看到 `version: "2.0.4"` 即表示最新 Worker 已生效。
 
 ## Cloudflare 绑定
 
