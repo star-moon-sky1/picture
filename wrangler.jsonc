@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xingyueji",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-06",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/api/*", "/media/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xingyueji-db",
+      "database_id": "614cb2af-022c-4d9b-8ae4-a35f1eebe4f4"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "xingyueji-media"
+    }
+  ],
+  "vars": {
+    "DEEPSEEK_MODEL": "deepseek-v4-flash",
+    "DEEPSEEK_API_BASE": "https://api.deepseek.com",
+    "AI_UPSTREAM_URL": "https://qwen-ai.1598116329.workers.dev"
+  }
+}
