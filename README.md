@@ -20,8 +20,9 @@
 
 ```text
 picture/
-├─ worker.js          # Cloudflare 后端，必须放在仓库根目录
-├─ wrangler.jsonc     # Cloudflare 配置，main 指向 worker.js
+├─ src/
+│  └─ worker.js       # Cloudflare 后端
+├─ wrangler.jsonc     # Cloudflare 配置，main 指向 src/worker.js
 ├─ public/
 │  ├─ index.html      # 公开网站
 │  └─ studio.html     # 内容发布后台
@@ -29,8 +30,8 @@ picture/
 └─ package-lock.json
 ```
 
-不要把 `worker.js` 改成 `scr`，也不要只上传文件而漏掉 `public` 文件夹。
-部署后访问 `/api/health`，看到 `version: "2.1.1"` 即表示最新 Worker 已生效。
+不要把 `src` 目录误写成 `scr`，也不要只上传文件而漏掉 `public` 文件夹。
+部署后访问 `/api/health`，看到 `version: "1.8.8.0"` 即表示最新 Worker 已生效。
 
 ## Cloudflare 绑定
 
