@@ -12,6 +12,7 @@
 - `/studio` 内容发布后台（草稿、发布、插图、相册、评论管理）
 - D1 内容数据库与 R2 对象存储
 - 可读取已发布网站内容的 AI 助手
+- AI 回答支持逐字流式显示；配置 DeepSeek Secret 后支持模型原生流式转发
 - 桌面端与手机端独立纵向滚动适配
 
 ## 必须保留的目录结构
@@ -28,7 +29,7 @@ picture/
 ```
 
 不要把 `worker.js` 改成 `scr`，也不要只上传文件而漏掉 `public` 文件夹。
-部署后访问 `/api/health`，看到 `version: "2.0.4"` 即表示最新 Worker 已生效。
+部署后访问 `/api/health`，看到 `version: "2.1.0"` 即表示最新 Worker 已生效。
 
 ## Cloudflare 绑定
 
