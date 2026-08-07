@@ -36,7 +36,7 @@ https://xingyueji.com.cn/api/health
 ```json
 {
   "ok": true,
-  "version": "2.1.0",
+  "version": "2.1.1",
   "bindings": {
     "DB": true,
     "BUCKET": true,
@@ -46,4 +46,4 @@ https://xingyueji.com.cn/api/health
 }
 ```
 
-如果访问 `/api/health` 得到 404，或者没有显示 `2.1.0`，说明 Cloudflare 仍在运行旧部署。
+如果访问 `/api/health` 得到 404，或者没有显示 `2.1.1`，说明 Cloudflare 仍在运行旧部署。
