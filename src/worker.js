@@ -327,10 +327,21 @@ async function initializeSchema(env) {
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("school", "北京理工大学 计算机学院", timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
-      .bind("intro", "这里是星月集的个人网站。", timestamp),
+      .bind("intro", "", timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("contact_email", "1598116329@qq.com", timestamp),
   ]);
+
+  /*
+   * 删除旧版本自动写入的默认主页副标题。只清理这两个完全匹配的旧默认值，
+   * 不会覆盖站长已经在后台填写过的其他自定义介绍。
+   */
+  await env.DB.prepare(`
+    UPDATE settings
+    SET value = '', updated_at = ?
+    WHERE key = 'intro'
+      AND value IN ('这里是星月集的个人网站。', '这里是星月集的个人网站')
+  `).bind(timestamp).run();
 
   /*
    * 初次升级时创建三个默认大板块。初始化标记会永久保留，因此站长日后把
