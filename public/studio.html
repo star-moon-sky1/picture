@@ -69,7 +69,7 @@
     .topbar p { margin:5px 0 0; color:var(--muted); }
     .view { display:none; }
     .view.active { display:block; }
-    .cards { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:12px; }
     .stat { padding:20px; background:white; border:1px solid var(--line); border-radius:15px; }
     .stat span { color:var(--muted); font-size:.76rem; }
     .stat strong { display:block; margin-top:9px; font-size:1.7rem; }
@@ -111,6 +111,12 @@
     .media-info strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.83rem; }
     .media-info small { color:var(--muted); }
     .album-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+    .album-chip { display:inline-flex; align-items:center; gap:5px; padding:5px; border:1px solid var(--line); border-radius:10px; background:white; }
+    .checkbox-field { display:flex; align-items:center; gap:8px; min-height:42px; }
+    .checkbox-field input { width:auto; }
+    .feedback-admin-row { padding:16px; border:1px solid var(--line); border-radius:12px; background:white; }
+    .feedback-admin-row.unread { border-color:var(--cyan); box-shadow:inset 4px 0 0 var(--cyan); }
+    .feedback-admin-row p { white-space:pre-wrap; line-height:1.7; }
     .comment-row { padding:15px 0; border-top:1px solid var(--line); }
     .comment-row:first-child { border-top:0; }
     .comment-row p { margin:8px 0; white-space:pre-wrap; }
@@ -155,10 +161,12 @@
       <h1>星月集 Studio</h1><small>内容发布与管理</small>
       <nav class="side-nav">
         <button class="active" data-view="dashboard">概览</button>
-        <button data-view="content">文章与指南</button>
+        <button data-view="sections">个人空间板块</button>
+        <button data-view="content">文章内容</button>
         <button data-view="changelogs">更新日志</button>
         <button data-view="media">图片与相册</button>
         <button data-view="comments">评论管理</button>
+        <button data-view="feedback">留言与反馈</button>
         <button data-view="settings">网站设置</button>
       </nav>
       <div class="side-footer"><a href="/" target="_blank">打开网站 ↗</a><button id="logout" class="btn small danger">退出登录</button></div>
@@ -177,7 +185,28 @@
         <div class="panel"><h3>开始发布</h3><p style="color:var(--muted);line-height:1.8">在“文章与指南”中新建内容，编辑完成后把状态改为“已发布”；更新日志采用追加方式保存，历史版本不会被覆盖。</p></div>
       </section>
 
-      <!-- ==================== 文章与旅行指南编辑器 ==================== -->
+      <!-- ==================== 个人空间大板块管理 ==================== -->
+      <section id="view-sections" class="view">
+        <div class="split">
+          <div class="panel" style="margin-top:0">
+            <div class="actions" style="margin:0 0 14px"><button id="new-section" class="btn small">新建大板块</button><button id="refresh-sections" class="btn small ghost">刷新</button></div>
+            <div id="section-list" class="list"></div>
+          </div>
+          <form id="section-form" class="panel" style="margin-top:0">
+            <h3>板块设置</h3><input id="section-id" type="hidden">
+            <div class="form-grid">
+              <div class="field"><label>板块名称</label><input id="section-name" maxlength="80" required placeholder="例如 随笔"></div>
+              <div class="field"><label>板块类型</label><select id="section-kind"><option value="content">文章类</option><option value="gallery">图片类</option></select></div>
+              <div class="field wide"><label>板块说明</label><input id="section-description" maxlength="500"></div>
+              <div class="field"><label>排序（数字越小越靠前）</label><input id="section-sort" type="number" value="0"></div>
+              <label class="checkbox-field"><input id="section-show-all" type="checkbox" checked>图片类板块显示“全部”筛选</label>
+            </div>
+            <div class="actions"><button class="btn" type="submit">保存板块</button><button id="delete-section" class="btn danger hidden" type="button">删除板块及内容</button><span id="section-notice" class="status"></span></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ==================== 文章类板块内容编辑器 ==================== -->
       <section id="view-content" class="view">
         <div class="split">
           <div class="panel" style="margin-top:0">
@@ -187,7 +216,7 @@
           <form id="content-form" class="panel" style="margin-top:0">
             <input id="content-id" type="hidden">
             <div class="form-grid">
-              <div class="field"><label>专栏</label><select id="content-type"><option value="article">文章</option><option value="guide">北京旅行指南</option></select></div>
+              <div class="field"><label>所属大板块</label><select id="content-section"></select></div>
               <div class="field"><label>状态</label><select id="content-status"><option value="draft">草稿</option><option value="published">已发布</option></select></div>
               <div class="field wide"><label>标题</label><input id="content-title" maxlength="120" required placeholder="输入标题"></div>
               <div class="field wide"><label>摘要</label><textarea id="content-excerpt" maxlength="500" style="min-height:75px" placeholder="列表中显示的简短介绍"></textarea></div>
@@ -229,7 +258,9 @@
       <!-- ==================== R2 图片与相册 ==================== -->
       <section id="view-media" class="view">
         <div class="panel" style="margin-top:0">
-          <h3>相册板块</h3><div id="album-row" class="album-row"></div>
+          <h3>图片类大板块与相册</h3>
+          <div class="field" style="max-width:420px"><label>当前图片大板块</label><select id="media-section"></select></div>
+          <div id="album-row" class="album-row"></div>
           <div class="actions"><button id="add-album" class="btn small">新建相册</button></div>
         </div>
         <form id="media-form" class="panel">
@@ -247,12 +278,21 @@
       <!-- ==================== 游客评论管理 ==================== -->
       <section id="view-comments" class="view"><div class="panel" style="margin-top:0"><div class="actions" style="margin:0 0 10px"><button id="refresh-comments" class="btn small ghost">刷新评论</button></div><div id="comment-admin-list"></div></div></section>
 
+      <!-- ==================== 留言与反馈管理 ==================== -->
+      <section id="view-feedback" class="view">
+        <div class="panel" style="margin-top:0">
+          <div class="actions" style="margin:0 0 14px"><button id="refresh-feedback" class="btn small ghost">刷新留言</button><span class="status">企业微信通知需在 Cloudflare Secret 中配置 WECOM_WEBHOOK_URL；QQ/个人微信可配置 FEEDBACK_WEBHOOK_URL 指向机器人中转服务。</span></div>
+          <div id="feedback-admin-list" class="list"></div>
+        </div>
+      </section>
+
       <!-- ==================== 网站公开资料设置 ==================== -->
       <section id="view-settings" class="view">
         <form id="settings-form" class="panel" style="margin-top:0;max-width:760px">
           <div class="form-grid">
             <div class="field"><label>网站名称</label><input id="setting-site-title" maxlength="80"></div>
             <div class="field"><label>网站主人</label><input id="setting-owner-name" maxlength="80"></div>
+            <div class="field"><label>网页左下角版本号</label><input id="setting-site-version" maxlength="30" placeholder="例如 1.9.0"></div>
             <div class="field wide"><label>就读院校</label><input id="setting-school" maxlength="160"></div>
             <div class="field wide"><label>主页介绍</label><textarea id="setting-intro" maxlength="1000"></textarea></div>
             <div class="field wide"><label>联系邮箱</label><input id="setting-email" type="email" maxlength="240"></div>
@@ -265,11 +305,13 @@
 
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script>
-    const app = { content: [], changelogs: [], albums: [], media: [], comments: [], settings: {} };
+    const app = { sections: [], content: [], changelogs: [], albums: [], media: [], comments: [], feedback: [], settings: {} };
     const viewInfo = {
-      dashboard:["概览","查看网站目前的内容状态。"], content:["文章与指南","撰写、保存草稿并发布文章或北京旅行指南。"],
+      dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","增加、改名、排序或删除文章类与图片类大板块。"],
+      content:["文章内容","在任意文章类大板块中撰写、保存草稿并发布内容。"],
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
-      comments:["评论管理","查看、隐藏或删除游客评论。"], settings:["网站设置","修改主页显示的公开资料。"],
+      comments:["评论管理","查看、隐藏或删除游客评论。"], feedback:["留言与反馈","处理游客留言、公开留言或标记为已解决。"],
+      settings:["网站设置","修改主页显示的公开资料和左下角版本号。"],
     };
 
     async function api(path, options={}) {
@@ -290,14 +332,21 @@
       document.getElementById("view-title").textContent=viewInfo[name][0];document.getElementById("view-desc").textContent=viewInfo[name][1];
     }
 
-    async function loadAll(){await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadComments(),loadSettings()])}
-    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["全部内容",data.content],["已发布",data.published],["评论",data.comments],["图片",data.media],["更新记录",data.changelogs]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadComments(),loadFeedback(),loadSettings()])}
+    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["评论",data.comments],["图片",data.media],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+
+    async function loadSections(){app.sections=await api("/api/admin/sections");renderSectionList();refreshSectionOptions()}
+    function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
+    function resetSectionForm(){document.getElementById("section-form").reset();document.getElementById("section-id").value="";document.getElementById("section-sort").value="0";document.getElementById("section-show-all").checked=true;document.getElementById("delete-section").classList.add("hidden");document.getElementById("section-notice").textContent="";renderSectionList()}
+    function editSection(item){document.getElementById("section-id").value=item.id;document.getElementById("section-name").value=item.name;document.getElementById("section-kind").value=item.kind;document.getElementById("section-description").value=item.description||"";document.getElementById("section-sort").value=item.sort_order||0;document.getElementById("section-show-all").checked=Number(item.show_all)!==0;document.getElementById("delete-section").classList.remove("hidden");renderSectionList()}
+    function sectionPayload(){return{name:document.getElementById("section-name").value,kind:document.getElementById("section-kind").value,description:document.getElementById("section-description").value,sortOrder:Number(document.getElementById("section-sort").value||0),showAll:document.getElementById("section-show-all").checked}}
+    function refreshSectionOptions(){const contentSelect=document.getElementById("content-section");const mediaSelect=document.getElementById("media-section");const currentContent=contentSelect.value;const currentMedia=mediaSelect.value;clear(contentSelect);clear(mediaSelect);app.sections.filter(item=>item.kind==="content").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;contentSelect.append(option)});app.sections.filter(item=>item.kind==="gallery").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;mediaSelect.append(option)});if([...contentSelect.options].some(o=>o.value===currentContent))contentSelect.value=currentContent;if([...mediaSelect.options].some(o=>o.value===currentMedia))mediaSelect.value=currentMedia}
 
     async function loadContent(){app.content=await api("/api/admin/content");renderContentList();refreshCoverOptions()}
-    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.type==="guide"?"北京旅行指南":"文章"} · ${item.status==="published"?"已发布":"草稿"} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
+    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
     function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";renderContentList()}
-    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-type").value=item.type;document.getElementById("content-status").value=item.status;document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
-    function contentPayload(){return{type:document.getElementById("content-type").value,status:document.getElementById("content-status").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
+    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
+    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
 
     async function loadChangelogs(){app.changelogs=await api("/api/admin/changelogs");renderChangelogs()}
     function renderChangelogs(){const list=document.getElementById("changelog-list");clear(list);app.changelogs.forEach(item=>{const row=document.createElement("div");row.className="list-item";const title=document.createElement("div");title.className="list-title";title.textContent=`v${item.version} · ${item.title}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=formatDate(item.published_at);row.append(title,meta);row.addEventListener("click",()=>editChangelog(item));list.append(row)})}
@@ -305,24 +354,33 @@
     function editChangelog(item){document.getElementById("changelog-id").value=item.id;document.getElementById("changelog-version").value=item.version;document.getElementById("changelog-title").value=item.title;document.getElementById("changelog-body").value=item.body;document.getElementById("changelog-date").value=new Date(item.published_at).toISOString().slice(0,10);document.getElementById("delete-changelog").classList.remove("hidden")}
 
     async function loadAlbumsAndMedia(){[app.albums,app.media]=await Promise.all([api("/api/admin/albums"),api("/api/admin/media")]);renderAlbums();renderMedia();refreshCoverOptions()}
-    function renderAlbums(){const row=document.getElementById("album-row");const select=document.getElementById("media-album");clear(row);clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.albums.forEach(album=>{const chip=button(`${album.name}（${album.media_count||0}）`);chip.addEventListener("click",()=>editAlbum(album));row.append(chip);const option=document.createElement("option");option.value=album.id;option.textContent=album.name;select.append(option)})}
-    function renderMedia(){const grid=document.getElementById("media-grid");clear(grid);app.media.forEach(item=>{const card=document.createElement("article");card.className="media-card";const img=document.createElement("img");img.loading="lazy";img.src=item.url;img.alt=item.caption||item.filename;const info=document.createElement("div");info.className="media-info";const title=document.createElement("strong");title.textContent=item.caption||item.filename;const small=document.createElement("small");small.textContent=item.album_name|| (item.kind==="inline"?"文章插图":"未分类");const actions=document.createElement("div");actions.className="list-actions";const copy=button("复制地址");copy.addEventListener("click",async()=>{await navigator.clipboard.writeText(new URL(item.url,location.origin).href);copy.textContent="已复制"});const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteMedia(item));actions.append(copy,del);info.append(title,small,actions);card.append(img,info);grid.append(card)})}
+    function renderAlbums(){const row=document.getElementById("album-row");const select=document.getElementById("media-album");const sectionId=document.getElementById("media-section").value;clear(row);clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.albums.filter(album=>album.section_id===sectionId||(!album.section_id&&sectionId==="section-photos")).forEach(album=>{const wrap=document.createElement("span");wrap.className="album-chip";const edit=button(`${album.name}（${album.media_count||0}）`);edit.addEventListener("click",()=>editAlbum(album));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAlbum(album));wrap.append(edit,del);row.append(wrap);const option=document.createElement("option");option.value=album.id;option.textContent=album.name;select.append(option)})}
+    function renderMedia(){const grid=document.getElementById("media-grid");const sectionId=document.getElementById("media-section").value;clear(grid);app.media.filter(item=>item.kind==="inline"||item.section_id===sectionId||(!item.section_id&&sectionId==="section-photos")).forEach(item=>{const card=document.createElement("article");card.className="media-card";const img=document.createElement("img");img.loading="lazy";img.src=item.url;img.alt=item.caption||item.filename;const info=document.createElement("div");info.className="media-info";const title=document.createElement("strong");title.textContent=item.caption||item.filename;const small=document.createElement("small");small.textContent=item.album_name|| (item.kind==="inline"?"文章插图":"未分类");const actions=document.createElement("div");actions.className="list-actions";const copy=button("复制地址");copy.addEventListener("click",async()=>{await navigator.clipboard.writeText(new URL(item.url,location.origin).href);copy.textContent="已复制"});const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteMedia(item));actions.append(copy,del);info.append(title,small,actions);card.append(img,info);grid.append(card)})}
     function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});select.value=current}
 
     async function loadComments(){app.comments=await api("/api/admin/comments");renderAdminComments()}
     function renderAdminComments(){const list=document.getElementById("comment-admin-list");clear(list);if(!app.comments.length){const p=document.createElement("p");p.className="status";p.textContent="暂无评论。";list.append(p);return}app.comments.forEach(item=>{const row=document.createElement("article");row.className="comment-row";const head=document.createElement("strong");head.textContent=`${item.guest_name} · ${item.content_title||"内容已删除"}`;const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)} · ${item.status==="hidden"?"已隐藏":"公开"}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const toggle=button(item.status==="hidden"?"恢复显示":"隐藏");toggle.addEventListener("click",()=>toggleComment(item));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteComment(item));actions.append(toggle,del);row.append(head,document.createElement("br"),meta,body,actions);list.append(row)})}
 
-    async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-email").value=app.settings.contact_email||""}
+    async function loadFeedback(){app.feedback=await api("/api/admin/feedback");renderAdminFeedback()}
+    function renderAdminFeedback(){const list=document.getElementById("feedback-admin-list");clear(list);if(!app.feedback.length){const p=document.createElement("p");p.className="status";p.textContent="暂无留言。";list.append(p);return}const labels={message:"留言",bug:"网站问题",suggestion:"功能建议"};app.feedback.forEach(item=>{const row=document.createElement("article");row.className=`feedback-admin-row${item.status==="new"?" unread":""}`;const title=document.createElement("strong");title.textContent=`${labels[item.category]||"留言"} · ${item.guest_name}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${formatDate(item.created_at)} · ${item.contact?`联系方式：${item.contact}`:"未留联系方式"} · ${item.status==="new"?"未读":item.status==="resolved"?"已解决":"已读"} · ${Number(item.is_public)?"公开":"不公开"}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const read=button("标为已读");read.addEventListener("click",()=>updateFeedback(item,"read",Number(item.is_public)===1));const resolved=button("标为已解决");resolved.addEventListener("click",()=>updateFeedback(item,"resolved",Number(item.is_public)===1));const publish=button(Number(item.is_public)?"取消公开":"公开到留言板");publish.addEventListener("click",()=>updateFeedback(item,item.status==="new"?"read":item.status,Number(item.is_public)!==1));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteFeedback(item));actions.append(read,resolved,publish,del);row.append(title,meta,body,actions);list.append(row)})}
+    async function updateFeedback(item,status,isPublic){await api(`/api/admin/feedback/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,isPublic})});await loadFeedback();await loadDashboard()}
+    async function deleteFeedback(item){if(!confirm("确定永久删除这条留言吗？"))return;await api(`/api/admin/feedback/${item.id}`,{method:"DELETE"});await loadFeedback();await loadDashboard()}
+
+    async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-site-version").value=app.settings.site_version||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-email").value=app.settings.contact_email||""}
 
     async function uploadInline(file){const form=new FormData();form.append("file",file);form.append("kind","inline");const item=await api("/api/admin/media",{method:"POST",body:form});app.media.unshift(item);refreshCoverOptions();return item}
     async function deleteMedia(item){if(!confirm(`确定删除“${item.filename}”吗？原图将同时删除。`))return;await api(`/api/admin/media/${item.id}`,{method:"DELETE"});await loadAlbumsAndMedia();await loadDashboard()}
-    async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order})});await loadAlbumsAndMedia()}
+    async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value})});await loadAlbumsAndMedia()}
+    async function deleteAlbum(album){if(!confirm(`确定删除相册“${album.name}”吗？相册内图片会保留为未分类。`))return;await api(`/api/admin/albums/${album.id}`,{method:"DELETE"});await loadAlbumsAndMedia()}
     async function toggleComment(item){await api(`/api/admin/comments/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:item.status==="hidden"?"active":"hidden"})});await loadComments()}
     async function deleteComment(item){if(!confirm("确定删除这条评论及其回复吗？"))return;await api(`/api/admin/comments/${item.id}`,{method:"DELETE"});await loadComments();await loadDashboard()}
 
     document.getElementById("login-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("login-notice");notice.textContent="正在登录…";try{await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:document.getElementById("password").value})});showStudio();await loadAll()}catch(error){notice.textContent=error.message}});
     document.querySelectorAll(".side-nav button").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
     document.getElementById("logout").addEventListener("click",async()=>{await api("/api/admin/logout",{method:"POST"});location.reload()});
+    document.getElementById("new-section").addEventListener("click",resetSectionForm);document.getElementById("refresh-sections").addEventListener("click",loadSections);
+    document.getElementById("section-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("section-id").value;const notice=document.getElementById("section-notice");notice.textContent="正在保存…";try{await api(id?`/api/admin/sections/${id}`:"/api/admin/sections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sectionPayload())});notice.textContent="板块已保存。";resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
+    document.getElementById("delete-section").addEventListener("click",async()=>{const id=document.getElementById("section-id").value;const item=app.sections.find(s=>s.id===id);if(!item)return;const warning=`确定删除大板块“${item.name}”吗？\n\n该板块内的文章、评论、相册、图片和 R2 原文件都会一并永久删除，此操作不可撤销。`;if(!confirm(warning))return;await api(`/api/admin/sections/${id}`,{method:"DELETE"});resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadComments();await loadDashboard()});
     document.getElementById("new-content").addEventListener("click",resetContentForm);document.getElementById("refresh-content").addEventListener("click",loadContent);
     document.getElementById("content-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("content-id").value;const notice=document.getElementById("content-notice");notice.textContent="正在保存…";try{await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(contentPayload())});notice.textContent="已保存。";await loadContent();await loadDashboard();if(!id)resetContentForm()}catch(error){notice.textContent=error.message}});
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
@@ -330,15 +388,17 @@
     document.getElementById("insert-link").addEventListener("click",()=>{const url=prompt("链接地址（需要以 https:// 开头）");if(url)document.execCommand("createLink",false,url)});document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
     document.getElementById("inline-image-input").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;const notice=document.getElementById("content-notice");notice.textContent="正在上传插图…";try{const item=await uploadInline(file);document.getElementById("content-editor").focus();document.execCommand("insertImage",false,item.url);notice.textContent="插图已插入正文。"}catch(error){notice.textContent=error.message}event.target.value=""});
 
-    document.getElementById("changelog-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("changelog-id").value;const notice=document.getElementById("changelog-notice");const date=document.getElementById("changelog-date").value;try{await api(id?`/api/admin/changelogs/${id}`:"/api/admin/changelogs",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:document.getElementById("changelog-version").value,title:document.getElementById("changelog-title").value,body:document.getElementById("changelog-body").value,publishedAt:date?`${date}T12:00:00.000Z`:new Date().toISOString()})});notice.textContent="更新记录已保存。";resetChangelog();await loadChangelogs();await loadDashboard()}catch(error){notice.textContent=error.message}});
-    document.getElementById("new-changelog").addEventListener("click",resetChangelog);document.getElementById("delete-changelog").addEventListener("click",async()=>{const id=document.getElementById("changelog-id").value;if(!id||!confirm("确定删除这条更新记录吗？"))return;await api(`/api/admin/changelogs/${id}`,{method:"DELETE"});resetChangelog();await loadChangelogs();await loadDashboard()});
+    document.getElementById("changelog-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("changelog-id").value;const notice=document.getElementById("changelog-notice");const date=document.getElementById("changelog-date").value;try{await api(id?`/api/admin/changelogs/${id}`:"/api/admin/changelogs",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:document.getElementById("changelog-version").value,title:document.getElementById("changelog-title").value,body:document.getElementById("changelog-body").value,publishedAt:date?`${date}T12:00:00.000Z`:new Date().toISOString()})});notice.textContent="更新记录已保存，网页版本号已同步。";resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()}catch(error){notice.textContent=error.message}});
+    document.getElementById("new-changelog").addEventListener("click",resetChangelog);document.getElementById("delete-changelog").addEventListener("click",async()=>{const id=document.getElementById("changelog-id").value;if(!id||!confirm("确定删除这条更新记录吗？"))return;await api(`/api/admin/changelogs/${id}`,{method:"DELETE"});resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()});
 
-    document.getElementById("add-album").addEventListener("click",async()=>{const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description})});await loadAlbumsAndMedia()});
-    document.getElementById("media-form").addEventListener("submit",async event=>{event.preventDefault();const file=document.getElementById("media-file").files[0];const notice=document.getElementById("media-notice");if(!file)return;const form=new FormData();form.append("file",file);form.append("albumId",document.getElementById("media-album").value);form.append("caption",document.getElementById("media-caption").value);form.append("kind","photo");notice.textContent="正在上传原图…";try{await api("/api/admin/media",{method:"POST",body:form});event.currentTarget.reset();notice.textContent="图片上传成功。";await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
+    document.getElementById("media-section").addEventListener("change",()=>{renderAlbums();renderMedia()});
+    document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId})});await loadAlbumsAndMedia()});
+    document.getElementById("media-form").addEventListener("submit",async event=>{event.preventDefault();const file=document.getElementById("media-file").files[0];const notice=document.getElementById("media-notice");if(!file)return;const form=new FormData();form.append("file",file);form.append("sectionId",document.getElementById("media-section").value);form.append("albumId",document.getElementById("media-album").value);form.append("caption",document.getElementById("media-caption").value);form.append("kind","photo");notice.textContent="正在上传原图…";try{await api("/api/admin/media",{method:"POST",body:form});event.currentTarget.reset();notice.textContent="图片上传成功。";await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
-    document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,contact_email:document.getElementById("setting-email").value})});notice.textContent="网站设置已保存。"}catch(error){notice.textContent=error.message}});
+    document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
+    document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,contact_email:document.getElementById("setting-email").value})});notice.textContent="网站设置已保存。"}catch(error){notice.textContent=error.message}});
 
-    resetContentForm();resetChangelog();checkSession();
+    resetSectionForm();resetContentForm();resetChangelog();checkSession();
   </script>
 </body>
 </html>

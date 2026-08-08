@@ -8,6 +8,26 @@
   <meta name="xingyueji-version" content="1.8.8.0">
   <title>星月集 - 个人主页</title>
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
+  <!--
+    MathJax 4：AI 完成回答后，把 \(...\) 与 \[...\] 内的 LaTeX 转成公式。
+    ui/safe 会过滤公式里不安全的链接和样式；脚本加载失败时仍会保留原始文字。
+  -->
+  <script>
+    window.MathJax = {
+      loader: { load: ["ui/safe"] },
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+        processEscapes: true,
+      },
+      options: {
+        safeOptions: {
+          allow: { URLs: "safe", classes: "safe", cssIDs: "safe", styles: "safe" },
+        },
+      },
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
   <style>
     /* =========================================================
        01. 全局基础与主题颜色
@@ -62,7 +82,15 @@
       display: flex;
       flex-direction: column;
       overflow-y: auto;
+      transition: width .22s ease, flex-basis .22s ease, padding .22s ease;
     }
+    .sidebar-toggle {
+      width: 40px; height: 40px; flex: 0 0 40px; margin: -11px 0 16px -7px;
+      border: 0; border-radius: 11px; background: transparent; cursor: pointer;
+      display: grid; place-items: center; color: var(--muted); font-size: 1.2rem;
+    }
+    .sidebar-toggle:hover { color: var(--ink); background: rgba(119,161,205,.16); }
+    .sidebar-toggle:focus-visible { outline: 3px solid rgba(119,161,205,.28); }
     .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 28px; }
 
     /* =========================================================
@@ -102,13 +130,27 @@
     .nav button {
       width: 100%; border: 0; border-radius: 13px; background: transparent;
       padding: 11px 13px; text-align: left; cursor: pointer; color: var(--ink);
+      display: flex; align-items: center; gap: 11px; white-space: nowrap;
       transition: .18s ease;
     }
+    .nav-icon { width: 22px; flex: 0 0 22px; text-align: center; font-size: 1.05rem; }
+    .nav-label { min-width: 0; }
     .nav button:hover { background: #ADC2D1; color: var(--ink); }
     .nav button.active { background: linear-gradient(135deg, #AEC3D1, #AFB5B9); color: white; box-shadow: 0 8px 18px rgba(154,175,199,.22); }
     .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
     .studio-link { display: inline-block; margin-top: 9px; color: var(--muted); text-decoration: none; }
     .studio-link:hover { color: #D1C0B7; }
+
+    /*
+       侧边栏收起后保留 76px 图标轨道和展开按钮。站名、文字与页脚隐藏，
+       data-title 仍通过浏览器 title 提示各图标含义。
+    */
+    .app-shell.sidebar-collapsed .sidebar { width: 76px; flex-basis: 76px; padding-inline: 13px; }
+    .app-shell.sidebar-collapsed .sidebar-toggle { margin-left: 5px; }
+    .app-shell.sidebar-collapsed .brand { display: none; }
+    .app-shell.sidebar-collapsed .nav button { justify-content: center; padding-inline: 10px; }
+    .app-shell.sidebar-collapsed .nav-label,
+    .app-shell.sidebar-collapsed .sidebar-note { display: none; }
 
     /* =========================================================
        04. 主内容区与通用文字
@@ -140,7 +182,20 @@
     }
     h1 { margin: 0; font-family: KaiTi, "Songti SC", serif; font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.06; font-weight: 700; }
     .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
-    .intro{ max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
+    /* 首页“本站使用说明”：框、标题和正文均可在这一组样式中集中修改。 */
+    .usage-guide {
+      max-width: 760px; margin: 26px 0 0; padding: 25px 28px;
+      border: 2px solid var(--ink); border-radius: var(--radius); background: rgba(255,255,255,.72);
+    }
+    .usage-guide h2 {
+      margin: 0 0 18px; text-align: center; font-family: SimHei, "Microsoft YaHei", sans-serif;
+      font-size: 1.28rem; font-weight: 800; color: #111;
+    }
+    .usage-guide p {
+      margin: 0 0 12px; text-indent: 2em; color: #111; line-height: 1.9;
+      font-family: SimHei, "Microsoft YaHei", sans-serif; font-weight: 700;
+    }
+    .usage-guide p:last-child { margin-bottom: 0; }
     .divider { height: 1px; background: var(--line); margin: 30px 0; }
     .section-title { font: 400 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
     .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
@@ -176,12 +231,23 @@
        ---------------------------------------------------------
        内容来自后台的“更新日志”；这里仅控制时间线外观。
        ========================================================= */
-    .updates { margin-top: 54px; }
+    .updates {
+      width: min(50%, 490px); margin-top: 54px; padding: 20px;
+      border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.72);
+      cursor: pointer; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .updates:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: rgba(119,161,205,.58); }
+    .updates:focus-visible { outline: 3px solid rgba(119,161,205,.3); outline-offset: 3px; }
+    .updates-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .updates-heading .section-title { margin: 0; font-size: 1.35rem; }
+    .updates-more { color: var(--blue); font-size: .8rem; white-space: nowrap; }
     .timeline { margin-top: 25px; display: grid; gap: 15px; }
     .timeline-item {
       display: grid; grid-template-columns: 110px 1fr; gap: 24px; padding: 23px;
       border: 1px solid var(--line); border-radius: var(--radius); background: rgba(255,255,255,.72);
     }
+    .updates .timeline-item { grid-template-columns: 1fr; gap: 10px; padding: 16px; background: white; }
+    .updates-history-toolbar { margin-bottom: 24px; }
     .version { color: var(--blue); font-weight: 800; }
     .date { margin-top: 7px; color: var(--muted); font-size: .75rem; }
     .timeline-item h3 { margin: 0 0 8px; font-size: 1.06rem; }
@@ -222,6 +288,21 @@
     .photo-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
     .photo-card:hover img { transform: scale(1.045); }
     .photo-card .caption { position: absolute; inset: auto 0 0; padding: 30px 12px 10px; color: white; background: linear-gradient(transparent, rgba(0,0,0,.64)); font-size: .82rem; }
+
+    /* 留言与反馈：公开留言卡片和游客提交表单。 */
+    .feedback-layout { margin-top: 30px; display: grid; grid-template-columns: minmax(260px,.8fr) minmax(0,1.2fr); gap: 18px; }
+    .feedback-form, .feedback-board { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
+    .feedback-form { display: grid; gap: 13px; align-content: start; }
+    .feedback-form label { display: grid; gap: 7px; color: var(--muted); font-size: .8rem; font-weight: 700; }
+    .feedback-form input, .feedback-form textarea, .feedback-form select { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; background: white; }
+    .feedback-form textarea { min-height: 150px; resize: vertical; }
+    .feedback-public { display: flex !important; grid-template-columns: none; align-items: center; gap: 8px !important; color: var(--ink) !important; }
+    .feedback-public input { width: auto; }
+    .feedback-list { display: grid; gap: 11px; }
+    .feedback-item { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: #f9fbfa; }
+    .feedback-item header { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .78rem; }
+    .feedback-item strong { color: var(--ink); }
+    .feedback-item p { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.7; }
 
     /* =========================================================
        07. AI 聊天区域
@@ -296,6 +377,7 @@
         width: 100%; height: auto; flex: 0 0 auto; padding: max(12px, env(safe-area-inset-top)) 13px 10px;
         border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
       }
+      .sidebar-toggle { margin: 0 0 8px; }
       .brand { margin: 0 0 10px; gap: 9px; }
       .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; border-width: 2px; }
       .brand h2 { font-size: 1rem; }
@@ -303,11 +385,19 @@
       .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
       .nav::-webkit-scrollbar { display: none; }
       .nav button { flex: 0 0 auto; width: auto; padding: 8px 12px; text-align: center; font-size: .82rem; }
+      .nav-icon { width: auto; flex-basis: auto; }
+      .app-shell.sidebar-collapsed .sidebar { width: 100%; flex-basis: auto; padding: max(12px, env(safe-area-inset-top)) 13px 10px; }
+      .app-shell.sidebar-collapsed .sidebar-toggle { margin: 0; }
+      .app-shell.sidebar-collapsed .brand,
+      .app-shell.sidebar-collapsed .nav,
+      .app-shell.sidebar-collapsed .sidebar-note { display: none; }
       .main { height: auto; flex: 1 1 auto; min-height: 0; }
       .content-section { height: 100%; padding: 28px 17px max(55px, env(safe-area-inset-bottom)); }
       .profile-grid, .content-grid { grid-template-columns: 1fr; }
       .gallery { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .timeline-item { grid-template-columns: 1fr; gap: 10px; }
+      .updates { width: 100%; }
+      .feedback-layout { grid-template-columns: 1fr; }
       .comment-form { grid-template-columns: 1fr; }
       .reply-form { margin-left: 15px; grid-template-columns: 1fr; }
       .chat-form { flex-wrap: wrap; }
@@ -335,6 +425,8 @@
   <div class="app-shell">
     <!-- 左侧栏：头像、站名、页面导航和后台入口。 -->
     <aside class="sidebar">
+      <!-- 左上角收起/展开按钮；状态会保存在当前浏览器的 localStorage。 -->
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">☰</button>
       <div class="brand">
         <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
           <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
@@ -343,15 +435,17 @@
       </div>
       <!-- data-section 的值必须与右侧 section 的 id 一致。 -->
       <nav class="nav" aria-label="主要导航">
-        <button class="active" data-section="home">主页</button>
-        <button data-section="portfolio">个人空间</button>
-        <button data-section="about">关于我</button>
-        <button data-section="contact">联系方式</button>
-        <button data-section="ai-helper">AI 助手</button>
+        <button class="active" data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
+        <button data-section="portfolio" title="个人空间"><span class="nav-icon">▦</span><span class="nav-label">个人空间</span></button>
+        <button data-section="about" title="关于我"><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
+        <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
+        <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
+        <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
       </nav>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
-        <br><small>网站版本 v1.8.8.0</small>
+        <!-- #site-version 会读取后台设置；新增/修改最新更新日志时会自动同步。 -->
+        <br><small id="site-version">网站版本 v1.8.8.0</small>
       </div>
     </aside>
 
@@ -363,16 +457,16 @@
           <h1 id="home-title">星月集的个人网站</h1>
           <!-- 主页介绍可在后台“网站设置”中修改；前端会写入 #home-intro。 -->
           <p class="lead" id="home-intro"></p>
-          <div class="intro">
-            <strong>本站使用说明</strong>
-            <p>  欢迎来到星月集的网站！
-            <br>  本站为星月集的个人空间，可视作朋友圈/QQ空间的平替。不论是生活中的感悟，还是学术上的探索，抑或是一些文章随笔，日后都将在该网站上进行发表，朋友圈/QQ空间除特殊事件以外，将逐步停更。
-            <br>  同时，该网站目前仍处于建设状态，网站功能将持续丰富。受限于掌握知识有限，目前该网站仍由chatGPT参与建设。随着前端学习的深入，GPT将逐渐退出建设者的角色。
-            <br>  本站托管在海外平台，故建议浏览者使用非公用网络进行登陆，以防被拦截从而导致浏览失败。若有更多关于网站建设的想法，也欢迎与星月集进行联系沟通！</p>
+          <div class="usage-guide">
+            <h2>本站使用说明</h2>
+            <p>欢迎来到星月集的网站！</p>
+            <p>本站为星月集的个人空间，可视作朋友圈/QQ空间的平替。不论是生活中的感悟，还是学术上的探索，抑或是一些文章随笔，日后都将在该网站上进行发表，朋友圈/QQ空间除特殊事件以外，将逐步停更。</p>
+            <p>同时，该网站目前仍处于建设状态，网站功能将持续丰富。受限于掌握知识有限，目前该网站仍由 ChatGPT 参与建设。随着前端学习的深入，GPT 将逐渐退出建设者的角色。</p>
+            <p>本站托管在海外平台，故建议浏览者使用非公用网络进行登录，以防被拦截从而导致浏览失败。若有更多关于网站建设的想法，也欢迎与星月集进行联系沟通！</p>
           </div>
-          <div class="updates">
-            <h2 class="section-title">版本更新说明</h2>
-            <!-- #timeline 由 JavaScript 根据 D1 中的更新日志自动生成。 -->
+          <div id="updates-preview" class="updates" role="button" tabindex="0" aria-label="查看往期版本更新说明">
+            <div class="updates-heading"><h2 class="section-title">版本更新说明</h2><span class="updates-more">查看往期 →</span></div>
+            <!-- 主页只显示最新一条；点击整个框后进入下一级页面查看完整历史。 -->
             <div id="timeline" class="timeline"><p class="loading">正在读取更新记录…</p></div>
           </div>
         </div>
@@ -382,18 +476,20 @@
       <section id="portfolio" class="content-section">
         <div class="section-inner">
           <h1>个人空间</h1>
-          <!-- 三个按钮分别切换下方 articles、photos、guides 面板。 -->
-          <div class="portfolio-tabs" role="tablist">
-            <button class="tab-button active" data-portfolio-tab="articles">随笔</button>
-            <button class="tab-button" data-portfolio-tab="photos">拍摄照片</button>
-            <button class="tab-button" data-portfolio-tab="guides">北京旅行指南</button>
-          </div>
-          <div id="panel-articles" class="portfolio-panel active"><div id="article-grid" class="content-grid"></div></div>
-          <div id="panel-photos" class="portfolio-panel">
-            <div id="album-tabs" class="album-tabs"></div>
-            <div id="photo-gallery" class="gallery"></div>
-          </div>
-          <div id="panel-guides" class="portfolio-panel"><div id="guide-grid" class="content-grid"></div></div>
+          <p class="section-desc">大板块和图片子板块均由站长后台维护。</p>
+          <!-- 这两个容器完全根据 D1 数据生成，不再把“随笔/图片/指南”写死在 HTML。 -->
+          <div id="portfolio-tabs" class="portfolio-tabs" role="tablist"></div>
+          <div id="portfolio-panel-host"></div>
+        </div>
+      </section>
+
+      <!-- ==================== 往期版本更新说明 ==================== -->
+      <section id="updates-history" class="content-section">
+        <div class="section-inner">
+          <div class="updates-history-toolbar"><button class="btn ghost" type="button" data-jump="home">← 返回主页</button></div>
+          <h1>往期版本更新说明</h1>
+          <p class="section-desc">每次更新都以独立记录保存，可以按时间回溯。</p>
+          <div id="timeline-history" class="timeline"><p class="loading">正在读取更新记录…</p></div>
         </div>
       </section>
 
@@ -416,6 +512,29 @@
           <div class="profile-grid">
             <div class="info-card"><span>国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
             <div class="info-card"><span>国际邮箱</span><a href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 留言与反馈 ==================== -->
+      <section id="feedback" class="content-section">
+        <div class="section-inner">
+          <h1>留言与反馈</h1>
+          <p class="section-desc">可以游客身份留言、报告网站问题或提出功能建议。联系方式只供站长查看。</p>
+          <div class="feedback-layout">
+            <form id="feedback-form" class="feedback-form">
+              <label>游客署名<input id="feedback-name" maxlength="30" required placeholder="怎么称呼你"></label>
+              <label>联系方式（选填，仅站长可见）<input id="feedback-contact" maxlength="160" placeholder="邮箱、微信或 QQ"></label>
+              <label>类型<select id="feedback-category"><option value="message">留言</option><option value="bug">网站问题</option><option value="suggestion">功能建议</option></select></label>
+              <label>内容<textarea id="feedback-body" maxlength="3000" required placeholder="写下想说的话…"></textarea></label>
+              <label class="feedback-public"><input id="feedback-public" type="checkbox">允许将这条留言公开显示在留言板</label>
+              <button class="btn" type="submit">提交给站长</button>
+              <p id="feedback-notice" class="notice"></p>
+            </form>
+            <div class="feedback-board">
+              <h2 class="section-title">公开留言板</h2>
+              <div id="feedback-list" class="feedback-list"><p class="loading">正在读取留言…</p></div>
+            </div>
           </div>
         </div>
       </section>
@@ -492,7 +611,14 @@
        ======================================================== -->
   <script>
     /* ---------- 01. 页面状态：保存从服务器读取的数据和当前打开的内容。 ---------- */
-    const state = { data: null, currentContent: null, comments: [], activeAlbum: "all" };
+    const state = {
+      data: null,
+      currentContent: null,
+      comments: [],
+      activePortfolioSection: null,
+      activeAlbums: {},
+      publicFeedback: [],
+    };
 
     /* 如果本次访问由头像强制刷新产生，清理地址栏中的临时防缓存参数。 */
     const initialUrl = new URL(window.location.href);
@@ -535,33 +661,59 @@
     /* ---------- 03. 主导航：显示指定 section，并滚回该板块顶部。 ---------- */
     function showSection(id) {
       document.querySelectorAll(".content-section").forEach((section) => section.classList.toggle("active", section.id === id));
-      document.querySelectorAll(".nav button").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
+      document.querySelectorAll(".nav button[data-section]").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
       document.getElementById(id)?.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    /* ---------- 04. 首页更新日志渲染。 ---------- */
-    function renderChangelogs() {
-      const timeline = document.getElementById("timeline");
-      timeline.replaceChildren();
-      const logs = state.data?.changelogs || [];
-      if (!logs.length) { timeline.append(empty("还没有更新记录。")); return; }
-      logs.forEach((log) => {
-        const item = document.createElement("article"); item.className = "timeline-item";
-        const side = document.createElement("div");
-        const version = document.createElement("div"); version.className = "version"; version.textContent = `v${log.version}`;
-        const date = document.createElement("div"); date.className = "date"; date.textContent = formatDate(log.published_at);
-        side.append(version, date);
-        const main = document.createElement("div");
-        const title = document.createElement("h3"); title.textContent = log.title;
-        const body = document.createElement("p"); body.textContent = log.body;
-        main.append(title, body); item.append(side, main); timeline.append(item);
-      });
+    /* ---------- 04. 首页最新日志 + 下一级完整历史。 ---------- */
+    function changelogNode(log) {
+      const item = document.createElement("article"); item.className = "timeline-item";
+      const side = document.createElement("div");
+      const version = document.createElement("div"); version.className = "version"; version.textContent = `v${log.version}`;
+      const date = document.createElement("div"); date.className = "date"; date.textContent = formatDate(log.published_at);
+      side.append(version, date);
+      const main = document.createElement("div");
+      const title = document.createElement("h3"); title.textContent = log.title;
+      const body = document.createElement("p"); body.textContent = log.body;
+      main.append(title, body); item.append(side, main);
+      return item;
     }
 
-    /* ---------- 05. 文章与北京旅行指南卡片。 ---------- */
-    function contentCard(item) {
+    function renderChangelogs() {
+      const preview = document.getElementById("timeline");
+      const history = document.getElementById("timeline-history");
+      preview.replaceChildren(); history.replaceChildren();
+      const logs = state.data?.changelogs || [];
+      if (!logs.length) {
+        preview.append(empty("还没有更新记录。"));
+        history.append(empty("还没有更新记录。"));
+        return;
+      }
+      preview.append(changelogNode(logs[0]));
+      logs.forEach((log) => history.append(changelogNode(log)));
+    }
+
+    /* ---------- 05. 动态个人空间：大板块、文章、相册与图片。 ---------- */
+    function portfolioSections() {
+      const configured = state.data?.sections || [];
+      if (configured.length) return configured;
+      // 仅用于兼容浏览器中尚未失效的旧 bootstrap 缓存。
+      return [
+        { id: "section-essays", name: "随笔", kind: "content", show_all: 1 },
+        { id: "section-photos", name: "拍摄照片", kind: "gallery", show_all: 1 },
+        { id: "section-guides", name: "北京旅行指南", kind: "content", show_all: 1 },
+      ];
+    }
+
+    function contentBelongsToSection(item, section) {
+      if (item.section_id) return item.section_id === section.id;
+      if (section.id === "section-guides") return item.type === "guide";
+      return section.id === "section-essays" && item.type !== "guide";
+    }
+
+    function contentCard(item, section) {
       const card = document.createElement("article"); card.className = "content-card"; card.tabIndex = 0;
-      const kind = document.createElement("span"); kind.className = "kind"; kind.textContent = item.type === "guide" ? "BEIJING GUIDE" : "ARTICLE";
+      const kind = document.createElement("span"); kind.className = "kind"; kind.textContent = section.name;
       const title = document.createElement("h3"); title.textContent = item.title;
       const excerpt = document.createElement("p"); excerpt.textContent = item.excerpt || "点击阅读全文";
       const meta = document.createElement("div"); meta.className = "card-meta";
@@ -573,33 +725,35 @@
       return card;
     }
 
-    function renderContent() {
-      const articles = (state.data?.content || []).filter((item) => item.type === "article");
-      const guides = (state.data?.content || []).filter((item) => item.type === "guide");
-      const articleGrid = document.getElementById("article-grid");
-      const guideGrid = document.getElementById("guide-grid");
-      articleGrid.replaceChildren(); guideGrid.replaceChildren();
-      if (!articles.length) articleGrid.append(empty("文章专栏尚未发布内容，站长可以通过后台直接撰写。"));
-      else articles.forEach((item) => articleGrid.append(contentCard(item)));
-      if (!guides.length) guideGrid.append(empty("北京旅行指南尚未发布内容。"));
-      else guides.forEach((item) => guideGrid.append(contentCard(item)));
-    }
+    function renderGallerySection(host, section) {
+      const albums = (state.data?.albums || []).filter((item) => item.section_id ? item.section_id === section.id : section.id === "section-photos");
+      const validAlbumIds = new Set(albums.map((item) => item.id));
+      let activeAlbum = state.activeAlbums[section.id];
+      if (!activeAlbum || (activeAlbum !== "all" && !validAlbumIds.has(activeAlbum))) {
+        activeAlbum = Number(section.show_all) ? "all" : (albums[0]?.id || "none");
+        state.activeAlbums[section.id] = activeAlbum;
+      }
 
-    /* ---------- 06. 相册分类、图片网格和大图预览。 ---------- */
-    function renderAlbums() {
-      const tabs = document.getElementById("album-tabs"); tabs.replaceChildren();
-      const all = document.createElement("button"); all.className = `tab-button${state.activeAlbum === "all" ? " active" : ""}`; all.textContent = "全部";
-      all.addEventListener("click", () => { state.activeAlbum = "all"; renderAlbums(); renderPhotos(); }); tabs.append(all);
-      (state.data?.albums || []).forEach((album) => {
-        const button = document.createElement("button"); button.className = `tab-button${state.activeAlbum === album.id ? " active" : ""}`; button.textContent = album.name;
+      const tabs = document.createElement("div"); tabs.className = "album-tabs";
+      const selectAlbum = (albumId) => { state.activeAlbums[section.id] = albumId; renderPortfolioPanel(); };
+      if (Number(section.show_all)) {
+        const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
+        all.className = `tab-button${activeAlbum === "all" ? " active" : ""}`;
+        all.addEventListener("click", () => selectAlbum("all")); tabs.append(all);
+      }
+      albums.forEach((album) => {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = album.name;
+        button.className = `tab-button${activeAlbum === album.id ? " active" : ""}`;
         button.title = album.description || album.name;
-        button.addEventListener("click", () => { state.activeAlbum = album.id; renderAlbums(); renderPhotos(); }); tabs.append(button);
+        button.addEventListener("click", () => selectAlbum(album.id)); tabs.append(button);
       });
-    }
+      host.append(tabs);
 
-    function renderPhotos() {
-      const gallery = document.getElementById("photo-gallery"); gallery.replaceChildren();
-      const photos = (state.data?.media || []).filter((item) => state.activeAlbum === "all" || item.album_id === state.activeAlbum);
+      const gallery = document.createElement("div"); gallery.className = "gallery"; host.append(gallery);
+      const photos = (state.data?.media || []).filter((item) => {
+        const belongs = item.section_id ? item.section_id === section.id : section.id === "section-photos";
+        return belongs && (activeAlbum === "all" || item.album_id === activeAlbum);
+      });
       if (!photos.length) { gallery.append(empty("这个图片板块还没有上传图片。")); return; }
       photos.forEach((photo) => {
         const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
@@ -608,6 +762,34 @@
         card.append(image, caption); card.addEventListener("click", () => openImage(photo));
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo); }); gallery.append(card);
       });
+    }
+
+    function renderPortfolioPanel() {
+      const sections = portfolioSections();
+      const section = sections.find((item) => item.id === state.activePortfolioSection) || sections[0];
+      const host = document.getElementById("portfolio-panel-host"); host.replaceChildren();
+      if (!section) { host.append(empty("还没有个人空间板块，请在站长后台新建。")); return; }
+      state.activePortfolioSection = section.id;
+      if (section.kind === "gallery") { renderGallerySection(host, section); return; }
+
+      const grid = document.createElement("div"); grid.className = "content-grid"; host.append(grid);
+      const items = (state.data?.content || []).filter((item) => contentBelongsToSection(item, section));
+      if (!items.length) grid.append(empty(`“${section.name}”尚未发布内容。`));
+      else items.forEach((item) => grid.append(contentCard(item, section)));
+    }
+
+    function renderPortfolio() {
+      const sections = portfolioSections();
+      const tabs = document.getElementById("portfolio-tabs"); tabs.replaceChildren();
+      if (!sections.some((item) => item.id === state.activePortfolioSection)) state.activePortfolioSection = sections[0]?.id || null;
+      sections.forEach((section) => {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = section.name;
+        button.className = `tab-button${section.id === state.activePortfolioSection ? " active" : ""}`;
+        button.title = section.description || section.name;
+        button.addEventListener("click", () => { state.activePortfolioSection = section.id; renderPortfolio(); });
+        tabs.append(button);
+      });
+      renderPortfolioPanel();
     }
 
     function openImage(photo) {
@@ -624,7 +806,12 @@
       document.getElementById("brand-title").textContent = title;
       // 后台仍可修改站名；主页标题会自动补上“的个人网站”，避免把页面文案覆盖成短标题。
       document.getElementById("home-title").textContent = `${title}的个人网站`;
+      /*
+       * “这里是星月集的个人网站”不写死在上方 HTML 正文里：HTML 只有一个空的
+       * #home-intro 占位符，真正文字来自 D1 的 settings.intro，并可在后台修改。
+       */
       document.getElementById("home-intro").textContent = settings.intro || "这里是星月集的个人网站。";
+      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.8.8.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
       const school = settings.school || "北京理工大学 计算机学院";
@@ -646,9 +833,10 @@
           api(`/api/comments?contentId=${encodeURIComponent(id)}`),
         ]);
         state.currentContent = content; state.comments = commentsData.comments || [];
-        document.getElementById("reader-kind").textContent = content.type === "guide" ? "BEIJING TRAVEL GUIDE" : "ARTICLE";
+        const sectionName = content.section_name || (content.type === "guide" ? "北京旅行指南" : "文章");
+        document.getElementById("reader-kind").textContent = sectionName;
         document.getElementById("reader-title").textContent = content.title;
-        document.getElementById("reader-meta").textContent = `${formatDate(content.published_at)} · ${content.type === "guide" ? "北京旅行指南" : "文章"}`;
+        document.getElementById("reader-meta").textContent = `${formatDate(content.published_at)} · ${sectionName}`;
         document.getElementById("reader-body").innerHTML = content.body_html || "<p>暂无正文。</p>";
         document.querySelector("#content-like span").textContent = content.like_count;
         document.querySelector("#content-dislike span").textContent = content.dislike_count;
@@ -733,10 +921,36 @@
       setTimeout(() => document.body.classList.remove("printing"), 500);
     }
 
-    /* ---------- 09. AI 聊天气泡。 ---------- */
+    /* ---------- 09. 公开留言板。联系方式永远不会由公开接口返回。 ---------- */
+    function renderFeedback() {
+      const list = document.getElementById("feedback-list"); list.replaceChildren();
+      if (!state.publicFeedback.length) { list.append(empty("还没有公开留言。")); return; }
+      const categoryNames = { message: "留言", bug: "网站问题", suggestion: "功能建议" };
+      state.publicFeedback.forEach((item) => {
+        const card = document.createElement("article"); card.className = "feedback-item";
+        const header = document.createElement("header");
+        const name = document.createElement("strong"); name.textContent = `${item.guest_name} · ${categoryNames[item.category] || "留言"}`;
+        const date = document.createElement("span"); date.textContent = formatDate(item.created_at);
+        const body = document.createElement("p"); body.textContent = item.body;
+        header.append(name, date); card.append(header, body); list.append(card);
+      });
+    }
+
+    /* ---------- 10. AI 聊天气泡与 LaTeX 公式排版。 ---------- */
     function addBubble(role, text) {
       const bubble = document.createElement("div"); bubble.className = `bubble ${role}`; bubble.textContent = text;
       const messages = document.getElementById("chat-messages"); messages.append(bubble); messages.scrollTop = messages.scrollHeight; return bubble;
+    }
+
+    async function typesetAiBubble(bubble) {
+      if (!bubble || !window.MathJax?.typesetPromise) return;
+      try {
+        // 如果同一气泡曾被排版过，先清理 MathJax 的内部记录再处理最终文本。
+        window.MathJax.typesetClear?.([bubble]);
+        await window.MathJax.typesetPromise([bubble]);
+      } catch (error) {
+        console.warn("LaTeX 排版失败，已保留原始文字", error);
+      }
     }
 
     /*
@@ -764,7 +978,7 @@
         const answer = await response.text();
         if (!answer.trim()) throw new Error("AI 没有返回内容");
         bubble.textContent = answer;
-        return;
+        return answer;
       }
 
       const reader = response.body.getReader();
@@ -781,23 +995,48 @@
       answer += decoder.decode();
       bubble.textContent = answer;
       if (!answer.trim()) throw new Error("AI 没有返回内容");
+      return answer;
     }
 
-    /* ---------- 10. 页面启动：一次读取网站公开数据并渲染各板块。 ---------- */
+    /* ---------- 11. 页面启动：读取公开数据并渲染各板块。 ---------- */
     async function boot() {
       try {
-        state.data = await api("/api/bootstrap");
-        applySettings(); renderChangelogs(); renderContent(); renderAlbums(); renderPhotos();
+        const [bootstrap, feedbackData] = await Promise.all([
+          api("/api/bootstrap"),
+          api("/api/feedback").catch(() => ({ feedback: [] })),
+        ]);
+        state.data = bootstrap;
+        state.publicFeedback = feedbackData.feedback || [];
+        applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback();
       } catch (error) {
         document.getElementById("timeline").replaceChildren(empty(`网站数据暂时无法读取：${error.message}`));
-        document.getElementById("article-grid").append(empty("数据服务尚未完成部署。"));
-        document.getElementById("guide-grid").append(empty("数据服务尚未完成部署。"));
-        document.getElementById("photo-gallery").append(empty("数据服务尚未完成部署。"));
+        document.getElementById("timeline-history").replaceChildren(empty("数据服务尚未完成部署。"));
+        document.getElementById("portfolio-panel-host").replaceChildren(empty("数据服务尚未完成部署。"));
+        document.getElementById("feedback-list").replaceChildren(empty("留言服务暂时不可用。"));
       }
     }
 
-    /* ---------- 11. 事件绑定：导航、头像、专栏切换和弹窗。 ---------- */
-    document.querySelectorAll(".nav button").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.section)));
+    /* ---------- 12. 事件绑定：导航、侧栏、头像和弹窗。 ---------- */
+    document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.section)));
+
+    const appShell = document.querySelector(".app-shell");
+    const sidebarToggle = document.getElementById("sidebar-toggle");
+    function setSidebarCollapsed(collapsed) {
+      appShell.classList.toggle("sidebar-collapsed", collapsed);
+      sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+      sidebarToggle.setAttribute("aria-label", collapsed ? "展开侧边栏" : "收起侧边栏");
+      sidebarToggle.title = collapsed ? "展开侧边栏" : "收起侧边栏";
+      sidebarToggle.textContent = collapsed ? "☰" : "◀";
+      localStorage.setItem("xyj_sidebar_collapsed", collapsed ? "1" : "0");
+    }
+    setSidebarCollapsed(localStorage.getItem("xyj_sidebar_collapsed") === "1");
+    sidebarToggle.addEventListener("click", () => setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed")));
+
+    const updatesPreview = document.getElementById("updates-preview");
+    updatesPreview.addEventListener("click", () => showSection("updates-history"));
+    updatesPreview.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); showSection("updates-history"); }
+    });
 
     /*
      * 头像点击刷新：
@@ -820,16 +1059,12 @@
     });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
-    document.querySelectorAll(".tab-button[data-portfolio-tab]").forEach((button) => button.addEventListener("click", () => {
-      document.querySelectorAll(".tab-button[data-portfolio-tab]").forEach((item) => item.classList.toggle("active", item === button));
-      document.querySelectorAll(".portfolio-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${button.dataset.portfolioTab}`));
-    }));
     document.getElementById("content-like").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, 1, event.currentTarget));
     document.getElementById("content-dislike").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, -1, event.currentTarget));
     document.getElementById("content-pdf").addEventListener("click", printCurrentContent);
     document.getElementById("reader-print").addEventListener("click", printCurrentContent);
 
-    /* ---------- 12. 游客评论表单。 ---------- */
+    /* ---------- 13. 游客评论表单。 ---------- */
     document.getElementById("guest-name").value = localStorage.getItem("xyj_guest_name") || "";
     document.getElementById("comment-form").addEventListener("submit", async (event) => {
       event.preventDefault(); if (!state.currentContent) return;
@@ -843,7 +1078,41 @@
       } catch (error) { notice.textContent = error.message; }
     });
 
-    /* ---------- 13. AI 提问表单。 ---------- */
+    /* ---------- 14. 游客留言与反馈表单。 ---------- */
+    document.getElementById("feedback-name").value = localStorage.getItem("xyj_guest_name") || "";
+    document.getElementById("feedback-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const notice = document.getElementById("feedback-notice");
+      const guestName = document.getElementById("feedback-name").value.trim();
+      const isPublic = document.getElementById("feedback-public").checked;
+      submit.disabled = true; notice.textContent = "正在提交…";
+      try {
+        localStorage.setItem("xyj_guest_name", guestName);
+        await api("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            guestName,
+            contact: document.getElementById("feedback-contact").value,
+            category: document.getElementById("feedback-category").value,
+            body: document.getElementById("feedback-body").value,
+            isPublic,
+          }),
+        });
+        document.getElementById("feedback-body").value = "";
+        notice.textContent = "已提交，站长后台会显示这条信息。";
+        if (isPublic) {
+          const data = await api("/api/feedback"); state.publicFeedback = data.feedback || []; renderFeedback();
+        }
+      } catch (error) {
+        notice.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    /* ---------- 15. AI 提问表单。 ---------- */
     document.getElementById("chat-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = document.getElementById("chat-input"); const status = document.getElementById("chat-status"); const submit = event.currentTarget.querySelector("button");
@@ -880,7 +1149,9 @@
           }
         }
       } finally {
-        answerBubble.classList.remove("streaming"); submit.disabled = false; input.focus();
+        answerBubble.classList.remove("streaming");
+        await typesetAiBubble(answerBubble);
+        submit.disabled = false; input.focus();
       }
     });
 
