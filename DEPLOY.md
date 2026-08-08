@@ -48,3 +48,18 @@ https://xingyueji.com.cn/api/health
 ```
 
 如果访问 `/api/health` 得到 404，或者没有显示 `1.8.8.0`，说明 Cloudflare 仍在运行旧部署。
+
+## 留言消息通知（可选）
+
+留言无论是否配置外部通知，都会先安全保存到 D1，并显示在 `/studio` 的“留言与反馈”中。
+
+如需企业微信提醒：
+
+1. 在企业微信群中添加群机器人并复制 Webhook 地址。
+2. 打开 Cloudflare Worker → Settings → Variables and Secrets。
+3. 新建加密 Secret，名称写 `WECOM_WEBHOOK_URL`，值粘贴完整 Webhook 地址。
+4. 保存并重新部署后，新留言会按企业微信文本消息格式推送。
+
+个人微信和 QQ 没有可以直接写进网页的通用个人账号接口。可以使用自建机器人或可信中转服务，
+把它提供的 HTTPS 接收地址保存为 Secret `FEEDBACK_WEBHOOK_URL`。Worker 会发送包含
+`event`、`feedback` 和 `text` 的 JSON；API Key 和 Webhook 地址都不要写进 HTML 或提交到 GitHub。
