@@ -636,6 +636,7 @@
       activeAlbums: {},
       publicFeedback: [],
       pdfDownloading: false,
+      pdfLibraryPromise: null,
     };
 
     /* 如果本次访问由头像强制刷新产生，清理地址栏中的临时防缓存参数。 */
@@ -935,6 +936,38 @@
     }
 
     /* ---------- 08. PDF：在浏览器内生成文件并直接下载，不再打开打印窗口。 ---------- */
+    async function ensurePdfLibrary() {
+      if (typeof window.html2pdf === "function") return;
+      if (!state.pdfLibraryPromise) {
+        /*
+         * 一些浏览器扩展会拦截页面初次加载的工具脚本。此处从本站同源地址重新
+         * 读取已经随项目部署的固定版本，并通过临时 Blob 执行，避免点击后失效。
+         */
+        state.pdfLibraryPromise = (async () => {
+          const response = await fetch("/html2pdf.bundle.min.js", { cache: "force-cache" });
+          if (!response.ok) throw new Error(`PDF 组件读取失败（${response.status}）`);
+          const source = await response.text();
+          const objectUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+          try {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement("script");
+              script.src = objectUrl;
+              script.onload = () => { script.remove(); resolve(); };
+              script.onerror = () => { script.remove(); reject(new Error("PDF 组件执行失败")); };
+              document.head.append(script);
+            });
+          } finally {
+            URL.revokeObjectURL(objectUrl);
+          }
+          if (typeof window.html2pdf !== "function") throw new Error("PDF 组件未正确初始化");
+        })().catch((error) => {
+          state.pdfLibraryPromise = null;
+          throw error;
+        });
+      }
+      await state.pdfLibraryPromise;
+    }
+
     function pdfFilename(title) {
       const safeTitle = String(title || "星月集文章")
         .normalize("NFKC")
@@ -960,10 +993,6 @@
 
     async function downloadCurrentContentPdf(button) {
       if (!state.currentContent || state.pdfDownloading) return;
-      if (typeof window.html2pdf !== "function") {
-        alert("PDF 组件尚未加载完成，请稍后再试。若问题持续，请刷新页面。");
-        return;
-      }
 
       const originalLabel = button.textContent;
       let exportRoot = null;
@@ -972,6 +1001,10 @@
       button.textContent = "生成中…";
 
       try {
+        button.textContent = "加载组件…";
+        await ensurePdfLibrary();
+        button.textContent = "生成中…";
+
         // 只复制文章信息和正文；评论、点赞按钮及弹窗工具栏不会进入下载文件。
         exportRoot = document.createElement("article");
         exportRoot.className = "pdf-export";
