@@ -28,6 +28,11 @@
     };
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+  <!--
+    html2pdf.js 由项目自身托管，不依赖临时的第三方 CDN。
+    点击文章中的“下载 PDF”时，它会在浏览器内生成 .pdf 文件并直接下载。
+  -->
+  <script defer src="/html2pdf.bundle.min.js"></script>
   <style>
     /* =========================================================
        01. 全局基础与主题颜色
@@ -342,6 +347,29 @@
     .reader-body img { display: block; max-width: 100%; height: auto; margin: 24px auto; border-radius: 12px; }
     .reader-body blockquote { margin: 24px 0; padding: 4px 0 4px 18px; border-left: 4px solid var(--cyan); color: var(--muted); }
     .reader-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 25px 0; border-block: 1px solid var(--line); margin-top: 34px; }
+
+    /*
+      PDF 专用排版：导出节点会短暂放在当前页面最底层，html2pdf.js 读取完后立即删除。
+      这里只控制下载文件中的标题、正文和图片，不会改变访客正在阅读的弹窗样式。
+    */
+    .pdf-export {
+      position: fixed; left: 0; top: 0; z-index: -10000; width: 760px;
+      padding: 48px 54px; pointer-events: none; color: #17262c; background: #fff;
+      font-family: Georgia, "Songti SC", "Microsoft YaHei", serif;
+    }
+    .pdf-export h1 { margin: 10px 0 12px; font-size: 32px; line-height: 1.35; }
+    .pdf-export .pdf-kind { margin: 0; color: #557985; font-size: 13px; font-weight: 700; letter-spacing: .12em; }
+    .pdf-export .pdf-meta { margin-bottom: 30px; color: #718087; font-size: 13px; }
+    .pdf-export .pdf-body { font-size: 17px; line-height: 2; overflow-wrap: anywhere; }
+    .pdf-export .pdf-body img { display: block; max-width: 100%; height: auto; margin: 22px auto; border-radius: 8px; }
+    .pdf-export .pdf-body blockquote { margin: 22px 0; padding-left: 16px; border-left: 4px solid #31bfc8; color: #5d6f76; }
+    .pdf-export h1,
+    .pdf-export h2,
+    .pdf-export h3,
+    .pdf-export img,
+    .pdf-export pre,
+    .pdf-export blockquote,
+    .pdf-export table { break-inside: avoid; page-break-inside: avoid; }
     .comments { margin-top: 34px; }
     .comment-form { display: grid; grid-template-columns: 150px 1fr auto; gap: 9px; margin: 16px 0 24px; }
     .comment-form input, .comment-form textarea { border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; }
@@ -405,17 +433,6 @@
       .bubble { max-width: 92%; }
     }
 
-    /* 打印文章时隐藏导航、按钮和评论，只保留文章正文。 */
-    @media print {
-      body.printing * { visibility: hidden !important; }
-      body.printing #reader-dialog,
-      body.printing #reader-dialog * { visibility: visible !important; }
-      body.printing #reader-dialog { position: absolute; inset: 0; width: 100%; max-height: none; box-shadow: none; }
-      body.printing .reader-wrap { max-height: none; overflow: visible; padding: 0; }
-      body.printing .dialog-top,
-      body.printing .reader-actions,
-      body.printing .comments { display: none !important; }
-    }
   </style>
 </head>
 <body>
@@ -455,8 +472,8 @@
       <section id="home" class="content-section active">
         <div class="section-inner">
           <h1 id="home-title">星月集的个人网站</h1>
-          <!-- 主页介绍可在后台“网站设置”中修改；前端会写入 #home-intro。 -->
-          <p class="lead" id="home-intro"></p>
+          <!-- 默认不显示副标题；只有站长以后在后台填写主页介绍时才会出现。 -->
+          <p class="lead" id="home-intro" hidden></p>
           <div class="usage-guide">
             <h2>本站使用说明</h2>
             <p>欢迎来到星月集的网站！</p>
@@ -562,7 +579,7 @@
   <dialog id="reader-dialog" class="reader-dialog">
     <div class="reader-wrap">
       <div class="dialog-top">
-        <button id="reader-print" class="icon-button" title="下载 PDF">PDF</button>
+        <button id="reader-print" class="icon-button" type="button" title="下载 PDF">下载 PDF</button>
         <button class="icon-button" data-close-dialog="reader-dialog" title="关闭">✕</button>
       </div>
       <article>
@@ -575,7 +592,7 @@
         <div class="reader-actions">
           <button id="content-like" class="btn small ghost">👍 <span>0</span></button>
           <button id="content-dislike" class="btn small ghost">👎 <span>0</span></button>
-          <button id="content-pdf" class="btn small ghost">转成 PDF</button>
+          <button id="content-pdf" class="btn small ghost" type="button">下载 PDF</button>
         </div>
       </article>
       <section class="comments">
@@ -618,6 +635,7 @@
       activePortfolioSection: null,
       activeAlbums: {},
       publicFeedback: [],
+      pdfDownloading: false,
     };
 
     /* 如果本次访问由头像强制刷新产生，清理地址栏中的临时防缓存参数。 */
@@ -807,10 +825,13 @@
       // 后台仍可修改站名；主页标题会自动补上“的个人网站”，避免把页面文案覆盖成短标题。
       document.getElementById("home-title").textContent = `${title}的个人网站`;
       /*
-       * “这里是星月集的个人网站”不写死在上方 HTML 正文里：HTML 只有一个空的
-       * #home-intro 占位符，真正文字来自 D1 的 settings.intro，并可在后台修改。
+       * 主页副标题默认为空，因此不会再显示“这里是星月集的个人网站”。
+       * 如果站长日后在后台填写新的主页介绍，这里会自动取消 hidden 并显示新内容。
        */
-      document.getElementById("home-intro").textContent = settings.intro || "这里是星月集的个人网站。";
+      const intro = String(settings.intro || "").trim();
+      const introNode = document.getElementById("home-intro");
+      introNode.textContent = intro;
+      introNode.hidden = !intro;
       document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.8.8.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
@@ -913,12 +934,83 @@
       parentNode.append(form); body.focus();
     }
 
-    /* ---------- 08. PDF：调用浏览器打印窗口，选择“另存为 PDF”。 ---------- */
-    function printCurrentContent() {
-      if (!state.currentContent) return;
-      document.body.classList.add("printing");
-      window.print();
-      setTimeout(() => document.body.classList.remove("printing"), 500);
+    /* ---------- 08. PDF：在浏览器内生成文件并直接下载，不再打开打印窗口。 ---------- */
+    function pdfFilename(title) {
+      const safeTitle = String(title || "星月集文章")
+        .normalize("NFKC")
+        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
+      return `${safeTitle || "星月集文章"}.pdf`;
+    }
+
+    function waitForPdfImages(root) {
+      const images = Array.from(root.querySelectorAll("img"));
+      return Promise.all(images.map((image) => {
+        if (image.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          const done = () => resolve();
+          image.addEventListener("load", done, { once: true });
+          image.addEventListener("error", done, { once: true });
+          window.setTimeout(done, 5000);
+        });
+      }));
+    }
+
+    async function downloadCurrentContentPdf(button) {
+      if (!state.currentContent || state.pdfDownloading) return;
+      if (typeof window.html2pdf !== "function") {
+        alert("PDF 组件尚未加载完成，请稍后再试。若问题持续，请刷新页面。");
+        return;
+      }
+
+      const originalLabel = button.textContent;
+      let exportRoot = null;
+      state.pdfDownloading = true;
+      document.querySelectorAll("#reader-print, #content-pdf").forEach((item) => { item.disabled = true; });
+      button.textContent = "生成中…";
+
+      try {
+        // 只复制文章信息和正文；评论、点赞按钮及弹窗工具栏不会进入下载文件。
+        exportRoot = document.createElement("article");
+        exportRoot.className = "pdf-export";
+
+        const kind = document.createElement("p");
+        kind.className = "pdf-kind";
+        kind.textContent = document.getElementById("reader-kind").textContent;
+
+        const title = document.createElement("h1");
+        title.textContent = state.currentContent.title || "未命名文章";
+
+        const meta = document.createElement("p");
+        meta.className = "pdf-meta";
+        meta.textContent = document.getElementById("reader-meta").textContent;
+
+        const body = document.getElementById("reader-body").cloneNode(true);
+        body.removeAttribute("id");
+        body.classList.add("pdf-body");
+        exportRoot.append(kind, title, meta, body);
+        document.body.append(exportRoot);
+
+        await waitForPdfImages(exportRoot);
+        await window.html2pdf().set({
+          margin: [12, 12, 14, 12],
+          filename: pdfFilename(state.currentContent.title),
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"], avoid: ["img", "pre", "blockquote", "table"] },
+        }).from(exportRoot).save();
+      } catch (error) {
+        console.error("PDF download failed", error);
+        alert("PDF 生成失败，请刷新页面后重试。");
+      } finally {
+        exportRoot?.remove();
+        state.pdfDownloading = false;
+        document.querySelectorAll("#reader-print, #content-pdf").forEach((item) => { item.disabled = false; });
+        button.textContent = originalLabel;
+      }
     }
 
     /* ---------- 09. 公开留言板。联系方式永远不会由公开接口返回。 ---------- */
@@ -1061,8 +1153,8 @@
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
     document.getElementById("content-like").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, 1, event.currentTarget));
     document.getElementById("content-dislike").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, -1, event.currentTarget));
-    document.getElementById("content-pdf").addEventListener("click", printCurrentContent);
-    document.getElementById("reader-print").addEventListener("click", printCurrentContent);
+    document.getElementById("content-pdf").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
+    document.getElementById("reader-print").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
 
     /* ---------- 13. 游客评论表单。 ---------- */
     document.getElementById("guest-name").value = localStorage.getItem("xyj_guest_name") || "";
