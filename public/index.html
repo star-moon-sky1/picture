@@ -349,12 +349,11 @@
     .reader-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 25px 0; border-block: 1px solid var(--line); margin-top: 34px; }
 
     /*
-      PDF 专用排版：导出节点会短暂放在当前页面最底层，html2pdf.js 读取完后立即删除。
+      PDF 专用排版：导出节点会短暂放在页面末尾，html2pdf.js 读取完后立即删除。
       这里只控制下载文件中的标题、正文和图片，不会改变访客正在阅读的弹窗样式。
     */
     .pdf-export {
-      position: fixed; left: 0; top: 0; z-index: -10000; width: 760px;
-      padding: 48px 54px; pointer-events: none; color: #17262c; background: #fff;
+      display: block; width: 760px; padding: 48px 54px; color: #17262c; background: #fff;
       font-family: Georgia, "Songti SC", "Microsoft YaHei", serif;
     }
     .pdf-export h1 { margin: 10px 0 12px; font-size: 32px; line-height: 1.35; }
