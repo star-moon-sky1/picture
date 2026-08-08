@@ -25,6 +25,7 @@ const AI_FORMAT_INSTRUCTION = [
 ].join(" ");
 
 let schemaReady = false;
+let schemaPromise = null;
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -170,7 +171,7 @@ async function ensureColumn(env, table, column, definition) {
   await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
 }
 
-async function ensureSchema(env) {
+async function initializeSchema(env) {
   if (schemaReady) return;
   if (!env.DB) throw new HttpError(503, "D1 数据库尚未绑定");
 
@@ -423,6 +424,18 @@ async function ensureSchema(env) {
     .bind(latestLog?.version || APP_VERSION, timestamp).run();
 
   schemaReady = true;
+}
+
+/* 同一 Worker 实例的首批并发请求共用一个初始化 Promise，避免重复 ALTER TABLE。 */
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  if (!schemaPromise) {
+    schemaPromise = initializeSchema(env).catch((error) => {
+      schemaPromise = null;
+      throw error;
+    });
+  }
+  await schemaPromise;
 }
 
 function rows(result) {
