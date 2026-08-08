@@ -32,7 +32,7 @@
     html2pdf.js 由项目自身托管，不依赖临时的第三方 CDN。
     点击文章中的“下载 PDF”时，它会在浏览器内生成 .pdf 文件并直接下载。
   -->
-  <script defer src="/html2pdf.bundle.min.js"></script>
+  <script defer src="/pdf-engine.js"></script>
   <style>
     /* =========================================================
        01. 全局基础与主题颜色
@@ -944,7 +944,7 @@
          * 读取已经随项目部署的固定版本，并通过临时 Blob 执行，避免点击后失效。
          */
         state.pdfLibraryPromise = (async () => {
-          const response = await fetch("/html2pdf.bundle.min.js", { cache: "force-cache" });
+          const response = await fetch("/pdf-engine.js", { cache: "force-cache" });
           if (!response.ok) throw new Error(`PDF 组件读取失败（${response.status}）`);
           const source = await response.text();
           const objectUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
