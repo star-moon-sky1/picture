@@ -998,6 +998,7 @@
       let exportRoot = null;
       state.pdfDownloading = true;
       document.querySelectorAll("#reader-print, #content-pdf").forEach((item) => { item.disabled = true; });
+      button.dataset.pdfError = "";
       button.textContent = "生成中…";
 
       try {
@@ -1037,7 +1038,8 @@
         }).from(exportRoot).save();
       } catch (error) {
         console.error("PDF download failed", error);
-        alert("PDF 生成失败，请刷新页面后重试。");
+        button.dataset.pdfError = error.message || "未知错误";
+        alert(`PDF 生成失败：${button.dataset.pdfError}。请刷新页面后重试。`);
       } finally {
         exportRoot?.remove();
         state.pdfDownloading = false;
