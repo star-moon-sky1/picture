@@ -28,6 +28,7 @@
   "vars": {
     "DEEPSEEK_MODEL": "deepseek-v4-flash",
     "DEEPSEEK_API_BASE": "https://api.deepseek.com",
-    "AI_UPSTREAM_URL": "https://qwen-ai.1598116329.workers.dev"
+    "AI_UPSTREAM_URL": "https://qwen-ai.1598116329.workers.dev",
+    "QQ_BOT_APP_ID": "1905406721"
   }
 }

@@ -33,7 +33,7 @@ picture/
 ```
 
 不要把 `src` 目录误写成 `scr`，也不要只上传文件而漏掉 `public` 文件夹。
-部署后访问 `/api/health`，看到 `version: "1.8.8.0"` 即表示最新 Worker 已生效。
+部署后访问 `/api/health`，看到 `version: "1.8.9.0"` 即表示最新 Worker 已生效。
 
 ## Cloudflare 绑定
 
@@ -42,7 +42,10 @@ picture/
 - Secret：`ADMIN_PASSWORD`（必须在 Cloudflare Settings → Variables and Secrets 中设置）
 - 可选 Secret：`DEEPSEEK_API_KEY`（未设置时复用现有 `qwen-ai` Worker）
 - 可选 Secret：`WECOM_WEBHOOK_URL`（企业微信群机器人通知地址）
-- 可选 Secret：`FEEDBACK_WEBHOOK_URL`（QQ/个人微信机器人中转或其他通用 HTTPS Webhook）
+- QQ 普通变量：`QQ_BOT_APP_ID`（当前已在 `wrangler.jsonc` 中填写）
+- QQ 必需 Secret：`QQ_BOT_SECRET`（QQ 机器人 AppSecret，严禁提交到 GitHub）
+- QQ 可选 Secret：`QQ_BIND_CODE`（防止其他人抢先绑定网站通知）
+- 可选 Secret：`FEEDBACK_WEBHOOK_URL`（其他通用 HTTPS Webhook 中转）
 
 数据库表会在首次 API 请求时自动创建，无需手动执行 SQL。
 
