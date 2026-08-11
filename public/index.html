@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="星月集个人网站">
-  <meta name="xingyueji-version" content="1.8.8.0">
+  <meta name="xingyueji-version" content="1.9.0.0">
   <title>星月集 - 个人主页</title>
   <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
   <!--
@@ -332,7 +332,39 @@
     .chat-status { padding: 0 18px 12px; min-height: 22px; color: var(--muted); font-size: .78rem; }
 
     /* =========================================================
-       08. 文章阅读弹窗、评论与图片预览弹窗
+       08. 账户中心与登录提示
+       ---------------------------------------------------------
+       普通用户可以在账户中心修改昵称和密码；游客点击 AI 或账户
+       中心时使用 auth-lock-dialog 提示登录，不会直接跳走当前页面。
+       ========================================================= */
+    .access-note {
+      display: inline-flex; margin-top: 13px; padding: 7px 11px; border-radius: 999px;
+      color: #3d747c; background: var(--cyan-soft); font-size: .8rem;
+    }
+    .account-grid { margin-top: 30px; display: grid; grid-template-columns: minmax(240px,.8fr) minmax(0,1.2fr); gap: 18px; }
+    .account-card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
+    .account-card h2 { margin: 0 0 18px; font: 500 1.45rem/1.2 Georgia,"Songti SC",serif; }
+    .account-meta { display: grid; gap: 12px; margin: 18px 0 0; }
+    .account-meta div { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    .account-meta span { color: var(--muted); font-size: .76rem; }
+    .account-meta strong { overflow-wrap: anywhere; }
+    .account-form { display: grid; gap: 12px; margin-bottom: 26px; }
+    .account-form:last-child { margin-bottom: 0; }
+    .account-form label { display: grid; gap: 7px; color: var(--muted); font-size: .8rem; font-weight: 700; }
+    .account-form input { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px; outline: none; }
+    .account-form input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(49,191,200,.13); }
+    .account-status { display: inline-flex; padding: 6px 11px; border-radius: 999px; color: #765814; background: #fff0c8; font-size: .78rem; font-weight: 800; }
+    .account-status.approved { color: #2d7159; background: #e2f5ec; }
+    .account-status.rejected, .account-status.disabled { color: #954542; background: #fde9e8; }
+    .auth-lock-dialog { width: min(460px, calc(100vw - 28px)); }
+    .auth-lock-card { padding: 30px; text-align: center; background: var(--paper); }
+    .auth-lock-symbol { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 17px; border-radius: 50%; color: #fff; background: linear-gradient(135deg,var(--blue),var(--cyan)); font-size: 1.5rem; }
+    .auth-lock-card h2 { margin: 0 0 10px; font-family: Georgia,"Songti SC",serif; font-size: 1.75rem; }
+    .auth-lock-card p { margin: 0 0 22px; color: var(--muted); line-height: 1.75; }
+    .auth-lock-actions { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+
+    /* =========================================================
+       09. 文章阅读弹窗、评论与图片预览弹窗
        ========================================================= */
     dialog { border: 0; padding: 0; border-radius: 22px; box-shadow: 0 30px 100px rgba(0,0,0,.28); }
     dialog::backdrop { background: rgba(18,30,34,.68); backdrop-filter: blur(4px); }
@@ -425,6 +457,7 @@
       .timeline-item { grid-template-columns: 1fr; gap: 10px; }
       .updates { width: 100%; }
       .feedback-layout { grid-template-columns: 1fr; }
+      .account-grid { grid-template-columns: 1fr; }
       .comment-form { grid-template-columns: 1fr; }
       .reply-form { margin-left: 15px; grid-template-columns: 1fr; }
       .chat-form { flex-wrap: wrap; }
@@ -457,11 +490,12 @@
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
+        <button data-section="account" title="账户中心"><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">登录 / 账户</span></button>
       </nav>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
         <!-- #site-version 会读取后台设置；新增/修改最新更新日志时会自动同步。 -->
-        <br><small id="site-version">网站版本 v1.8.8.0</small>
+        <br><small id="site-version">网站版本 v1.9.0.0</small>
       </div>
     </aside>
 
@@ -493,6 +527,7 @@
         <div class="section-inner">
           <h1>个人空间</h1>
           <p class="section-desc">大板块和图片子板块均由站长后台维护。</p>
+          <p id="portfolio-access-note" class="access-note">游客模式仅显示公开内容</p>
           <!-- 这两个容器完全根据 D1 数据生成，不再把“随笔/图片/指南”写死在 HTML。 -->
           <div id="portfolio-tabs" class="portfolio-tabs" role="tablist"></div>
           <div id="portfolio-panel-host"></div>
@@ -571,8 +606,60 @@
           </div>
         </div>
       </section>
+
+      <!-- ==================== 普通用户账户中心 ==================== -->
+      <section id="account" class="content-section">
+        <div class="section-inner">
+          <h1>账户中心</h1>
+          <p class="section-desc">查看审核状态、修改昵称与登录密码。</p>
+          <div class="account-grid">
+            <article class="account-card">
+              <h2>账户状态</h2>
+              <span id="account-status" class="account-status">读取中</span>
+              <p id="account-status-note" class="section-desc" style="margin-top:15px"></p>
+              <div class="account-meta">
+                <div><span>登录用户名</span><strong id="account-username">—</strong></div>
+                <div><span>当前昵称</span><strong id="account-current-nickname">—</strong></div>
+                <div><span>注册时间</span><strong id="account-created-at">—</strong></div>
+                <div><span>最后登录</span><strong id="account-last-login">—</strong></div>
+              </div>
+              <button id="account-logout" class="btn ghost" type="button" style="margin-top:20px">退出账号</button>
+            </article>
+            <article class="account-card">
+              <h2>修改昵称</h2>
+              <form id="nickname-form" class="account-form">
+                <label>新昵称<input id="account-nickname" required maxlength="30" autocomplete="nickname"></label>
+                <button class="btn" type="submit">保存昵称</button>
+                <p id="nickname-notice" class="notice"></p>
+              </form>
+              <h2>修改密码</h2>
+              <form id="password-form" class="account-form">
+                <label>当前密码<input id="current-password" type="password" required maxlength="128" autocomplete="current-password"></label>
+                <label>新密码<input id="new-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="至少8位，包含字母和数字"></label>
+                <label>确认新密码<input id="new-password-confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+                <button class="btn" type="submit">修改密码</button>
+                <p id="password-notice" class="notice"></p>
+              </form>
+            </article>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
+
+  <!-- 游客点击受限功能时出现；按钮直接通往登录或注册页。 -->
+  <dialog id="auth-lock-dialog" class="auth-lock-dialog">
+    <div class="auth-lock-card">
+      <div class="auth-lock-symbol">✦</div>
+      <h2 id="auth-lock-title">请登录以使用完整功能</h2>
+      <p id="auth-lock-message">登录并通过审核后即可使用 AI 助手并查看个人空间完整内容。</p>
+      <div class="auth-lock-actions">
+        <a id="auth-login-link" class="btn" href="/login?mode=login">登录</a>
+        <a id="auth-register-link" class="btn ghost" href="/login?mode=register">注册</a>
+        <button class="btn ghost" type="button" data-close-dialog="auth-lock-dialog">暂不登录</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- 文章阅读弹窗：文章正文、点赞/点踩、PDF 和评论都在这里。 -->
   <dialog id="reader-dialog" class="reader-dialog">
@@ -629,6 +716,7 @@
     /* ---------- 01. 页面状态：保存从服务器读取的数据和当前打开的内容。 ---------- */
     const state = {
       data: null,
+      auth: { authenticated: false, user: null },
       currentContent: null,
       comments: [],
       activePortfolioSection: null,
@@ -669,6 +757,46 @@
       return data;
     }
 
+    const accountStatusLabels = {
+      pending: "等待审核", approved: "已通过审核",
+      rejected: "审核未通过", disabled: "账号已停用",
+    };
+
+    function hasFullAccess() {
+      return state.auth.authenticated && state.auth.user?.status === "approved";
+    }
+
+    /*
+     * 受限功能统一使用同一个登录提示框。游客看到登录/注册快捷入口；
+     * 已登录但未通过审核的用户会看到自己的具体审核状态。
+     */
+    function showAuthLock(feature = "full") {
+      const dialog = document.getElementById("auth-lock-dialog");
+      const title = document.getElementById("auth-lock-title");
+      const message = document.getElementById("auth-lock-message");
+      const loginLink = document.getElementById("auth-login-link");
+      const registerLink = document.getElementById("auth-register-link");
+      const next = encodeURIComponent(feature === "ai" ? "/#ai-helper" : "/#account");
+
+      if (!state.auth.authenticated) {
+        title.textContent = "请登录以使用完整功能";
+        message.textContent = feature === "ai"
+          ? "AI 助手仅向审核通过的账号开放。你可以立即登录或提交注册申请。"
+          : "登录后可以查看账户状态、修改昵称和密码。";
+        loginLink.textContent = "登录"; loginLink.href = `/login?mode=login&next=${next}`;
+        registerLink.hidden = false; registerLink.href = `/login?mode=register&next=${next}`;
+      } else {
+        const status = state.auth.user.status;
+        title.textContent = status === "pending" ? "账号正在等待审核" : "账号暂时没有完整权限";
+        message.textContent = status === "pending"
+          ? "站长审核通过后，AI 助手和个人空间完整内容会自动开放。"
+          : "请前往账户中心查看审核状态；如有疑问，可以通过留言与反馈联系站长。";
+        loginLink.textContent = "查看账户状态"; loginLink.href = "/#account";
+        registerLink.hidden = true;
+      }
+      if (!dialog.open) dialog.showModal();
+    }
+
     function empty(message) {
       const box = document.createElement("div");
       box.className = "empty";
@@ -681,6 +809,12 @@
       document.querySelectorAll(".content-section").forEach((section) => section.classList.toggle("active", section.id === id));
       document.querySelectorAll(".nav button[data-section]").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
       document.getElementById(id)?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function navigateSection(id) {
+      if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
+      if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
+      showSection(id);
     }
 
     /* ---------- 04. 首页最新日志 + 下一级完整历史。 ---------- */
@@ -713,8 +847,8 @@
 
     /* ---------- 05. 动态个人空间：大板块、文章、相册与图片。 ---------- */
     function portfolioSections() {
-      const configured = state.data?.sections || [];
-      if (configured.length) return configured;
+      const configured = state.data?.sections;
+      if (Array.isArray(configured)) return configured;
       // 仅用于兼容浏览器中尚未失效的旧 bootstrap 缓存。
       return [
         { id: "section-essays", name: "随笔", kind: "content", show_all: 1 },
@@ -832,7 +966,7 @@
       const introNode = document.getElementById("home-intro");
       introNode.textContent = intro;
       introNode.hidden = !intro;
-      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.8.8.0"}`;
+      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.9.0.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
       const school = settings.school || "北京理工大学 计算机学院";
@@ -842,7 +976,37 @@
       const contact = document.getElementById("contact-email"); contact.textContent = email; contact.href = `mailto:${email}`;
     }
 
-    /* ---------- 07. 文章阅读器、点赞/点踩和评论回复。 ---------- */
+    /* ---------- 07. 普通用户账户状态、昵称和密码。 ---------- */
+    function renderAccount() {
+      const user = state.auth.user;
+      const navLabel = document.getElementById("account-nav-label");
+      navLabel.textContent = user ? user.nickname : "登录 / 账户";
+      const accessNote = document.getElementById("portfolio-access-note");
+      accessNote.textContent = hasFullAccess() ? "已显示个人空间完整内容" : "游客或待审核账号仅显示公开内容";
+      if (!user) return;
+
+      const status = document.getElementById("account-status");
+      status.textContent = accountStatusLabels[user.status] || user.status;
+      status.className = `account-status ${user.status}`;
+      const notes = {
+        pending: "注册申请已经提交。审核完成前仍可浏览公开内容。",
+        approved: "账号已获得完整权限，可以使用 AI 助手并查看会员内容。",
+        rejected: "本次申请未通过审核，你可以通过留言与反馈联系站长。",
+        disabled: "账号已被停用，请联系站长。",
+      };
+      document.getElementById("account-status-note").textContent = notes[user.status] || "";
+      document.getElementById("account-username").textContent = user.username;
+      document.getElementById("account-current-nickname").textContent = user.nickname;
+      document.getElementById("account-created-at").textContent = formatDate(user.createdAt) || "—";
+      document.getElementById("account-last-login").textContent = formatDate(user.lastLoginAt) || "—";
+      document.getElementById("account-nickname").value = user.nickname;
+
+      // 登录账号发表评论时默认使用账号昵称，但仍允许用户临时改成其他署名。
+      if (!document.getElementById("guest-name").value) document.getElementById("guest-name").value = user.nickname;
+      if (!document.getElementById("feedback-name").value) document.getElementById("feedback-name").value = user.nickname;
+    }
+
+    /* ---------- 08. 文章阅读器、点赞/点踩和评论回复。 ---------- */
     async function openContent(id) {
       const dialog = document.getElementById("reader-dialog");
       document.getElementById("reader-title").textContent = "正在读取…";
@@ -1124,16 +1288,28 @@
       return answer;
     }
 
-    /* ---------- 11. 页面启动：读取公开数据并渲染各板块。 ---------- */
+    /* ---------- 12. 页面启动：先确认身份，再读取对应权限的数据。 ---------- */
     async function boot() {
       try {
+        const session = await api("/api/auth/session").catch(() => ({ authenticated: false, user: null }));
+        state.auth = session;
+        if (session.authenticated) localStorage.setItem("xyj_entry_mode", "account");
+        if (!session.authenticated && !localStorage.getItem("xyj_entry_mode")) {
+          const next = encodeURIComponent(`${location.pathname}${location.hash || ""}`);
+          location.replace(`/login?next=${next}`);
+          return;
+        }
         const [bootstrap, feedbackData] = await Promise.all([
           api("/api/bootstrap"),
           api("/api/feedback").catch(() => ({ feedback: [] })),
         ]);
         state.data = bootstrap;
         state.publicFeedback = feedbackData.feedback || [];
-        applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback();
+        applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback(); renderAccount();
+
+        // 登录或注册后可通过 /#ai-helper、/#account 回到原本想打开的功能。
+        const target = location.hash.slice(1);
+        if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target);
       } catch (error) {
         document.getElementById("timeline").replaceChildren(empty(`网站数据暂时无法读取：${error.message}`));
         document.getElementById("timeline-history").replaceChildren(empty("数据服务尚未完成部署。"));
@@ -1142,8 +1318,8 @@
       }
     }
 
-    /* ---------- 12. 事件绑定：导航、侧栏、头像和弹窗。 ---------- */
-    document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.section)));
+    /* ---------- 13. 事件绑定：导航、侧栏、头像和弹窗。 ---------- */
+    document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.section)));
 
     const appShell = document.querySelector(".app-shell");
     const sidebarToggle = document.getElementById("sidebar-toggle");
@@ -1190,7 +1366,74 @@
     document.getElementById("content-pdf").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
     document.getElementById("reader-print").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
 
-    /* ---------- 13. 游客评论表单。 ---------- */
+    /* ---------- 14. 账户中心：修改昵称、密码、退出和在线心跳。 ---------- */
+    document.getElementById("nickname-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const notice = document.getElementById("nickname-notice");
+      submit.disabled = true; notice.textContent = "正在保存…";
+      try {
+        const result = await api("/api/auth/profile", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nickname: document.getElementById("account-nickname").value }),
+        });
+        state.auth.user = result.user; renderAccount(); notice.textContent = "昵称已更新。";
+      } catch (error) { notice.textContent = error.message; }
+      finally { submit.disabled = false; }
+    });
+
+    document.getElementById("password-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const currentPassword = document.getElementById("current-password");
+      const newPassword = document.getElementById("new-password");
+      const confirmPassword = document.getElementById("new-password-confirm");
+      const notice = document.getElementById("password-notice");
+      if (newPassword.value !== confirmPassword.value) { notice.textContent = "两次输入的新密码不一致。"; return; }
+      if (!/\p{L}/u.test(newPassword.value) || !/\p{N}/u.test(newPassword.value)) { notice.textContent = "新密码至少需要包含一个字母和一个数字。"; return; }
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      submit.disabled = true; notice.textContent = "正在修改密码…";
+      try {
+        await api("/api/auth/change-password", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentPassword: currentPassword.value, newPassword: newPassword.value }),
+        });
+        event.currentTarget.reset(); notice.textContent = "密码已修改，其他设备上的登录已经失效。";
+      } catch (error) { notice.textContent = error.message; }
+      finally { submit.disabled = false; }
+    });
+
+    document.getElementById("account-logout").addEventListener("click", async () => {
+      await api("/api/auth/logout", { method: "POST" }).catch(() => null);
+      localStorage.removeItem("xyj_entry_mode");
+      location.replace("/login");
+    });
+
+    document.getElementById("auth-login-link").addEventListener("click", (event) => {
+      if (!state.auth.authenticated) return;
+      event.preventDefault(); document.getElementById("auth-lock-dialog").close(); showSection("account");
+    });
+
+    window.addEventListener("hashchange", () => {
+      const target = location.hash.slice(1);
+      if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target);
+    });
+
+    async function refreshAuthPresence() {
+      try {
+        const before = `${state.auth.user?.status || "guest"}:${state.auth.user?.nickname || ""}`;
+        const session = await api("/api/auth/session");
+        state.auth = session;
+        const after = `${session.user?.status || "guest"}:${session.user?.nickname || ""}`;
+        renderAccount();
+        if (before !== after) {
+          state.data = await api("/api/bootstrap");
+          renderPortfolio();
+        }
+      } catch { /* 心跳失败不打断访客当前正在阅读的页面。 */ }
+    }
+    window.setInterval(refreshAuthPresence, 60_000);
+
+    /* ---------- 15. 游客评论表单。 ---------- */
     document.getElementById("guest-name").value = localStorage.getItem("xyj_guest_name") || "";
     document.getElementById("comment-form").addEventListener("submit", async (event) => {
       event.preventDefault(); if (!state.currentContent) return;
@@ -1204,7 +1447,7 @@
       } catch (error) { notice.textContent = error.message; }
     });
 
-    /* ---------- 14. 游客留言与反馈表单。 ---------- */
+    /* ---------- 16. 游客留言与反馈表单。 ---------- */
     document.getElementById("feedback-name").value = localStorage.getItem("xyj_guest_name") || "";
     document.getElementById("feedback-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1238,9 +1481,10 @@
       }
     });
 
-    /* ---------- 15. AI 提问表单。 ---------- */
+    /* ---------- 17. AI 提问表单。 ---------- */
     document.getElementById("chat-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!hasFullAccess()) { showAuthLock("ai"); return; }
       const input = document.getElementById("chat-input"); const status = document.getElementById("chat-status"); const submit = event.currentTarget.querySelector("button");
       const question = input.value.trim(); if (!question) return;
       addBubble("user", question); input.value = ""; submit.disabled = true; status.textContent = "AI 正在生成回答…";

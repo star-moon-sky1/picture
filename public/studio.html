@@ -4,7 +4,7 @@
   <!-- 后台页面基础信息。版本号用于确认 Cloudflare 是否部署了最新文件。 -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="xingyueji-version" content="1.8.8.0">
+  <meta name="xingyueji-version" content="1.9.0.0">
   <title>星月集 · Studio</title>
   <style>
     /* =========================================================
@@ -123,7 +123,33 @@
     .comment-row small { color:var(--muted); }
 
     /* =========================================================
-       07. 平板与手机适配
+       07. 用户审核、在线状态与密码重置
+       ---------------------------------------------------------
+       绿色圆点表示两分钟内有页面心跳；“最近在线”只是近实时状态。
+       Studio 不显示密码或密码哈希，只允许审核、停用和生成重置链接。
+       ========================================================= */
+    .user-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .user-card,.reset-card { padding:17px; border:1px solid var(--line); border-radius:13px; background:#fff; }
+    .user-card.pending,.reset-card.pending { border-color:#e6be65; box-shadow:inset 4px 0 0 #e6be65; }
+    .user-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .user-head h3 { margin:0; font-size:1rem; }
+    .user-state { display:inline-flex; align-items:center; gap:6px; padding:5px 9px; border-radius:999px; background:#edf1f2; color:var(--muted); font-size:.72rem; font-weight:800; }
+    .user-state.approved { color:#2e7158; background:#e5f5ed; }
+    .user-state.pending { color:#805e16; background:#fff0c8; }
+    .user-state.rejected,.user-state.disabled { color:#984642; background:#fde9e8; }
+    .online-dot { width:8px; height:8px; border-radius:50%; background:#a8b1b3; }
+    .online-dot.online { background:#35ad70; box-shadow:0 0 0 4px rgba(53,173,112,.14); }
+    .user-data { display:grid; gap:6px; margin-top:13px; color:var(--muted); font-size:.78rem; line-height:1.6; }
+    .user-data strong { color:var(--ink); }
+    .user-note { margin:10px 0 0; padding:10px; border-radius:9px; background:#f6f9f8; white-space:pre-wrap; line-height:1.6; font-size:.82rem; }
+    .event-list { display:grid; gap:7px; max-height:420px; overflow-y:auto; }
+    .event-row { padding:10px 12px; border:1px solid var(--line); border-radius:9px; font-size:.8rem; }
+    .event-row small { display:block; margin-top:5px; color:var(--muted); overflow-wrap:anywhere; }
+    .reset-link { margin-top:12px; padding:12px; border:1px solid #acd8c4; border-radius:10px; background:#eff9f4; }
+    .reset-link input { margin-bottom:8px; font-family:ui-monospace,monospace; font-size:.76rem; }
+
+    /* =========================================================
+       08. 平板与手机适配
        ---------------------------------------------------------
        980px 以下减少图片列数；720px 以下把左栏改为顶部导航。
        ========================================================= */
@@ -139,6 +165,7 @@
       .cards,.form-grid { grid-template-columns:1fr; }
       .form-grid .wide { grid-column:auto; }
       .media-grid { grid-template-columns:repeat(2,1fr); }
+      .user-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -167,6 +194,7 @@
         <button data-view="media">图片与相册</button>
         <button data-view="comments">评论管理</button>
         <button data-view="feedback">留言与反馈</button>
+        <button data-view="users">用户与审核</button>
         <button data-view="settings">网站设置</button>
       </nav>
       <div class="side-footer"><a href="/" target="_blank">打开网站 ↗</a><button id="logout" class="btn small danger">退出登录</button></div>
@@ -199,6 +227,7 @@
               <div class="field"><label>板块类型</label><select id="section-kind"><option value="content">文章类</option><option value="gallery">图片类</option></select></div>
               <div class="field wide"><label>板块说明</label><input id="section-description" maxlength="500"></div>
               <div class="field"><label>排序（数字越小越靠前）</label><input id="section-sort" type="number" value="0"></div>
+              <div class="field"><label>访问权限</label><select id="section-visibility"><option value="public">游客与用户均可见</option><option value="member">仅审核通过的用户可见</option></select></div>
               <label class="checkbox-field"><input id="section-show-all" type="checkbox" checked>图片类板块显示“全部”筛选</label>
             </div>
             <div class="actions"><button class="btn" type="submit">保存板块</button><button id="delete-section" class="btn danger hidden" type="button">删除板块及内容</button><span id="section-notice" class="status"></span></div>
@@ -218,6 +247,7 @@
             <div class="form-grid">
               <div class="field"><label>所属大板块</label><select id="content-section"></select></div>
               <div class="field"><label>状态</label><select id="content-status"><option value="draft">草稿</option><option value="published">已发布</option></select></div>
+              <div class="field"><label>访问权限</label><select id="content-visibility"><option value="public">游客与用户均可见</option><option value="member">仅审核通过的用户可见</option></select></div>
               <div class="field wide"><label>标题</label><input id="content-title" maxlength="120" required placeholder="输入标题"></div>
               <div class="field wide"><label>摘要</label><textarea id="content-excerpt" maxlength="500" style="min-height:75px" placeholder="列表中显示的简短介绍"></textarea></div>
               <div class="field wide"><label>封面图片</label><select id="content-cover"><option value="">无封面</option></select></div>
@@ -286,6 +316,27 @@
         </div>
       </section>
 
+      <!-- ==================== 普通用户、注册审核与密码重置 ==================== -->
+      <section id="view-users" class="view">
+        <div class="panel" style="margin-top:0">
+          <div class="actions" style="margin:0 0 14px">
+            <button id="refresh-users" class="btn small ghost">刷新用户</button>
+            <span class="status">在线表示用户在最近两分钟内保持页面心跳；密码只保存哈希，后台不可查看。</span>
+          </div>
+          <div id="user-list" class="user-grid"></div>
+        </div>
+        <div class="split">
+          <div class="panel">
+            <h3>密码重置申请</h3>
+            <div id="password-reset-list" class="list"></div>
+          </div>
+          <div class="panel">
+            <h3 id="event-title">最近登录痕迹</h3>
+            <div id="user-event-list" class="event-list"><p class="status">点击用户卡片中的“登录痕迹”查看。</p></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== 网站公开资料设置 ==================== -->
       <section id="view-settings" class="view">
         <form id="settings-form" class="panel" style="margin-top:0;max-width:760px">
@@ -305,12 +356,16 @@
 
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script>
-    const app = { sections: [], content: [], changelogs: [], albums: [], media: [], comments: [], feedback: [], settings: {} };
+    const app = {
+      sections: [], content: [], changelogs: [], albums: [], media: [], comments: [], feedback: [],
+      users: [], passwordResets: [], userEvents: [], generatedResetLinks: new Map(), settings: {},
+    };
     const viewInfo = {
       dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","增加、改名、排序或删除文章类与图片类大板块。"],
       content:["文章内容","在任意文章类大板块中撰写、保存草稿并发布内容。"],
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
       comments:["评论管理","查看、隐藏或删除游客评论。"], feedback:["留言与反馈","处理游客留言、公开留言或标记为已解决。"],
+      users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页显示的公开资料和左下角版本号。"],
     };
 
@@ -332,21 +387,21 @@
       document.getElementById("view-title").textContent=viewInfo[name][0];document.getElementById("view-desc").textContent=viewInfo[name][1];
     }
 
-    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadComments(),loadFeedback(),loadSettings()])}
-    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["评论",data.comments],["图片",data.media],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadComments(),loadFeedback(),loadUsers(),loadSettings()])}
+    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
 
     async function loadSections(){app.sections=await api("/api/admin/sections");renderSectionList();refreshSectionOptions()}
-    function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
+    function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
     function resetSectionForm(){document.getElementById("section-form").reset();document.getElementById("section-id").value="";document.getElementById("section-sort").value="0";document.getElementById("section-show-all").checked=true;document.getElementById("delete-section").classList.add("hidden");document.getElementById("section-notice").textContent="";renderSectionList()}
-    function editSection(item){document.getElementById("section-id").value=item.id;document.getElementById("section-name").value=item.name;document.getElementById("section-kind").value=item.kind;document.getElementById("section-description").value=item.description||"";document.getElementById("section-sort").value=item.sort_order||0;document.getElementById("section-show-all").checked=Number(item.show_all)!==0;document.getElementById("delete-section").classList.remove("hidden");renderSectionList()}
-    function sectionPayload(){return{name:document.getElementById("section-name").value,kind:document.getElementById("section-kind").value,description:document.getElementById("section-description").value,sortOrder:Number(document.getElementById("section-sort").value||0),showAll:document.getElementById("section-show-all").checked}}
+    function editSection(item){document.getElementById("section-id").value=item.id;document.getElementById("section-name").value=item.name;document.getElementById("section-kind").value=item.kind;document.getElementById("section-description").value=item.description||"";document.getElementById("section-sort").value=item.sort_order||0;document.getElementById("section-visibility").value=item.visibility||"public";document.getElementById("section-show-all").checked=Number(item.show_all)!==0;document.getElementById("delete-section").classList.remove("hidden");renderSectionList()}
+    function sectionPayload(){return{name:document.getElementById("section-name").value,kind:document.getElementById("section-kind").value,description:document.getElementById("section-description").value,sortOrder:Number(document.getElementById("section-sort").value||0),visibility:document.getElementById("section-visibility").value,showAll:document.getElementById("section-show-all").checked}}
     function refreshSectionOptions(){const contentSelect=document.getElementById("content-section");const mediaSelect=document.getElementById("media-section");const currentContent=contentSelect.value;const currentMedia=mediaSelect.value;clear(contentSelect);clear(mediaSelect);app.sections.filter(item=>item.kind==="content").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;contentSelect.append(option)});app.sections.filter(item=>item.kind==="gallery").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;mediaSelect.append(option)});if([...contentSelect.options].some(o=>o.value===currentContent))contentSelect.value=currentContent;if([...mediaSelect.options].some(o=>o.value===currentMedia))mediaSelect.value=currentMedia}
 
     async function loadContent(){app.content=await api("/api/admin/content");renderContentList();refreshCoverOptions()}
-    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
+    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
     function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";renderContentList()}
-    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
-    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
+    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
+    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,visibility:document.getElementById("content-visibility").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
 
     async function loadChangelogs(){app.changelogs=await api("/api/admin/changelogs");renderChangelogs()}
     function renderChangelogs(){const list=document.getElementById("changelog-list");clear(list);app.changelogs.forEach(item=>{const row=document.createElement("div");row.className="list-item";const title=document.createElement("div");title.className="list-title";title.textContent=`v${item.version} · ${item.title}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=formatDate(item.published_at);row.append(title,meta);row.addEventListener("click",()=>editChangelog(item));list.append(row)})}
@@ -366,9 +421,108 @@
     async function updateFeedback(item,status,isPublic){await api(`/api/admin/feedback/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,isPublic})});await loadFeedback();await loadDashboard()}
     async function deleteFeedback(item){if(!confirm("确定永久删除这条留言吗？"))return;await api(`/api/admin/feedback/${item.id}`,{method:"DELETE"});await loadFeedback();await loadDashboard()}
 
+    /* ---------- 普通用户、注册审核与密码重置 ---------- */
+    const userStatusLabels={pending:"待审核",approved:"已批准",rejected:"未通过",disabled:"已停用"};
+    const eventLabels={register:"注册申请",login_success:"登录成功",login_failed:"登录失败",login_blocked:"登录被阻止",logout:"退出登录",password_change:"修改密码",password_reset:"重置密码"};
+    const resetStatusLabels={pending:"待核实",approved:"链接已生成",rejected:"已拒绝",used:"已完成",expired:"已过期"};
+
+    async function loadUsers(){
+      [app.users,app.passwordResets]=await Promise.all([
+        api("/api/admin/users"),api("/api/admin/password-resets"),
+      ]);
+      renderUsers();renderPasswordResets();
+    }
+
+    function renderUsers(){
+      const list=document.getElementById("user-list");clear(list);
+      if(!app.users.length){const p=document.createElement("p");p.className="status";p.textContent="还没有注册用户。";list.append(p);return}
+      app.users.forEach(item=>{
+        const card=document.createElement("article");card.className=`user-card ${item.status}`;
+        const head=document.createElement("div");head.className="user-head";
+        const title=document.createElement("h3");title.textContent=`${item.nickname} · @${item.username}`;
+        const state=document.createElement("span");state.className=`user-state ${item.status}`;
+        const dot=document.createElement("span");dot.className=`online-dot${item.is_online?" online":""}`;
+        state.append(dot,document.createTextNode(`${userStatusLabels[item.status]||item.status} · ${item.is_online?"在线":"离线"}`));
+        head.append(title,state);
+
+        const data=document.createElement("div");data.className="user-data";
+        const contact=document.createElement("div");contact.textContent=`验证称呼：${item.display_name||"未填写"} · 联系方式：${contactLabel(item.contact_type)} ${item.contact_value||""}`;
+        const dates=document.createElement("div");dates.textContent=`注册：${formatDate(item.created_at)} · 最后登录：${formatDate(item.last_login_at)||"从未"} · 有效会话：${item.active_session_count||0}`;
+        data.append(contact,dates);
+        if(item.invite_code){const invite=document.createElement("div");invite.textContent=`邀请码：${item.invite_code}`;data.append(invite)}
+
+        const note=document.createElement("div");note.className="user-note";note.textContent=item.note?`申请备注：${item.note}`:"申请备注：未填写";
+        const review=document.createElement("div");review.className="user-note";review.textContent=item.review_note?`审核备注：${item.review_note}`:"审核备注：未填写";
+        const actions=document.createElement("div");actions.className="list-actions";
+        if(item.status!=="approved"){const approve=button("批准账号","btn small");approve.addEventListener("click",()=>updateUserStatus(item,"approved"));actions.append(approve)}
+        if(item.status!=="rejected"){const reject=button("拒绝申请","btn small ghost");reject.addEventListener("click",()=>updateUserStatus(item,"rejected"));actions.append(reject)}
+        if(item.status!=="disabled"){const disable=button("停用账号","btn small danger");disable.addEventListener("click",()=>updateUserStatus(item,"disabled"));actions.append(disable)}
+        else{const restore=button("恢复为待审核","btn small ghost");restore.addEventListener("click",()=>updateUserStatus(item,"pending"));actions.append(restore)}
+        const traces=button("登录痕迹","btn small ghost");traces.addEventListener("click",()=>loadUserEvents(item));actions.append(traces);
+        card.append(head,data,note,review,actions);list.append(card);
+      });
+    }
+
+    function contactLabel(type){return({qq:"QQ",wechat:"微信",email:"邮箱",phone:"手机号",other:"其他"})[type]||"其他"}
+
+    async function updateUserStatus(item,status){
+      const reviewNote=prompt("审核备注（选填）",item.review_note||"");if(reviewNote===null)return;
+      if(status==="disabled"&&!confirm(`确定停用账号“${item.username}”并注销其全部会话吗？`))return;
+      await api(`/api/admin/users/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,reviewNote})});
+      await Promise.all([loadUsers(),loadDashboard()]);
+    }
+
+    async function loadUserEvents(item){
+      app.userEvents=await api(`/api/admin/user-events/${item.id}`);
+      document.getElementById("event-title").textContent=`${item.nickname} 的登录痕迹`;
+      const list=document.getElementById("user-event-list");clear(list);
+      if(!app.userEvents.length){const p=document.createElement("p");p.className="status";p.textContent="暂无登录记录。";list.append(p);return}
+      app.userEvents.forEach(event=>{
+        const row=document.createElement("div");row.className="event-row";
+        const title=document.createElement("strong");title.textContent=`${eventLabels[event.event_type]||event.event_type} · ${formatDate(event.created_at)}`;
+        const detail=document.createElement("small");detail.textContent=`网络位置：${event.ip_hint||"未知"} · 设备：${event.user_agent||"未知"}`;
+        row.append(title,detail);list.append(row);
+      });
+    }
+
+    function renderPasswordResets(){
+      const list=document.getElementById("password-reset-list");clear(list);
+      if(!app.passwordResets.length){const p=document.createElement("p");p.className="status";p.textContent="暂无密码重置申请。";list.append(p);return}
+      app.passwordResets.forEach(item=>{
+        const card=document.createElement("article");card.className=`reset-card ${item.status}`;
+        const head=document.createElement("div");head.className="user-head";
+        const title=document.createElement("h3");title.textContent=`${item.nickname} · @${item.username}`;
+        const state=document.createElement("span");state.className=`user-state ${item.status}`;state.textContent=resetStatusLabels[item.status]||item.status;head.append(title,state);
+        const data=document.createElement("div");data.className="user-data";data.textContent=`${contactLabel(item.contact_type)} ${item.contact_value} · 申请于 ${formatDate(item.requested_at)} · 网络位置 ${item.ip_hint||"未知"}`;
+        const actions=document.createElement("div");actions.className="list-actions";
+        if(["pending","approved","expired","rejected"].includes(item.status)){
+          const approve=button(item.status==="approved"?"重新生成链接":"核实通过并生成链接","btn small");approve.addEventListener("click",()=>runResetAction(item,item.status==="approved"?"regenerate":"approve"));actions.append(approve);
+        }
+        if(!["used","rejected"].includes(item.status)){const reject=button("拒绝","btn small danger");reject.addEventListener("click",()=>runResetAction(item,"reject"));actions.append(reject)}
+        card.append(head,data,actions);
+        const generated=app.generatedResetLinks.get(item.id);
+        if(generated){
+          const box=document.createElement("div");box.className="reset-link";
+          const input=document.createElement("input");input.readOnly=true;input.value=generated.url;
+          const copy=button("复制24小时一次性链接","btn small");copy.addEventListener("click",async()=>{await navigator.clipboard.writeText(input.value);copy.textContent="已复制"});
+          const expiry=document.createElement("div");expiry.className="list-meta";expiry.textContent=`有效至：${formatDate(generated.expiresAt)}。此链接只在当前生成后显示，请立即发送给用户。`;
+          box.append(input,copy,expiry);card.append(box);
+        }
+        list.append(card);
+      });
+    }
+
+    async function runResetAction(item,action){
+      if(action!=="reject"&&!confirm("请确认你已经通过该账户原来登记的联系方式核实了用户身份。"))return;
+      const result=await api(`/api/admin/password-resets/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
+      if(result.resetUrl)app.generatedResetLinks.set(item.id,{url:result.resetUrl,expiresAt:result.expiresAt});
+      else app.generatedResetLinks.delete(item.id);
+      await Promise.all([loadUsers(),loadDashboard()]);
+    }
+
     async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-site-version").value=app.settings.site_version||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-email").value=app.settings.contact_email||""}
 
-    async function uploadInline(file){const form=new FormData();form.append("file",file);form.append("kind","inline");const item=await api("/api/admin/media",{method:"POST",body:form});app.media.unshift(item);refreshCoverOptions();return item}
+    async function uploadInline(file){const form=new FormData();form.append("file",file);form.append("kind","inline");form.append("visibility",document.getElementById("content-visibility").value);const item=await api("/api/admin/media",{method:"POST",body:form});app.media.unshift(item);refreshCoverOptions();return item}
     async function deleteMedia(item){if(!confirm(`确定删除“${item.filename}”吗？原图将同时删除。`))return;await api(`/api/admin/media/${item.id}`,{method:"DELETE"});await loadAlbumsAndMedia();await loadDashboard()}
     async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value})});await loadAlbumsAndMedia()}
     async function deleteAlbum(album){if(!confirm(`确定删除相册“${album.name}”吗？相册内图片会保留为未分类。`))return;await api(`/api/admin/albums/${album.id}`,{method:"DELETE"});await loadAlbumsAndMedia()}
@@ -396,8 +550,11 @@
     document.getElementById("media-form").addEventListener("submit",async event=>{event.preventDefault();const file=document.getElementById("media-file").files[0];const notice=document.getElementById("media-notice");if(!file)return;const form=new FormData();form.append("file",file);form.append("sectionId",document.getElementById("media-section").value);form.append("albumId",document.getElementById("media-album").value);form.append("caption",document.getElementById("media-caption").value);form.append("kind","photo");notice.textContent="正在上传原图…";try{await api("/api/admin/media",{method:"POST",body:form});event.currentTarget.reset();notice.textContent="图片上传成功。";await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
     document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
+    document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});
     document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,contact_email:document.getElementById("setting-email").value})});notice.textContent="网站设置已保存。"}catch(error){notice.textContent=error.message}});
 
+    // 用户在线状态每60秒更新一次；未登录后台时不会发起刷新请求。
+    window.setInterval(()=>{if(!document.getElementById("studio").classList.contains("hidden"))loadUsers().catch(()=>null)},60_000);
     resetSectionForm();resetContentForm();resetChangelog();checkSession();
   </script>
 </body>

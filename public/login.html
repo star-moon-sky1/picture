@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>登录与注册 - 星月集</title>
+  <style>
+    /* ========================================================
+       01. 登录页颜色与基础重置
+       --------------------------------------------------------
+       本页独立于主页，避免修改登录卡片时意外影响主页布局。
+       所有常用颜色集中在 :root，后续可直接搜索变量名修改。
+       ======================================================== */
+    :root {
+      --paper: #faf8f4;
+      --paper-deep: #f1ece4;
+      --ink: #262626;
+      --muted: #75716c;
+      --line: #ded8cf;
+      --cyan: #28b8cc;
+      --cyan-deep: #168da1;
+      --cyan-soft: #e6f8fa;
+      --white: #fff;
+      --danger: #b94a48;
+      --success: #357b61;
+      --shadow: 0 26px 80px rgba(49, 45, 39, .13);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 16% 14%, rgba(40, 184, 204, .16), transparent 28rem),
+        radial-gradient(circle at 92% 88%, rgba(218, 190, 164, .24), transparent 31rem),
+        var(--paper);
+      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    }
+    button, input, select, textarea { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+
+    /* ========================================================
+       02. 页面双栏结构
+       --------------------------------------------------------
+       桌面端左边展示网站简介，右边显示登录卡片；手机端自动
+       变成单栏，登录卡片始终完整可滚动，不会出现内容被截断。
+       ======================================================== */
+    .auth-page {
+      min-height: 100dvh;
+      display: grid;
+      grid-template-columns: minmax(290px, .85fr) minmax(480px, 1.15fr);
+      align-items: stretch;
+    }
+    .brand-panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      padding: clamp(32px, 5vw, 74px);
+      background: linear-gradient(145deg, #273337 0%, #1c2528 100%);
+      color: #fff;
+    }
+    .brand-panel::before,
+    .brand-panel::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .brand-panel::before {
+      width: 430px; height: 430px; left: -240px; top: -180px;
+      border: 1px solid rgba(255,255,255,.18);
+      box-shadow: 0 0 0 70px rgba(255,255,255,.035), 0 0 0 140px rgba(255,255,255,.025);
+    }
+    .brand-panel::after {
+      width: 320px; height: 320px; right: -180px; bottom: -170px;
+      background: rgba(40,184,204,.17);
+      filter: blur(4px);
+    }
+    .brand, .brand-copy, .brand-foot { position: relative; z-index: 1; }
+    .brand { display: flex; align-items: center; gap: 13px; font-weight: 800; letter-spacing: .08em; }
+    .brand-mark {
+      width: 44px; height: 44px; display: grid; place-items: center;
+      border: 1px solid rgba(255,255,255,.34); border-radius: 50%;
+      color: #8ee8f1; font-family: Georgia, serif; font-size: 1.5rem;
+    }
+    .brand-copy h1 {
+      margin: 0 0 17px;
+      max-width: 520px;
+      font-family: Georgia, "Songti SC", serif;
+      font-size: clamp(2.7rem, 6vw, 5.8rem);
+      line-height: .98;
+      font-weight: 500;
+    }
+    .brand-copy p { max-width: 510px; margin: 0; color: rgba(255,255,255,.72); line-height: 1.9; }
+    .brand-foot { color: rgba(255,255,255,.48); font-size: .82rem; }
+
+    .card-side {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(24px, 6vw, 86px);
+      overflow-y: auto;
+    }
+    .auth-card {
+      width: min(100%, 610px);
+      padding: clamp(26px, 5vw, 52px);
+      border: 1px solid rgba(204, 195, 184, .82);
+      border-radius: 24px;
+      background: rgba(255,255,255,.91);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+    .card-head { margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 8px; color: var(--cyan-deep); font-weight: 800; font-size: .78rem; letter-spacing: .16em; }
+    .card-head h2 { margin: 0 0 9px; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 3.15rem); font-weight: 500; }
+    .card-head p { margin: 0; color: var(--muted); line-height: 1.7; }
+
+    /* ========================================================
+       03. 表单、按钮与状态提示
+       ======================================================== */
+    .panel[hidden] { display: none !important; }
+    .field { display: grid; gap: 7px; margin-bottom: 17px; }
+    .field label { font-size: .84rem; font-weight: 800; }
+    .field small { color: var(--muted); line-height: 1.55; }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 13px 14px;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .field textarea { min-height: 92px; resize: vertical; line-height: 1.65; }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 4px rgba(40,184,204,.12);
+    }
+    .two-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; }
+    .check-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -2px 0 20px; }
+    .remember { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .88rem; }
+    .remember input { accent-color: var(--cyan-deep); }
+    .text-button {
+      padding: 0; border: 0; background: none; color: var(--cyan-deep);
+      cursor: pointer; font-weight: 700; text-decoration: none;
+    }
+    .text-button:hover { text-decoration: underline; }
+    .btn {
+      min-height: 46px;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px; border: 1px solid var(--cyan-deep); border-radius: 12px;
+      padding: 11px 17px; cursor: pointer; color: #fff;
+      background: var(--cyan-deep); font-weight: 800; text-decoration: none;
+      transition: transform .15s, background .15s, box-shadow .15s;
+    }
+    .btn:hover { transform: translateY(-1px); background: #117d8e; box-shadow: 0 7px 18px rgba(22,141,161,.18); }
+    .btn:disabled { opacity: .55; cursor: wait; transform: none; }
+    .btn.ghost { color: var(--ink); border-color: var(--line); background: #fff; box-shadow: none; }
+    .btn.ghost:hover { border-color: #bcb4a9; background: #faf8f4; }
+    .btn.block { width: 100%; }
+    .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .button-row .btn { flex: 1 1 130px; }
+    .divider { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: #aaa39b; font-size: .78rem; }
+    .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+    .notice { min-height: 24px; margin: 15px 0 0; color: var(--muted); line-height: 1.55; font-size: .88rem; }
+    .notice.error { color: var(--danger); }
+    .notice.success { color: var(--success); }
+    .privacy-note {
+      margin: 3px 0 20px; padding: 13px 15px; border-left: 3px solid var(--cyan);
+      border-radius: 4px 10px 10px 4px; background: var(--cyan-soft);
+      color: #4b6468; line-height: 1.7; font-size: .86rem;
+    }
+
+    /* 注册进度条只表示页面位置，不代表账户已经审核通过。 */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 27px; }
+    .step { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; color: #aaa39b; font-size: .76rem; }
+    .step::after { content: ""; grid-column: 1 / -1; height: 3px; border-radius: 9px; background: var(--line); }
+    .step-number { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--paper-deep); font-weight: 900; }
+    .step.active { color: var(--cyan-deep); }
+    .step.active::after, .step.done::after { background: var(--cyan); }
+    .step.active .step-number, .step.done .step-number { color: #fff; background: var(--cyan-deep); }
+    .register-step[hidden] { display: none; }
+    .summary-list { margin: 0 0 22px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .summary-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .summary-row:last-child { border-bottom: 0; }
+    .summary-row dt { color: var(--muted); }
+    .summary-row dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .status-badge { display: inline-flex; padding: 5px 10px; border-radius: 99px; background: #fff1ce; color: #7b5c18; font-size: .78rem; font-weight: 900; }
+    .status-badge.approved { background: #e4f5ed; color: #2e7158; }
+    .status-badge.rejected, .status-badge.disabled { background: #fde9e8; color: #984341; }
+    .success-box { padding: 22px; border: 1px solid #bcdccd; border-radius: 14px; background: #f0faf5; line-height: 1.8; }
+
+    @media (max-width: 850px) {
+      .auth-page { grid-template-columns: 1fr; }
+      .brand-panel { min-height: 240px; padding: 26px 22px; }
+      .brand-copy h1 { margin-top: 40px; font-size: 3.2rem; }
+      .brand-foot { display: none; }
+      .card-side { align-items: flex-start; padding: 18px 13px 44px; overflow: visible; }
+      .auth-card { margin-top: -32px; position: relative; z-index: 2; border-radius: 19px; }
+    }
+    @media (max-width: 540px) {
+      .auth-card { padding: 25px 18px; }
+      .two-fields { grid-template-columns: 1fr; gap: 0; }
+      .step { grid-template-columns: 27px 1fr; font-size: .69rem; }
+      .step-number { width: 27px; height: 27px; }
+      .summary-row { grid-template-columns: 90px 1fr; }
+      .check-row { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="auth-page">
+    <!-- 左侧品牌区域：只放网站介绍，不参与任何登录逻辑。 -->
+    <aside class="brand-panel">
+      <div class="brand"><span class="brand-mark">月</span><span>星月集</span></div>
+      <div class="brand-copy">
+        <h1>Welcome<br>back.</h1>
+        <p>选择游客身份即可浏览公开页面；审核通过的账号可以使用 AI 助手并查看个人空间的完整内容。</p>
+      </div>
+      <div class="brand-foot">XINGYUEJI · PERSONAL SPACE</div>
+    </aside>
+
+    <section class="card-side">
+      <div class="auth-card">
+        <!-- 登录面板 -->
+        <section id="panel-login" class="panel">
+          <header class="card-head"><p class="eyebrow">ACCOUNT LOGIN</p><h2>登录星月集</h2><p>使用已注册账号进入，或者选择游客身份浏览。</p></header>
+          <form id="login-form">
+            <div class="field"><label for="login-username">登录用户名</label><input id="login-username" required autocomplete="username" maxlength="32" placeholder="输入登录用户名"></div>
+            <div class="field"><label for="login-password">密码</label><input id="login-password" type="password" required autocomplete="current-password" maxlength="128" placeholder="输入密码"></div>
+            <div class="check-row">
+              <label class="remember"><input id="login-remember" type="checkbox">保持登录30天</label>
+              <button class="text-button" type="button" data-show-panel="forgot">忘记密码？</button>
+            </div>
+            <button class="btn block" type="submit">登录</button>
+            <p id="login-notice" class="notice" aria-live="polite"></p>
+          </form>
+          <div class="divider">或者</div>
+          <div class="button-row">
+            <button id="guest-entry" class="btn ghost" type="button">以游客身份进入</button>
+            <button class="btn ghost" type="button" data-show-panel="register">注册账号</button>
+          </div>
+        </section>
+
+        <!-- 三步注册面板 -->
+        <section id="panel-register" class="panel" hidden>
+          <header class="card-head"><p class="eyebrow">CREATE ACCOUNT</p><h2>申请注册</h2><p>提交后需要由站长审核，审核期间仍可按游客权限浏览。</p></header>
+          <div class="steps" aria-label="注册进度">
+            <div class="step active" data-step-indicator="1"><span class="step-number">1</span><span>创建账号</span></div>
+            <div class="step" data-step-indicator="2"><span class="step-number">2</span><span>验证信息</span></div>
+            <div class="step" data-step-indicator="3"><span class="step-number">3</span><span>确认提交</span></div>
+          </div>
+          <form id="register-form">
+            <!-- 第一步没有用户协议或隐私勾选项。 -->
+            <div class="register-step" data-register-step="1">
+              <div class="field"><label for="register-username">登录用户名</label><input id="register-username" required minlength="4" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{3,31}" autocomplete="username" placeholder="4—32位字母、数字或 _ . -"><small>用户名用于登录；昵称以后可以自行修改。</small></div>
+              <div class="field"><label for="register-nickname">昵称</label><input id="register-nickname" required maxlength="30" autocomplete="nickname" placeholder="在网站中显示的名称"></div>
+              <div class="field"><label for="register-password">设置密码</label><input id="register-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="至少8位，包含字母和数字"></div>
+              <div class="field"><label for="register-password-confirm">确认密码</label><input id="register-password-confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="再次输入密码"></div>
+              <div class="button-row"><button class="btn ghost" type="button" data-show-panel="login">返回登录</button><button class="btn" type="button" data-register-next>下一步</button></div>
+            </div>
+
+            <div class="register-step" data-register-step="2" hidden>
+              <div class="field"><label for="register-display-name">真实姓名或常用称呼</label><input id="register-display-name" required maxlength="60" placeholder="便于站长确认你的身份"></div>
+              <div class="two-fields">
+                <div class="field"><label for="register-contact-type">联系方式类型</label><select id="register-contact-type"><option value="qq">QQ</option><option value="wechat">微信</option><option value="email">邮箱</option><option value="phone">手机号</option><option value="other">其他</option></select></div>
+                <div class="field"><label for="register-contact">联系方式</label><input id="register-contact" required maxlength="160" placeholder="填写可联系到你的账号"></div>
+              </div>
+              <div class="field"><label for="register-note">备注（选填）</label><textarea id="register-note" maxlength="800" placeholder="主要面向与站长不认识的申请人，可简单说明身份、认识途径或注册原因"></textarea></div>
+              <div class="field"><label for="register-invite">邀请码（选填）</label><input id="register-invite" maxlength="80" placeholder="没有邀请码可以留空"></div>
+              <!-- 按用户要求，信息用途说明只在第二步出现。 -->
+              <p class="privacy-note">真实姓名和联系方式仅用于账户审核、联系用户及找回密码。</p>
+              <div class="button-row"><button class="btn ghost" type="button" data-register-back>上一步</button><button class="btn" type="button" data-register-next>下一步</button></div>
+            </div>
+
+            <div class="register-step" data-register-step="3" hidden>
+              <dl id="register-summary" class="summary-list"></dl>
+              <div class="button-row"><button class="btn ghost" type="button" data-register-back>上一步</button><button id="register-submit" class="btn" type="submit">提交注册申请</button></div>
+              <p id="register-notice" class="notice" aria-live="polite"></p>
+            </div>
+          </form>
+        </section>
+
+        <!-- 忘记密码：提交后由站长通过预留联系方式核实。 -->
+        <section id="panel-forgot" class="panel" hidden>
+          <header class="card-head"><p class="eyebrow">PASSWORD HELP</p><h2>申请重置密码</h2><p>填写注册时使用的信息。为保护账号，无论信息是否匹配，页面都会显示相同结果。</p></header>
+          <form id="forgot-form">
+            <div class="field"><label for="forgot-username">登录用户名</label><input id="forgot-username" required maxlength="32" autocomplete="username"></div>
+            <div class="two-fields">
+              <div class="field"><label for="forgot-contact-type">联系方式类型</label><select id="forgot-contact-type"><option value="qq">QQ</option><option value="wechat">微信</option><option value="email">邮箱</option><option value="phone">手机号</option><option value="other">其他</option></select></div>
+              <div class="field"><label for="forgot-contact">注册时的联系方式</label><input id="forgot-contact" required maxlength="160"></div>
+            </div>
+            <button class="btn block" type="submit">提交重置申请</button>
+            <p id="forgot-notice" class="notice" aria-live="polite"></p>
+          </form>
+          <div class="divider">返回</div>
+          <button class="btn ghost block" type="button" data-show-panel="login">返回登录</button>
+        </section>
+
+        <!-- 一次性重置链接会直接打开此面板，链接有效期为24小时。 -->
+        <section id="panel-reset" class="panel" hidden>
+          <header class="card-head"><p class="eyebrow">NEW PASSWORD</p><h2>设置新密码</h2><p id="reset-description">正在验证一次性重置链接…</p></header>
+          <form id="reset-form" hidden>
+            <div class="field"><label for="reset-password">新密码</label><input id="reset-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="至少8位，包含字母和数字"></div>
+            <div class="field"><label for="reset-password-confirm">确认新密码</label><input id="reset-password-confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+            <button class="btn block" type="submit">确认重置密码</button>
+            <p id="reset-notice" class="notice" aria-live="polite"></p>
+          </form>
+          <button id="reset-back" class="btn ghost block" type="button" data-show-panel="login" hidden>返回登录</button>
+        </section>
+
+        <!-- 浏览器已有有效账号会话时显示，避免重复登录。 -->
+        <section id="panel-signed" class="panel" hidden>
+          <header class="card-head"><p class="eyebrow">ACCOUNT STATUS</p><h2>你已经登录</h2><p>当前账号状态如下。</p></header>
+          <div class="success-box">
+            <strong id="signed-nickname"></strong>
+            <p>登录用户名：<span id="signed-username"></span></p>
+            <p>账户状态：<span id="signed-status" class="status-badge"></span></p>
+          </div>
+          <div class="button-row" style="margin-top:20px"><a id="signed-enter" class="btn" href="/">进入网站</a><button id="signed-logout" class="btn ghost" type="button">退出账号</button></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    /* ========================================================
+       登录页 JavaScript
+       负责切换面板、三步注册、登录、游客入口和密码重置。
+       ======================================================== */
+    const params = new URLSearchParams(location.search);
+    const resetToken = params.get("reset") || "";
+    const requestedMode = params.get("mode") || "login";
+    const requestedNext = params.get("next") || "/";
+
+    /* 只允许跳转到本站内部路径，阻止 next 参数把用户带到外部网站。 */
+    const nextPath = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+    let registerStep = 1;
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, options);
+      const type = response.headers.get("content-type") || "";
+      const data = type.includes("application/json") ? await response.json() : null;
+      if (!response.ok) throw new Error(data?.error || `请求失败（${response.status}）`);
+      return data;
+    }
+
+    function setNotice(node, message, kind = "") {
+      node.textContent = message;
+      node.className = `notice${kind ? ` ${kind}` : ""}`;
+    }
+
+    function showPanel(name) {
+      document.querySelectorAll(".panel").forEach((panel) => { panel.hidden = panel.id !== `panel-${name}`; });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    document.querySelectorAll("[data-show-panel]").forEach((button) => {
+      button.addEventListener("click", () => showPanel(button.dataset.showPanel));
+    });
+
+    /* ---------- 登录与游客入口 ---------- */
+    document.getElementById("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const notice = document.getElementById("login-notice");
+      submit.disabled = true; setNotice(notice, "正在登录…");
+      try {
+        await api("/api/auth/login", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("login-username").value,
+            password: document.getElementById("login-password").value,
+            remember: document.getElementById("login-remember").checked,
+          }),
+        });
+        localStorage.setItem("xyj_entry_mode", "account");
+        location.replace(nextPath);
+      } catch (error) {
+        setNotice(notice, error.message, "error");
+      } finally { submit.disabled = false; }
+    });
+
+    document.getElementById("guest-entry").addEventListener("click", () => {
+      localStorage.setItem("xyj_entry_mode", "guest");
+      location.replace(nextPath);
+    });
+
+    /* ---------- 三步注册 ---------- */
+    function updateRegisterStep(nextStep) {
+      registerStep = Math.min(3, Math.max(1, nextStep));
+      document.querySelectorAll("[data-register-step]").forEach((node) => {
+        node.hidden = Number(node.dataset.registerStep) !== registerStep;
+      });
+      document.querySelectorAll("[data-step-indicator]").forEach((node) => {
+        const step = Number(node.dataset.stepIndicator);
+        node.classList.toggle("active", step === registerStep);
+        node.classList.toggle("done", step < registerStep);
+      });
+      if (registerStep === 3) renderRegisterSummary();
+    }
+
+    function validateRegisterStep() {
+      const ids = registerStep === 1
+        ? ["register-username", "register-nickname", "register-password", "register-password-confirm"]
+        : ["register-display-name", "register-contact"];
+      for (const id of ids) {
+        const input = document.getElementById(id);
+        if (!input.reportValidity()) return false;
+      }
+      if (registerStep === 1) {
+        const password = document.getElementById("register-password").value;
+        if (!/\p{L}/u.test(password) || !/\p{N}/u.test(password)) {
+          alert("密码至少需要包含一个字母和一个数字。"); return false;
+        }
+        if (password !== document.getElementById("register-password-confirm").value) {
+          alert("两次输入的密码不一致。"); return false;
+        }
+      }
+      return true;
+    }
+
+    function renderRegisterSummary() {
+      const labels = { qq: "QQ", wechat: "微信", email: "邮箱", phone: "手机号", other: "其他" };
+      const values = [
+        ["登录用户名", document.getElementById("register-username").value],
+        ["昵称", document.getElementById("register-nickname").value],
+        ["姓名或称呼", document.getElementById("register-display-name").value],
+        ["联系方式", `${labels[document.getElementById("register-contact-type").value]} · ${document.getElementById("register-contact").value}`],
+        ["备注", document.getElementById("register-note").value || "未填写"],
+        ["邀请码", document.getElementById("register-invite").value || "未填写"],
+      ];
+      const summary = document.getElementById("register-summary"); summary.replaceChildren();
+      values.forEach(([label, value]) => {
+        const row = document.createElement("div"); row.className = "summary-row";
+        const term = document.createElement("dt"); term.textContent = label;
+        const detail = document.createElement("dd"); detail.textContent = value;
+        row.append(term, detail); summary.append(row);
+      });
+    }
+
+    document.querySelectorAll("[data-register-next]").forEach((button) => button.addEventListener("click", () => {
+      if (validateRegisterStep()) updateRegisterStep(registerStep + 1);
+    }));
+    document.querySelectorAll("[data-register-back]").forEach((button) => button.addEventListener("click", () => updateRegisterStep(registerStep - 1)));
+
+    document.getElementById("register-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = document.getElementById("register-submit");
+      const notice = document.getElementById("register-notice");
+      submit.disabled = true; setNotice(notice, "正在提交注册申请…");
+      try {
+        await api("/api/auth/register", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("register-username").value,
+            nickname: document.getElementById("register-nickname").value,
+            password: document.getElementById("register-password").value,
+            displayName: document.getElementById("register-display-name").value,
+            contactType: document.getElementById("register-contact-type").value,
+            contact: document.getElementById("register-contact").value,
+            note: document.getElementById("register-note").value,
+            inviteCode: document.getElementById("register-invite").value,
+          }),
+        });
+        localStorage.setItem("xyj_entry_mode", "account");
+        document.getElementById("panel-register").innerHTML = `
+          <header class="card-head"><p class="eyebrow">APPLICATION SENT</p><h2>申请已提交</h2></header>
+          <div class="success-box"><strong>账号目前处于待审核状态。</strong><p>QQ机器人已经尝试通知站长。审核期间你仍然可以浏览公开内容；审核通过后即可使用AI助手并查看个人空间完整内容。</p></div>
+          <a class="btn block" style="margin-top:20px" href="/">进入网站</a>`;
+      } catch (error) {
+        setNotice(notice, error.message, "error");
+      } finally { submit.disabled = false; }
+    });
+
+    /* ---------- 忘记密码与一次性重置链接 ---------- */
+    document.getElementById("forgot-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const notice = document.getElementById("forgot-notice");
+      submit.disabled = true; setNotice(notice, "正在提交…");
+      try {
+        const result = await api("/api/auth/forgot-password", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("forgot-username").value,
+            contactType: document.getElementById("forgot-contact-type").value,
+            contact: document.getElementById("forgot-contact").value,
+          }),
+        });
+        setNotice(notice, result.message, "success");
+        event.currentTarget.reset();
+      } catch (error) { setNotice(notice, error.message, "error"); }
+      finally { submit.disabled = false; }
+    });
+
+    async function prepareResetPanel() {
+      showPanel("reset");
+      const description = document.getElementById("reset-description");
+      const form = document.getElementById("reset-form");
+      const back = document.getElementById("reset-back");
+      try {
+        const info = await api(`/api/auth/password-reset-info?token=${encodeURIComponent(resetToken)}`);
+        if (!info.valid) throw new Error("链接无效、已使用或已过期，请重新申请密码重置。");
+        description.textContent = `正在为“${info.nickname}”重置密码。本链接将在24小时内失效，且只能使用一次。`;
+        form.hidden = false;
+      } catch (error) {
+        description.textContent = error.message; back.hidden = false;
+      }
+    }
+
+    document.getElementById("reset-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const password = document.getElementById("reset-password").value;
+      const confirmPassword = document.getElementById("reset-password-confirm").value;
+      const notice = document.getElementById("reset-notice");
+      if (password !== confirmPassword) { setNotice(notice, "两次输入的密码不一致。", "error"); return; }
+      if (!/\p{L}/u.test(password) || !/\p{N}/u.test(password)) { setNotice(notice, "新密码至少需要包含一个字母和一个数字。", "error"); return; }
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      submit.disabled = true; setNotice(notice, "正在重置密码…");
+      try {
+        const result = await api("/api/auth/reset-password", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: resetToken, newPassword: password }),
+        });
+        setNotice(notice, result.message, "success");
+        submit.hidden = true; document.getElementById("reset-back").hidden = false;
+      } catch (error) { setNotice(notice, error.message, "error"); submit.disabled = false; }
+    });
+
+    /* ---------- 已登录状态 ---------- */
+    const statusLabels = { pending: "等待审核", approved: "已通过审核", rejected: "审核未通过", disabled: "账号已停用" };
+    async function initialize() {
+      if (resetToken) { await prepareResetPanel(); return; }
+      try {
+        const session = await api("/api/auth/session");
+        if (session.authenticated) {
+          document.getElementById("signed-nickname").textContent = session.user.nickname;
+          document.getElementById("signed-username").textContent = session.user.username;
+          const status = document.getElementById("signed-status");
+          status.textContent = statusLabels[session.user.status] || session.user.status;
+          status.className = `status-badge ${session.user.status}`;
+          document.getElementById("signed-enter").href = nextPath;
+          showPanel("signed"); return;
+        }
+      } catch { /* 会话检查失败时仍允许显示普通登录表单。 */ }
+      showPanel(["register", "forgot"].includes(requestedMode) ? requestedMode : "login");
+    }
+
+    document.getElementById("signed-logout").addEventListener("click", async () => {
+      await api("/api/auth/logout", { method: "POST" }).catch(() => null);
+      localStorage.removeItem("xyj_entry_mode");
+      location.replace("/login");
+    });
+
+    updateRegisterStep(1);
+    initialize();
+  </script>
+</body>
+</html>
