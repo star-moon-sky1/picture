@@ -11,6 +11,7 @@
 │  └─ worker.js
 └─ public
    ├─ index.html
+   ├─ login.html
    └─ studio.html
 ```
 
@@ -20,7 +21,7 @@
 ## 使用 GitHub 网页更新
 
 1. 进入仓库的 `src` 文件夹，上传并替换 `worker.js`；配置改动时再替换根目录的 `wrangler.jsonc`。
-2. 点击仓库中的 `public` 文件夹，上传并替换 `index.html` 和 `studio.html`。
+2. 点击仓库中的 `public` 文件夹，上传并替换 `index.html`、`login.html` 和 `studio.html`。
 3. 每次上传后点击绿色的 **Commit changes**。
 4. 打开 Cloudflare 的 `xingyueji` Worker，进入 **Deployments**，等待最新部署显示成功。
 
@@ -37,7 +38,7 @@ https://xingyueji.com.cn/api/health
 ```json
 {
   "ok": true,
-  "version": "1.8.9.0",
+  "version": "1.9.0.0",
   "bindings": {
     "DB": true,
     "BUCKET": true,
@@ -47,7 +48,7 @@ https://xingyueji.com.cn/api/health
 }
 ```
 
-如果访问 `/api/health` 得到 404，或者没有显示 `1.8.9.0`，说明 Cloudflare 仍在运行旧部署。
+如果访问 `/api/health` 得到 404，或者没有显示 `1.9.0.0`，说明 Cloudflare 仍在运行旧部署。
 
 ## 留言消息通知（可选）
 
@@ -100,3 +101,12 @@ https://xingyueji.com.cn/api/qq/events
 
 其他第三方通知中转仍可使用 Secret `FEEDBACK_WEBHOOK_URL`。Worker 会发送包含 `event`、
 `feedback` 和 `text` 的 JSON；中转地址及 API Key 同样不得提交到 GitHub。
+
+## 注册审核和密码重置
+
+- 游客首次访问可以选择“以游客身份进入”，无需创建账号。
+- 用户注册后默认为“待审核”，QQ机器人会向已绑定的站长账号发送申请摘要。
+- 在 `/studio` →“用户与审核”中批准账号后，用户即可使用 AI 和会员内容。
+- 用户忘记密码时提交预留联系方式；站长核实身份后点击“生成链接”，把链接通过原联系方式发给用户。
+- 重置链接有效期为24小时且只能使用一次；重新生成、成功重置或用户再次申请都会使旧链接失效。
+- Studio 永远不会显示用户原始密码或密码哈希。
