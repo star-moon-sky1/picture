@@ -4,9 +4,14 @@
  * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "1.8.9.0";
+const APP_VERSION = "1.9.0.0";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const USER_SESSION_COOKIE = "xyj_user";
+const USER_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const USER_SESSION_REMEMBER_TTL_SECONDS = 60 * 60 * 24 * 30;
+const PASSWORD_RESET_TTL_SECONDS = 60 * 60 * 24;
+const PASSWORD_HASH_ITERATIONS = 600_000;
 const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -319,10 +324,95 @@ async function initializeSchema(env) {
       updated_at TEXT NOT NULL
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      username_normalized TEXT NOT NULL UNIQUE,
+      nickname TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      password_salt TEXT NOT NULL,
+      password_iterations INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'approved', 'rejected', 'disabled')),
+      role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'admin')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      approved_at TEXT,
+      last_login_at TEXT,
+      last_seen_at TEXT,
+      password_changed_at TEXT NOT NULL
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      user_id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      contact_type TEXT NOT NULL,
+      contact_value TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      invite_code TEXT NOT NULL DEFAULT '',
+      review_note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      ip_hash TEXT NOT NULL DEFAULT '',
+      ip_hint TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS login_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      username_attempt TEXT NOT NULL DEFAULT '',
+      event_type TEXT NOT NULL,
+      ip_hash TEXT NOT NULL DEFAULT '',
+      ip_hint TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS password_reset_requests (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      contact_type TEXT NOT NULL,
+      contact_value TEXT NOT NULL,
+      token_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'approved', 'rejected', 'used', 'expired')),
+      requested_at TEXT NOT NULL,
+      approved_at TEXT,
+      expires_at TEXT,
+      used_at TEXT,
+      ip_hash TEXT NOT NULL DEFAULT '',
+      ip_hint TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
     "CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at)",
     "CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id)",
+    "CREATE INDEX IF NOT EXISTS idx_users_status ON users(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_user_sessions_seen ON user_sessions(last_seen_at, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_reset_requests(user_id, requested_at)",
+    "CREATE INDEX IF NOT EXISTS idx_password_resets_status ON password_reset_requests(status, requested_at)",
   ];
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
 
@@ -330,11 +420,31 @@ async function initializeSchema(env) {
   await ensureColumn(env, "content", "section_id", "TEXT");
   await ensureColumn(env, "albums", "section_id", "TEXT");
   await ensureColumn(env, "media", "section_id", "TEXT");
+  await ensureColumn(env, "media", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await env.DB.batch([
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_section ON content(section_id, status, published_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_albums_section ON albums(section_id, sort_order)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_media_section ON media(section_id, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sections_visibility ON portfolio_sections(visibility, sort_order)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_visibility ON content(visibility, status, published_at)"),
+  ]);
+
+  /*
+   * 登录痕迹只保留最近 90 天；过期会话和过期重置申请同时做状态清理。
+   * 这些语句只删除已经没有安全用途的旧日志，不会影响用户账号和内容。
+   */
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM login_events WHERE created_at < ?")
+      .bind(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()),
+    env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < ?")
+      .bind(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    env.DB.prepare(`
+      UPDATE password_reset_requests SET status = 'expired'
+      WHERE status = 'approved' AND expires_at IS NOT NULL AND expires_at <= ?
+    `).bind(nowIso()),
   ]);
 
   const timestamp = nowIso();
@@ -488,17 +598,19 @@ async function settingsObject(env) {
   return Object.fromEntries(rows(result).map((item) => [item.key, item.value]));
 }
 
-async function publicBootstrap(env) {
+async function publicBootstrap(request, env) {
+  const sessionUser = await getUserSession(request, env);
+  const fullAccess = sessionUser?.status === "approved";
   const [changelogs, sections, content, albums, media, settings] = await Promise.all([
     env.DB.prepare(
       "SELECT id, version, title, body, published_at FROM changelogs ORDER BY published_at DESC, created_at DESC",
     ).all(),
     env.DB.prepare(`
-      SELECT id, name, kind, description, sort_order, show_all
+      SELECT id, name, kind, description, sort_order, show_all, visibility
       FROM portfolio_sections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, type, section_id, title, slug, excerpt, cover_media_id,
+      SELECT id, type, section_id, title, slug, excerpt, cover_media_id, visibility,
              published_at, like_count, dislike_count
       FROM content
       WHERE status = 'published'
@@ -517,35 +629,49 @@ async function publicBootstrap(env) {
     settingsObject(env),
   ]);
 
+  const visibleSections = rows(sections).filter((item) => fullAccess || item.visibility !== "member");
+  const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
+  const visibleContent = rows(content).filter((item) => (
+    visibleSectionIds.has(item.section_id) && (fullAccess || item.visibility !== "member")
+  ));
+  const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
+  const visibleMedia = rows(media).filter((item) => visibleSectionIds.has(item.section_id));
+
   return {
     settings,
+    access: { authenticated: Boolean(sessionUser), fullAccess },
     changelogs: rows(changelogs),
-    sections: rows(sections),
-    content: rows(content).map((item) => ({
+    sections: visibleSections,
+    content: visibleContent.map((item) => ({
       ...item,
       coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}` : null,
     })),
-    albums: rows(albums),
-    media: rows(media).map(mediaDto),
+    albums: visibleAlbums,
+    media: visibleMedia.map(mediaDto),
   };
 }
 
-async function getPublicContent(env, id) {
+async function getPublicContent(request, env, id) {
   const item = await env.DB.prepare(`
     SELECT c.id, c.type, c.section_id, c.title, c.slug, c.excerpt, c.body_html,
-           c.cover_media_id, c.published_at, c.like_count, c.dislike_count,
-           s.name AS section_name
+           c.cover_media_id, c.published_at, c.like_count, c.dislike_count, c.visibility,
+           s.name AS section_name, s.visibility AS section_visibility
     FROM content c LEFT JOIN portfolio_sections s ON s.id = c.section_id
     WHERE c.id = ? AND c.status = 'published'
   `).bind(id).first();
   if (!item) throw new HttpError(404, "内容不存在或尚未发布");
+  if (item.visibility === "member" || item.section_visibility === "member") {
+    await requireApprovedUser(request, env);
+  }
   return {
     ...item,
     coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}` : null,
   };
 }
 
-async function listPublicComments(env, contentId) {
+async function listPublicComments(request, env, contentId) {
+  // 评论跟随文章权限；会员文章的评论不能通过直接调用 API 被游客读取。
+  await getPublicContent(request, env, contentId);
   const result = await env.DB.prepare(`
     SELECT id, content_id, parent_id, guest_name, body, like_count, dislike_count, created_at
     FROM comments
@@ -593,9 +719,7 @@ async function createComment(request, env) {
   if (!validId(contentId) || !guestName || commentBody.length < 2) {
     throw new HttpError(400, "请填写游客署名和评论内容");
   }
-  const content = await env.DB.prepare("SELECT id FROM content WHERE id = ? AND status = 'published'")
-    .bind(contentId).first();
-  if (!content) throw new HttpError(404, "文章不存在");
+  await getPublicContent(request, env, contentId);
 
   if (parentId) {
     const parent = await env.DB.prepare(
@@ -921,6 +1045,36 @@ async function notifyFeedback(env, item) {
   });
 }
 
+/* 注册和密码找回沿用同一个已绑定的 QQ 官方机器人接收人。 */
+function contactTypeLabel(type) {
+  return ({ qq: "QQ", wechat: "微信", email: "邮箱", phone: "手机号", other: "其他" })[type] || "其他";
+}
+
+async function notifyRegistration(env, item) {
+  const summary = [
+    "【星月集·新注册申请】",
+    `用户名：${item.username}`,
+    `昵称：${item.nickname}`,
+    `称呼：${item.displayName}`,
+    `联系方式：${contactTypeLabel(item.contactType)} ${item.contact}`,
+    item.note ? `备注：${item.note}` : "备注：未填写",
+    item.inviteCode ? `邀请码：${item.inviteCode}` : "邀请码：未填写",
+    "请进入星月集 Studio 的“用户与审核”页面处理。",
+  ].join("\n");
+  return notifyQqFeedback(env, summary);
+}
+
+async function notifyPasswordResetRequest(env, item) {
+  const summary = [
+    "【星月集·密码重置申请】",
+    `用户名：${item.username}`,
+    `昵称：${item.nickname}`,
+    `预留联系方式：${contactTypeLabel(item.contactType)} ${item.contact}`,
+    "请先通过预留联系方式核实身份，再进入 Studio 生成一次性重置链接。",
+  ].join("\n");
+  return notifyQqFeedback(env, summary);
+}
+
 async function react(request, env) {
   await consumeRateLimit(env, await clientRateKey(request, "reaction"), 120, 60 * 60);
   const body = await readJson(request);
@@ -931,6 +1085,14 @@ async function react(request, env) {
 
   if (!targetType || !validId(targetId) || !validId(visitorId) || ![-1, 1].includes(value)) {
     throw new HttpError(400, "反应参数错误");
+  }
+
+  if (targetType === "content") {
+    await getPublicContent(request, env, targetId);
+  } else {
+    const comment = await env.DB.prepare("SELECT content_id FROM comments WHERE id = ?").bind(targetId).first();
+    if (!comment) throw new HttpError(404, "目标不存在");
+    await getPublicContent(request, env, comment.content_id);
   }
 
   const table = targetType === "content" ? "content" : "comments";
@@ -1067,6 +1229,437 @@ async function adminLogin(request, env) {
   }
   const token = await makeSession(env);
   return json({ ok: true }, 200, { "Set-Cookie": secureCookie(request, token, SESSION_TTL_SECONDS) });
+}
+
+/* ============================================================
+ * 普通用户账户与会话
+ * ============================================================
+ * 管理员后台继续使用上面的签名 Cookie；普通用户使用独立的随机会话令牌。
+ * 浏览器只保存 HttpOnly Cookie，D1 只保存令牌的 SHA-256 摘要。数据库泄露时，
+ * 摘要不能直接拿来冒充用户登录。
+ */
+
+function decodeBase64Url(value) {
+  const base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+function randomToken(byteLength = 32) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return encodeBase64Url(bytes);
+}
+
+function normalizeUsername(value) {
+  return String(value || "").normalize("NFKC").trim().toLowerCase();
+}
+
+function validateUsername(value) {
+  const username = normalizeUsername(value);
+  if (!/^[a-z0-9][a-z0-9_.-]{3,31}$/.test(username)) {
+    throw new HttpError(400, "登录用户名须为 4—32 位字母、数字、下划线、点或短横线");
+  }
+  return username;
+}
+
+function validatePassword(value, fieldName = "密码") {
+  const password = String(value || "");
+  if (password.length < 8 || password.length > 128) {
+    throw new HttpError(400, `${fieldName}须为 8—128 个字符`);
+  }
+  if (!/\p{L}/u.test(password) || !/\p{N}/u.test(password)) {
+    throw new HttpError(400, `${fieldName}至少需要包含一个字母和一个数字`);
+  }
+  return password;
+}
+
+function normalizeContact(type, value) {
+  const contact = clampText(value, 160).normalize("NFKC");
+  if (type === "qq" || type === "phone") return contact.replace(/[\s()-]/g, "");
+  if (type === "email") return contact.toLowerCase();
+  return contact.toLowerCase().replace(/\s+/g, " ");
+}
+
+function contactType(value) {
+  return ["qq", "wechat", "email", "phone", "other"].includes(value) ? value : "other";
+}
+
+/*
+ * PBKDF2-HMAC-SHA256 使用随机盐和固定工作因子。D1 中只保存推导结果、盐和
+ * 工作因子，不保存原始密码；Studio 也没有任何返回这些字段的接口。
+ */
+async function derivePasswordHash(password, saltBytes, iterations = PASSWORD_HASH_ITERATIONS) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: saltBytes, iterations },
+    key,
+    256,
+  );
+  return encodeBase64Url(new Uint8Array(bits));
+}
+
+async function createPasswordRecord(password) {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  return {
+    hash: await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS),
+    salt: encodeBase64Url(salt),
+    iterations: PASSWORD_HASH_ITERATIONS,
+  };
+}
+
+async function verifyPassword(password, user) {
+  if (!user?.password_hash || !user?.password_salt) return false;
+  let actual = "";
+  try {
+    actual = await derivePasswordHash(
+      String(password || ""),
+      decodeBase64Url(user.password_salt),
+      Math.max(100_000, Number(user.password_iterations) || PASSWORD_HASH_ITERATIONS),
+    );
+  } catch {
+    return false;
+  }
+  return timingSafeEqualText(actual, user.password_hash);
+}
+
+function maskIp(ip) {
+  const value = String(ip || "").trim();
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) {
+    const parts = value.split(".");
+    return `${parts[0]}.${parts[1]}.${parts[2]}.*`;
+  }
+  if (value.includes(":")) return `${value.split(":").slice(0, 4).join(":")}::`;
+  return "未知";
+}
+
+async function clientMeta(request) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  return {
+    ipHash: await sha256(ip),
+    ipHint: maskIp(ip),
+    userAgent: clampText(request.headers.get("User-Agent"), 300),
+  };
+}
+
+function userSessionCookie(request, value, maxAge) {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `${USER_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    nickname: user.nickname,
+    status: user.status,
+    role: user.role,
+    createdAt: user.created_at,
+    approvedAt: user.approved_at || null,
+    lastLoginAt: user.last_login_at || null,
+    passwordChangedAt: user.password_changed_at || null,
+    fullAccess: user.status === "approved",
+  };
+}
+
+async function recordLoginEvent(env, request, eventType, userId = null, usernameAttempt = "") {
+  const meta = await clientMeta(request);
+  await env.DB.prepare(`
+    INSERT INTO login_events
+      (id, user_id, username_attempt, event_type, ip_hash, ip_hint, user_agent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    crypto.randomUUID(), userId, clampText(usernameAttempt, 32), eventType,
+    meta.ipHash, meta.ipHint, meta.userAgent, nowIso(),
+  ).run();
+}
+
+async function createUserSession(request, env, userId, remember = false) {
+  const token = randomToken();
+  const tokenHash = await sha256(token);
+  const ttl = remember ? USER_SESSION_REMEMBER_TTL_SECONDS : USER_SESSION_TTL_SECONDS;
+  const timestamp = nowIso();
+  const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+  const meta = await clientMeta(request);
+  await env.DB.prepare(`
+    INSERT INTO user_sessions
+      (token_hash, user_id, created_at, last_seen_at, expires_at, revoked_at, ip_hash, ip_hint, user_agent)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
+  `).bind(tokenHash, userId, timestamp, timestamp, expiresAt, meta.ipHash, meta.ipHint, meta.userAgent).run();
+  return { token, ttl };
+}
+
+async function getUserSession(request, env, touch = true) {
+  const token = getCookie(request, USER_SESSION_COOKIE);
+  if (!token) return null;
+  const tokenHash = await sha256(token);
+  const session = await env.DB.prepare(`
+    SELECT s.token_hash, s.created_at AS session_created_at, s.last_seen_at AS session_last_seen_at,
+           s.expires_at, u.*
+    FROM user_sessions s JOIN users u ON u.id = s.user_id
+    WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ?
+  `).bind(tokenHash, nowIso()).first();
+  if (!session || session.status === "disabled") return null;
+
+  if (touch && new Date(session.session_last_seen_at).getTime() < Date.now() - 45_000) {
+    const timestamp = nowIso();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE user_sessions SET last_seen_at = ? WHERE token_hash = ?").bind(timestamp, tokenHash),
+      env.DB.prepare("UPDATE users SET last_seen_at = ?, updated_at = ? WHERE id = ?")
+        .bind(timestamp, timestamp, session.id),
+    ]);
+    session.session_last_seen_at = timestamp;
+    session.last_seen_at = timestamp;
+  }
+  return session;
+}
+
+async function requireApprovedUser(request, env) {
+  const user = await getUserSession(request, env);
+  if (!user) throw new HttpError(401, "请登录后使用 AI 助手");
+  if (user.status !== "approved") throw new HttpError(403, "账号尚未通过审核，暂时不能使用完整功能");
+  return user;
+}
+
+async function registerUser(request, env, ctx) {
+  await consumeRateLimit(env, await clientRateKey(request, "user-register"), 5, 60 * 60);
+  const input = await readJson(request);
+  const username = validateUsername(input.username);
+  const nickname = clampText(input.nickname, 30);
+  const password = validatePassword(input.password);
+  const displayName = clampText(input.displayName, 60);
+  const type = contactType(input.contactType);
+  const contact = clampText(input.contact, 160);
+  const note = clampText(input.note, 800);
+  const inviteCode = clampText(input.inviteCode, 80);
+  if (!nickname) throw new HttpError(400, "请填写昵称");
+  if (!displayName || !contact) throw new HttpError(400, "请填写真实姓名或常用称呼以及联系方式");
+
+  const existing = await env.DB.prepare("SELECT id FROM users WHERE username_normalized = ?")
+    .bind(username).first();
+  if (existing) throw new HttpError(409, "该登录用户名已被使用");
+
+  const id = crypto.randomUUID();
+  const timestamp = nowIso();
+  const passwordRecord = await createPasswordRecord(password);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO users
+          (id, username, username_normalized, nickname, password_hash, password_salt,
+           password_iterations, status, role, created_at, updated_at, password_changed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'member', ?, ?, ?)
+      `).bind(
+        id, username, username, nickname, passwordRecord.hash, passwordRecord.salt,
+        passwordRecord.iterations, timestamp, timestamp, timestamp,
+      ),
+      env.DB.prepare(`
+        INSERT INTO user_profiles
+          (user_id, display_name, contact_type, contact_value, note, invite_code, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, displayName, type, contact, note, inviteCode, timestamp, timestamp),
+    ]);
+  } catch (error) {
+    if (/unique/i.test(String(error?.message || error))) throw new HttpError(409, "该登录用户名已被使用");
+    throw error;
+  }
+
+  await recordLoginEvent(env, request, "register", id, username);
+  const session = await createUserSession(request, env, id, false);
+  const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first();
+  const noticeJob = notifyRegistration(env, {
+    id, username, nickname, displayName, contactType: type, contact,
+    note, inviteCode, createdAt: timestamp,
+  }).catch((error) => console.error("Registration notification failed", error));
+  if (ctx) ctx.waitUntil(noticeJob); else await noticeJob;
+  return json({ ok: true, user: publicUser(user) }, 201, {
+    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
+    "Cache-Control": "no-store",
+  });
+}
+
+async function loginUser(request, env) {
+  await consumeRateLimit(env, await clientRateKey(request, "user-login"), 10, 15 * 60);
+  const input = await readJson(request);
+  const username = normalizeUsername(input.username);
+  const user = username
+    ? await env.DB.prepare("SELECT * FROM users WHERE username_normalized = ?").bind(username).first()
+    : null;
+
+  if (!user || !(await verifyPassword(input.password, user))) {
+    await recordLoginEvent(env, request, "login_failed", user?.id || null, username);
+    throw new HttpError(401, "用户名或密码错误");
+  }
+  if (user.status === "disabled") {
+    await recordLoginEvent(env, request, "login_blocked", user.id, username);
+    throw new HttpError(403, "该账号已被停用，请联系站长");
+  }
+
+  const timestamp = nowIso();
+  const session = await createUserSession(request, env, user.id, input.remember === true);
+  await env.DB.prepare("UPDATE users SET last_login_at = ?, last_seen_at = ?, updated_at = ? WHERE id = ?")
+    .bind(timestamp, timestamp, timestamp, user.id).run();
+  user.last_login_at = timestamp;
+  user.last_seen_at = timestamp;
+  await recordLoginEvent(env, request, "login_success", user.id, username);
+  return json({ ok: true, user: publicUser(user) }, 200, {
+    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
+    "Cache-Control": "no-store",
+  });
+}
+
+async function authSession(request, env) {
+  const user = await getUserSession(request, env);
+  return json({
+    authenticated: Boolean(user),
+    user: user ? publicUser(user) : null,
+  }, 200, { "Cache-Control": "no-store" });
+}
+
+async function logoutUser(request, env) {
+  const token = getCookie(request, USER_SESSION_COOKIE);
+  const user = await getUserSession(request, env, false);
+  if (token) {
+    await env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE token_hash = ?")
+      .bind(nowIso(), await sha256(token)).run();
+  }
+  if (user) await recordLoginEvent(env, request, "logout", user.id, user.username_normalized);
+  return json({ ok: true }, 200, {
+    "Set-Cookie": userSessionCookie(request, "", 0),
+    "Cache-Control": "no-store",
+  });
+}
+
+async function updateUserProfile(request, env) {
+  const user = await getUserSession(request, env);
+  if (!user) throw new HttpError(401, "请先登录");
+  const input = await readJson(request);
+  const nickname = clampText(input.nickname, 30);
+  if (!nickname) throw new HttpError(400, "昵称不能为空");
+  await env.DB.prepare("UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?")
+    .bind(nickname, nowIso(), user.id).run();
+  user.nickname = nickname;
+  return { user: publicUser(user) };
+}
+
+async function changeUserPassword(request, env) {
+  const user = await getUserSession(request, env);
+  if (!user) throw new HttpError(401, "请先登录");
+  const input = await readJson(request);
+  if (!(await verifyPassword(input.currentPassword, user))) throw new HttpError(401, "当前密码错误");
+  const newPassword = validatePassword(input.newPassword, "新密码");
+  const record = await createPasswordRecord(newPassword);
+  const timestamp = nowIso();
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE users SET password_hash = ?, password_salt = ?, password_iterations = ?,
+                       password_changed_at = ?, updated_at = ? WHERE id = ?
+    `).bind(record.hash, record.salt, record.iterations, timestamp, timestamp, user.id),
+    env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+      .bind(timestamp, user.id),
+  ]);
+  const session = await createUserSession(request, env, user.id, false);
+  await recordLoginEvent(env, request, "password_change", user.id, user.username_normalized);
+  return json({ ok: true }, 200, {
+    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
+    "Cache-Control": "no-store",
+  });
+}
+
+async function requestPasswordReset(request, env, ctx) {
+  await consumeRateLimit(env, await clientRateKey(request, "password-reset-request"), 5, 60 * 60);
+  const input = await readJson(request);
+  const username = normalizeUsername(input.username);
+  const type = contactType(input.contactType);
+  const suppliedContact = clampText(input.contact, 160);
+  const genericResult = { ok: true, message: "如果信息与账户一致，站长将通过预留联系方式与你核实。" };
+  if (!username || !suppliedContact) return genericResult;
+
+  const user = await env.DB.prepare(`
+    SELECT u.id, u.username, u.nickname, u.status, p.contact_type, p.contact_value
+    FROM users u JOIN user_profiles p ON p.user_id = u.id
+    WHERE u.username_normalized = ?
+  `).bind(username).first();
+  const matches = user
+    && user.status !== "disabled"
+    && user.contact_type === type
+    && normalizeContact(type, user.contact_value) === normalizeContact(type, suppliedContact);
+  if (!matches) return genericResult;
+
+  const id = crypto.randomUUID();
+  const timestamp = nowIso();
+  const meta = await clientMeta(request);
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE password_reset_requests SET status = 'expired'
+      WHERE user_id = ? AND status IN ('pending', 'approved')
+    `).bind(user.id),
+    env.DB.prepare(`
+      INSERT INTO password_reset_requests
+        (id, user_id, contact_type, contact_value, status, requested_at,
+         ip_hash, ip_hint, user_agent)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+    `).bind(id, user.id, type, suppliedContact, timestamp, meta.ipHash, meta.ipHint, meta.userAgent),
+  ]);
+  const noticeJob = notifyPasswordResetRequest(env, {
+    id, username: user.username, nickname: user.nickname,
+    contactType: type, contact: suppliedContact, requestedAt: timestamp,
+  }).catch((error) => console.error("Password reset notification failed", error));
+  if (ctx) ctx.waitUntil(noticeJob); else await noticeJob;
+  return genericResult;
+}
+
+async function passwordResetInfo(request, env, url) {
+  const token = clampText(url.searchParams.get("token"), 200);
+  if (!token) return { valid: false };
+  const requestRow = await env.DB.prepare(`
+    SELECT r.id, r.expires_at, u.nickname
+    FROM password_reset_requests r JOIN users u ON u.id = r.user_id
+    WHERE r.token_hash = ? AND r.status = 'approved' AND r.expires_at > ?
+  `).bind(await sha256(token), nowIso()).first();
+  return requestRow ? { valid: true, nickname: requestRow.nickname, expiresAt: requestRow.expires_at } : { valid: false };
+}
+
+async function resetUserPassword(request, env) {
+  await consumeRateLimit(env, await clientRateKey(request, "password-reset-finish"), 8, 60 * 60);
+  const input = await readJson(request);
+  const token = clampText(input.token, 200);
+  const newPassword = validatePassword(input.newPassword, "新密码");
+  if (!token) throw new HttpError(400, "重置链接无效或已过期");
+  const tokenHash = await sha256(token);
+  const reset = await env.DB.prepare(`
+    SELECT r.*, u.username_normalized
+    FROM password_reset_requests r JOIN users u ON u.id = r.user_id
+    WHERE r.token_hash = ? AND r.status = 'approved' AND r.expires_at > ?
+  `).bind(tokenHash, nowIso()).first();
+  if (!reset) throw new HttpError(400, "重置链接无效、已使用或已过期");
+
+  const record = await createPasswordRecord(newPassword);
+  const timestamp = nowIso();
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE users SET password_hash = ?, password_salt = ?, password_iterations = ?,
+                       password_changed_at = ?, updated_at = ? WHERE id = ?
+    `).bind(record.hash, record.salt, record.iterations, timestamp, timestamp, reset.user_id),
+    env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+      .bind(timestamp, reset.user_id),
+    env.DB.prepare(`
+      UPDATE password_reset_requests SET status = 'used', used_at = ?, token_hash = NULL WHERE id = ?
+    `).bind(timestamp, reset.id),
+    env.DB.prepare(`
+      UPDATE password_reset_requests SET status = 'expired'
+      WHERE user_id = ? AND id <> ? AND status IN ('pending', 'approved')
+    `).bind(reset.user_id, reset.id),
+  ]);
+  await recordLoginEvent(env, request, "password_reset", reset.user_id, reset.username_normalized);
+  return { ok: true, message: "密码已重置，请使用新密码登录。" };
 }
 
 async function buildAiContext(env) {
@@ -1334,10 +1927,16 @@ async function askAiStream(request, env) {
 
 async function serveMedia(request, env, id) {
   if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
-  const media = await env.DB.prepare(
-    "SELECT object_key, filename, mime_type FROM media WHERE id = ?",
-  ).bind(id).first();
+  const media = await env.DB.prepare(`
+    SELECT m.object_key, m.filename, m.mime_type, m.kind, m.visibility AS media_visibility,
+           s.visibility AS section_visibility
+    FROM media m LEFT JOIN portfolio_sections s ON s.id = m.section_id
+    WHERE m.id = ?
+  `).bind(id).first();
   if (!media) throw new HttpError(404, "图片不存在");
+  if (media.section_visibility === "member" || media.media_visibility === "member") {
+    await requireApprovedUser(request, env);
+  }
 
   const object = await env.BUCKET.get(media.object_key);
   if (!object) throw new HttpError(404, "图片文件不存在");
@@ -1345,7 +1944,12 @@ async function serveMedia(request, env, id) {
   object.writeHttpMetadata(headers);
   headers.set("Content-Type", media.mime_type);
   headers.set("ETag", object.httpEtag);
-  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set(
+    "Cache-Control",
+    media.section_visibility === "member" || media.media_visibility === "member"
+      ? "private, no-store"
+      : "public, max-age=31536000, immutable",
+  );
   const disposition = new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline";
   headers.set("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(media.filename)}`);
   return new Response(object.body, { headers });
@@ -1384,6 +1988,20 @@ async function deleteContentCascade(env, id) {
   await env.DB.batch(statements);
 }
 
+function inlineMediaIdsFromHtml(html) {
+  const ids = new Set();
+  for (const match of String(html || "").matchAll(/\/media\/([a-zA-Z0-9_-]{1,80})/g)) ids.add(match[1]);
+  return [...ids];
+}
+
+async function syncInlineMediaVisibility(env, bodyHtml, visibility) {
+  const ids = inlineMediaIdsFromHtml(bodyHtml);
+  if (!ids.length) return;
+  await env.DB.batch(ids.map((mediaId) => env.DB.prepare(`
+    UPDATE media SET visibility = ?, updated_at = ? WHERE id = ? AND kind = 'inline'
+  `).bind(visibility, nowIso(), mediaId)));
+}
+
 /* ---------- 个人空间大板块：新增、改名、排序、删除。 ---------- */
 async function adminSections(request, env, id) {
   if (request.method === "GET") {
@@ -1404,6 +2022,7 @@ async function adminSections(request, env, id) {
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
     const showAll = input.showAll === false ? 0 : 1;
+    const visibility = input.visibility === "member" ? "member" : "public";
     if (!name) throw new HttpError(400, "板块名称不能为空");
     const timestamp = nowIso();
 
@@ -1411,9 +2030,9 @@ async function adminSections(request, env, id) {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
         INSERT INTO portfolio_sections
-          (id, name, kind, description, sort_order, show_all, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, name, kind, description, sortOrder, showAll, timestamp, timestamp).run();
+          (id, name, kind, description, sort_order, show_all, visibility, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, name, kind, description, sortOrder, showAll, visibility, timestamp, timestamp).run();
       return { id: newId };
     }
 
@@ -1431,9 +2050,9 @@ async function adminSections(request, env, id) {
     }
     await env.DB.prepare(`
       UPDATE portfolio_sections
-      SET name = ?, kind = ?, description = ?, sort_order = ?, show_all = ?, updated_at = ?
+      SET name = ?, kind = ?, description = ?, sort_order = ?, show_all = ?, visibility = ?, updated_at = ?
       WHERE id = ?
-    `).bind(name, kind, description, sortOrder, showAll, timestamp, id).run();
+    `).bind(name, kind, description, sortOrder, showAll, visibility, timestamp, id).run();
     return { id };
   }
 
@@ -1484,6 +2103,7 @@ async function adminContent(request, env, id) {
     const bodyHtml = sanitizeRichHtml(body.bodyHtml);
     const coverMediaId = validId(body.coverMediaId) ? body.coverMediaId : null;
     const status = body.status === "published" ? "published" : "draft";
+    const visibility = body.visibility === "member" ? "member" : "public";
     if (!title) throw new HttpError(400, "标题不能为空");
     const timestamp = nowIso();
 
@@ -1493,12 +2113,13 @@ async function adminContent(request, env, id) {
       await env.DB.prepare(`
         INSERT INTO content
           (id, type, section_id, title, slug, excerpt, body_html, cover_media_id, status, published_at,
-           like_count, dislike_count, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+           like_count, dislike_count, visibility, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
       `).bind(
         newId, type, sectionId, title, slug, excerpt, bodyHtml, coverMediaId, status,
-        status === "published" ? timestamp : null, timestamp, timestamp,
+        status === "published" ? timestamp : null, visibility, timestamp, timestamp,
       ).run();
+      await syncInlineMediaVisibility(env, bodyHtml, visibility);
       return { id: newId };
     }
 
@@ -1509,9 +2130,10 @@ async function adminContent(request, env, id) {
     await env.DB.prepare(`
       UPDATE content
       SET type = ?, section_id = ?, title = ?, excerpt = ?, body_html = ?, cover_media_id = ?,
-          status = ?, published_at = ?, updated_at = ?
+          status = ?, visibility = ?, published_at = ?, updated_at = ?
       WHERE id = ?
-    `).bind(type, sectionId, title, excerpt, bodyHtml, coverMediaId, status, publishedAt, timestamp, id).run();
+    `).bind(type, sectionId, title, excerpt, bodyHtml, coverMediaId, status, visibility, publishedAt, timestamp, id).run();
+    await syncInlineMediaVisibility(env, bodyHtml, visibility);
     return { id };
   }
 
@@ -1634,6 +2256,7 @@ async function uploadMedia(request, env) {
   const albumId = validId(form.get("albumId")) ? String(form.get("albumId")) : null;
   const caption = clampText(form.get("caption"), 500);
   const kind = form.get("kind") === "inline" ? "inline" : "photo";
+  const visibility = kind === "inline" && form.get("visibility") === "member" ? "member" : "public";
   let sectionId = null;
   if (kind === "photo") {
     if (albumId) {
@@ -1652,10 +2275,10 @@ async function uploadMedia(request, env) {
   });
   await env.DB.prepare(`
     INSERT INTO media
-      (id, object_key, filename, mime_type, size_bytes, section_id, album_id, caption, kind, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, objectKey, file.name.slice(0, 240), file.type, file.size, sectionId, albumId, caption, kind, timestamp, timestamp).run();
-  return mediaDto({ id, filename: file.name, mime_type: file.type, size_bytes: file.size, section_id: sectionId, album_id: albumId, caption, kind, created_at: timestamp });
+      (id, object_key, filename, mime_type, size_bytes, section_id, album_id, caption, kind, visibility, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, objectKey, file.name.slice(0, 240), file.type, file.size, sectionId, albumId, caption, kind, visibility, timestamp, timestamp).run();
+  return mediaDto({ id, filename: file.name, mime_type: file.type, size_bytes: file.size, section_id: sectionId, album_id: albumId, caption, kind, visibility, created_at: timestamp });
 }
 
 async function adminMedia(request, env, id) {
@@ -1672,6 +2295,7 @@ async function adminMedia(request, env, id) {
     const albumId = validId(body.albumId) ? body.albumId : null;
     const caption = clampText(body.caption, 500);
     const kind = body.kind === "inline" ? "inline" : "photo";
+    const visibility = kind === "inline" && body.visibility === "member" ? "member" : "public";
     let sectionId = null;
     if (kind === "photo") {
       if (albumId) {
@@ -1682,8 +2306,8 @@ async function adminMedia(request, env, id) {
         sectionId = await gallerySectionId(env, body.sectionId);
       }
     }
-    await env.DB.prepare("UPDATE media SET section_id = ?, album_id = ?, caption = ?, kind = ?, updated_at = ? WHERE id = ?")
-      .bind(sectionId, albumId, caption, kind, nowIso(), id).run();
+    await env.DB.prepare("UPDATE media SET section_id = ?, album_id = ?, caption = ?, kind = ?, visibility = ?, updated_at = ? WHERE id = ?")
+      .bind(sectionId, albumId, caption, kind, visibility, nowIso(), id).run();
     return { id };
   }
   if (request.method === "DELETE") {
@@ -1773,8 +2397,140 @@ async function adminSettings(request, env) {
   throw new HttpError(405, "不支持的请求方法");
 }
 
+/*
+ * Studio 用户管理接口不会 SELECT 或返回 password_hash/password_salt。
+ * 站长可以审核、停用、查看在线状态与登录痕迹，但永远不能读取用户密码。
+ */
+async function adminUsers(request, env, id) {
+  if (request.method === "GET") {
+    const result = await env.DB.prepare(`
+      SELECT u.id, u.username, u.nickname, u.status, u.role, u.created_at, u.updated_at,
+             u.approved_at, u.last_login_at, u.last_seen_at, u.password_changed_at,
+             p.display_name, p.contact_type, p.contact_value, p.note, p.invite_code, p.review_note,
+             MAX(CASE WHEN s.revoked_at IS NULL AND s.expires_at > ? THEN s.last_seen_at ELSE NULL END) AS active_session_seen_at,
+             SUM(CASE WHEN s.revoked_at IS NULL AND s.expires_at > ? THEN 1 ELSE 0 END) AS active_session_count
+      FROM users u
+      LEFT JOIN user_profiles p ON p.user_id = u.id
+      LEFT JOIN user_sessions s ON s.user_id = u.id
+      GROUP BY u.id
+      ORDER BY CASE u.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'rejected' THEN 2 ELSE 3 END,
+               u.created_at DESC
+    `).bind(nowIso(), nowIso()).all();
+    const onlineCutoff = Date.now() - 2 * 60 * 1000;
+    return rows(result).map((item) => ({
+      ...item,
+      active_session_count: Number(item.active_session_count || 0),
+      is_online: Boolean(item.active_session_seen_at && new Date(item.active_session_seen_at).getTime() >= onlineCutoff),
+    }));
+  }
+
+  if (request.method === "PUT") {
+    if (!validId(id)) throw new HttpError(400, "用户 ID 错误");
+    const input = await readJson(request);
+    const status = ["pending", "approved", "rejected", "disabled"].includes(input.status)
+      ? input.status
+      : "pending";
+    const reviewNote = clampText(input.reviewNote, 800);
+    const existing = await env.DB.prepare("SELECT id, status FROM users WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "用户不存在");
+    const timestamp = nowIso();
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE users
+        SET status = ?, approved_at = CASE WHEN ? = 'approved' THEN COALESCE(approved_at, ?) ELSE approved_at END,
+            updated_at = ?
+        WHERE id = ?
+      `).bind(status, status, timestamp, timestamp, id),
+      env.DB.prepare("UPDATE user_profiles SET review_note = ?, updated_at = ? WHERE user_id = ?")
+        .bind(reviewNote, timestamp, id),
+    ]);
+    if (status === "disabled") {
+      await env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+        .bind(timestamp, id).run();
+    }
+    return { id, status };
+  }
+
+  throw new HttpError(405, "不支持的请求方法");
+}
+
+async function adminUserEvents(request, env, id, url) {
+  if (request.method !== "GET") throw new HttpError(405, "不支持的请求方法");
+  if (id && !validId(id)) throw new HttpError(400, "用户 ID 错误");
+  const limit = Math.min(200, Math.max(10, Number(url.searchParams.get("limit")) || 80));
+  const result = id
+    ? await env.DB.prepare(`
+        SELECT id, user_id, username_attempt, event_type, ip_hint, user_agent, created_at
+        FROM login_events WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
+      `).bind(id, limit).all()
+    : await env.DB.prepare(`
+        SELECT id, user_id, username_attempt, event_type, ip_hint, user_agent, created_at
+        FROM login_events ORDER BY created_at DESC LIMIT ?
+      `).bind(limit).all();
+  return rows(result);
+}
+
+async function adminPasswordResets(request, env, id) {
+  if (request.method === "GET") {
+    await env.DB.prepare(`
+      UPDATE password_reset_requests SET status = 'expired'
+      WHERE status = 'approved' AND expires_at IS NOT NULL AND expires_at <= ?
+    `).bind(nowIso()).run();
+    return rows(await env.DB.prepare(`
+      SELECT r.id, r.user_id, r.contact_type, r.contact_value, r.status, r.requested_at,
+             r.approved_at, r.expires_at, r.used_at, r.ip_hint, r.user_agent,
+             u.username, u.nickname
+      FROM password_reset_requests r JOIN users u ON u.id = r.user_id
+      ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+               r.requested_at DESC
+    `).all());
+  }
+
+  if (request.method === "PUT") {
+    if (!validId(id)) throw new HttpError(400, "重置申请 ID 错误");
+    const input = await readJson(request);
+    const action = input.action;
+    const reset = await env.DB.prepare(`
+      SELECT r.*, u.status AS user_status FROM password_reset_requests r
+      JOIN users u ON u.id = r.user_id WHERE r.id = ?
+    `).bind(id).first();
+    if (!reset) throw new HttpError(404, "重置申请不存在");
+
+    if (action === "reject") {
+      await env.DB.prepare(`
+        UPDATE password_reset_requests
+        SET status = 'rejected', token_hash = NULL, expires_at = NULL WHERE id = ?
+      `).bind(id).run();
+      return { id, status: "rejected" };
+    }
+
+    if (action === "approve" || action === "regenerate") {
+      if (reset.user_status === "disabled") throw new HttpError(400, "停用账号不能生成重置链接");
+      if (reset.status === "used") throw new HttpError(400, "该申请已经完成，请让用户重新提交申请");
+      const token = randomToken();
+      const timestamp = nowIso();
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_SECONDS * 1000).toISOString();
+      await env.DB.prepare(`
+        UPDATE password_reset_requests
+        SET token_hash = ?, status = 'approved', approved_at = ?, expires_at = ?, used_at = NULL
+        WHERE id = ?
+      `).bind(await sha256(token), timestamp, expiresAt, id).run();
+      const origin = new URL(request.url).origin;
+      return {
+        id,
+        status: "approved",
+        expiresAt,
+        resetUrl: `${origin}/login?reset=${encodeURIComponent(token)}`,
+      };
+    }
+    throw new HttpError(400, "未知的重置操作");
+  }
+
+  throw new HttpError(405, "不支持的请求方法");
+}
+
 async function adminDashboard(env) {
-  const [content, published, comments, media, logs, sections, feedback, unreadFeedback] = await Promise.all([
+  const [content, published, comments, media, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS count FROM content").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM content WHERE status = 'published'").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM comments").first(),
@@ -1783,6 +2539,13 @@ async function adminDashboard(env) {
     env.DB.prepare("SELECT COUNT(*) AS count FROM portfolio_sections").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM feedback").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM feedback WHERE status = 'new'").first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM users").first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM users WHERE status = 'pending'").first(),
+    env.DB.prepare(`
+      SELECT COUNT(DISTINCT user_id) AS count FROM user_sessions
+      WHERE revoked_at IS NULL AND expires_at > ? AND last_seen_at > ?
+    `).bind(nowIso(), new Date(Date.now() - 2 * 60 * 1000).toISOString()).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM password_reset_requests WHERE status = 'pending'").first(),
   ]);
   return {
     content: Number(content?.count || 0),
@@ -1793,6 +2556,10 @@ async function adminDashboard(env) {
     sections: Number(sections?.count || 0),
     feedback: Number(feedback?.count || 0),
     unreadFeedback: Number(unreadFeedback?.count || 0),
+    users: Number(users?.count || 0),
+    pendingUsers: Number(pendingUsers?.count || 0),
+    onlineUsers: Number(onlineUsers?.count || 0),
+    resetRequests: Number(resetRequests?.count || 0),
   };
 }
 
@@ -1814,6 +2581,9 @@ async function handleAdmin(request, env, url) {
   if (resource === "media") return adminMedia(request, env, id);
   if (resource === "comments") return adminComments(request, env, id);
   if (resource === "feedback") return adminFeedback(request, env, id);
+  if (resource === "users") return adminUsers(request, env, id);
+  if (resource === "user-events") return adminUserEvents(request, env, id, url);
+  if (resource === "password-resets") return adminPasswordResets(request, env, id);
   if (resource === "settings") return adminSettings(request, env);
   throw new HttpError(404, "后台接口不存在");
 }
@@ -1894,25 +2664,55 @@ async function handleApi(request, env, url, ctx) {
     }, ok ? 200 : 503);
   }
 
-  // AI 路由必须位于 ensureSchema 之前，避免数据库故障阻断 AI 上游。
+  await ensureSchema(env);
+
+  /* 普通用户注册、登录、资料、密码和会话接口。 */
+  if (url.pathname === "/api/auth/register" && request.method === "POST") {
+    return registerUser(request, env, ctx);
+  }
+  if (url.pathname === "/api/auth/login" && request.method === "POST") {
+    return loginUser(request, env);
+  }
+  if (url.pathname === "/api/auth/session" && request.method === "GET") {
+    return authSession(request, env);
+  }
+  if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+    return logoutUser(request, env);
+  }
+  if (url.pathname === "/api/auth/profile" && request.method === "PUT") {
+    return json(await updateUserProfile(request, env));
+  }
+  if (url.pathname === "/api/auth/change-password" && request.method === "POST") {
+    return changeUserPassword(request, env);
+  }
+  if (url.pathname === "/api/auth/forgot-password" && request.method === "POST") {
+    return json(await requestPasswordReset(request, env, ctx));
+  }
+  if (url.pathname === "/api/auth/password-reset-info" && request.method === "GET") {
+    return json(await passwordResetInfo(request, env, url));
+  }
+  if (url.pathname === "/api/auth/reset-password" && request.method === "POST") {
+    return json(await resetUserPassword(request, env));
+  }
+
+  /* AI 的前端按钮和后端接口都要求审核通过，不能只靠 CSS 隐藏。 */
   if (url.pathname === "/api/ai" && request.method === "POST") {
+    await requireApprovedUser(request, env);
     if (url.searchParams.get("stream") === "1") return askAiStream(request, env);
     return json(await askAi(request, env));
   }
 
-  await ensureSchema(env);
-
   if (url.pathname === "/api/bootstrap" && request.method === "GET") {
-    return json(await publicBootstrap(env));
+    return json(await publicBootstrap(request, env));
   }
   if (url.pathname.startsWith("/api/content/") && request.method === "GET") {
     const id = url.pathname.split("/").filter(Boolean)[2];
-    return json(await getPublicContent(env, id));
+    return json(await getPublicContent(request, env, id));
   }
   if (url.pathname === "/api/comments" && request.method === "GET") {
     const contentId = url.searchParams.get("contentId") || "";
     if (!validId(contentId)) throw new HttpError(400, "缺少文章 ID");
-    return json({ comments: await listPublicComments(env, contentId) });
+    return json({ comments: await listPublicComments(request, env, contentId) });
   }
   if (url.pathname === "/api/comments" && request.method === "POST") {
     return json(await createComment(request, env), 201);
