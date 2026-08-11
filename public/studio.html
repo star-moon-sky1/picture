@@ -281,7 +281,7 @@
       <!-- ==================== 留言与反馈管理 ==================== -->
       <section id="view-feedback" class="view">
         <div class="panel" style="margin-top:0">
-          <div class="actions" style="margin:0 0 14px"><button id="refresh-feedback" class="btn small ghost">刷新留言</button><span class="status">企业微信通知需在 Cloudflare Secret 中配置 WECOM_WEBHOOK_URL；QQ/个人微信可配置 FEEDBACK_WEBHOOK_URL 指向机器人中转服务。</span></div>
+          <div class="actions" style="margin:0 0 14px"><button id="refresh-feedback" class="btn small ghost">刷新留言</button><span class="status">QQ 官方机器人通知需配置 QQ_BOT_SECRET，并通过“绑定网站通知”指令绑定站长 QQ；企业微信仍可使用 WECOM_WEBHOOK_URL。</span></div>
           <div id="feedback-admin-list" class="list"></div>
         </div>
       </section>
