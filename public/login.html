@@ -40,16 +40,55 @@
     /* ========================================================
        02. 单栏居中结构
        --------------------------------------------------------
-       登录、注册和找回密码都在页面正中显示，不再设置左侧品牌
-       区域或任何装饰图样。“返回网站首页”固定在左下角。
+       登录、注册和找回密码都在页面正中显示，不再设置左侧品牌。
+       背景只轮播个人空间中的公开照片，“返回网站首页”固定在左下角。
        ======================================================== */
     .auth-page {
       position: relative;
+      z-index: 2;
       min-height: 100dvh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: clamp(24px, 5vw, 64px) clamp(13px, 4vw, 44px) 88px;
+    }
+
+    /*
+     * 全屏照片背景使用两个图层交叉淡入淡出。浅色遮罩让表单始终可读，
+     * 如果公开照片为空或接口不可用，则只显示原来的米白色底色。
+     */
+    .auth-photo-background {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      background: linear-gradient(145deg, #f7f3eb, #edf7f6 52%, #f5f1e9);
+    }
+    .auth-photo-background::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: linear-gradient(145deg, rgba(247,243,235,.64), rgba(238,247,246,.58), rgba(245,241,233,.67));
+      backdrop-filter: blur(1.5px);
+    }
+    .auth-photo-background img {
+      position: absolute;
+      inset: -3%;
+      z-index: 1;
+      width: 106%;
+      height: 106%;
+      object-fit: cover;
+      opacity: 0;
+      filter: saturate(.82) contrast(.94);
+      transform: scale(1.01);
+      transition: opacity 1.4s ease, transform 8s linear;
+    }
+    .auth-photo-background img.active { opacity: .52; transform: scale(1.075); }
+    @media (prefers-reduced-motion: reduce) {
+      .auth-photo-background img { transition: opacity .25s ease; transform: none; }
+      .auth-photo-background img.active { transform: none; }
     }
 
     /* 左下角唯一保留的页面外入口；半透明底色保证手机上也清晰可点。 */
@@ -185,6 +224,8 @@
   </style>
 </head>
 <body>
+  <!-- 仅由公开图片专栏生成；不会把会员照片放到未登录页面。 -->
+  <div id="auth-photo-background" class="auth-photo-background" aria-hidden="true"></div>
   <main class="auth-page">
     <!-- 页面左下角只保留返回入口，登录与注册表单自身位于屏幕正中。 -->
     <a class="home-link" href="/">← 返回网站首页</a>
@@ -311,6 +352,52 @@
       const data = type.includes("application/json") ? await response.json() : null;
       if (!response.ok) throw new Error(data?.error || `请求失败（${response.status}）`);
       return data;
+    }
+
+    /* 背景只采用“公开大板块中的公开照片”，即使当前浏览器已经登录也不例外。 */
+    function publicPhotoUrls(data) {
+      const publicSectionIds = new Set(
+        (data?.sections || []).filter((section) => section.visibility !== "member").map((section) => section.id),
+      );
+      return [...new Set((data?.media || [])
+        .filter((photo) => (
+          photo.kind === "photo"
+          && photo.visibility !== "member"
+          && publicSectionIds.has(photo.section_id)
+        ))
+        .map((photo) => photo.previewUrl || photo.url)
+        .filter(Boolean))];
+    }
+
+    /* 两个 img 节点循环复用，避免一次加载所有公开原片。 */
+    function startPhotoBackground(urls) {
+      const host = document.getElementById("auth-photo-background");
+      if (!host || !urls.length) return;
+      const frames = [document.createElement("img"), document.createElement("img")];
+      frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
+      let activeFrame = 0;
+      let photoIndex = 0;
+      frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
+      frames[0].src = urls[0];
+
+      if (urls.length === 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      window.setInterval(() => {
+        const nextFrame = activeFrame === 0 ? 1 : 0;
+        photoIndex = (photoIndex + 1) % urls.length;
+        const incoming = frames[nextFrame];
+        const outgoing = frames[activeFrame];
+        incoming.onload = () => {
+          incoming.classList.add("active");
+          outgoing.classList.remove("active");
+          activeFrame = nextFrame;
+        };
+        incoming.src = urls[photoIndex];
+      }, 7_000);
+    }
+
+    async function initializePhotoBackground() {
+      try { startPhotoBackground(publicPhotoUrls(await api("/api/bootstrap"))); }
+      catch { /* 数据服务失败时保留纯色背景，不影响登录和注册表单。 */ }
     }
 
     function setNotice(node, message, kind = "") {
@@ -529,6 +616,7 @@
     });
 
     updateRegisterStep(1);
+    initializePhotoBackground();
     initialize();
   </script>
 </body>

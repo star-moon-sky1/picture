@@ -248,16 +248,54 @@
       display: grid;
       place-items: center;
       overflow: auto;
+      background: #f3f2ed;
+    }
+
+    /*
+     * 登录入口的照片背景：图片地址只来自 /api/bootstrap 返回的公开照片。
+     * 两个 img 图层交替淡入淡出；上方浅色遮罩保证表单文字始终清晰。
+     */
+    .entry-photo-background {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
       background:
         radial-gradient(circle at 12% 16%, rgba(49,191,200,.24), transparent 30%),
         radial-gradient(circle at 88% 84%, rgba(119,161,205,.25), transparent 32%),
         linear-gradient(145deg, #f7f3eb 0%, #eef7f6 52%, #f5f1e9 100%);
     }
+    .entry-photo-background::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: linear-gradient(145deg, rgba(247,243,235,.64), rgba(238,247,246,.58), rgba(245,241,233,.66));
+      backdrop-filter: blur(1.5px);
+    }
+    .entry-photo-background img {
+      position: absolute;
+      inset: -3%;
+      z-index: 1;
+      width: 106%;
+      height: 106%;
+      object-fit: cover;
+      opacity: 0;
+      filter: saturate(.82) contrast(.94);
+      transform: scale(1.01);
+      transition: opacity 1.4s ease, transform 8s linear;
+    }
+    .entry-photo-background img.active { opacity: .52; transform: scale(1.075); }
+    @media (prefers-reduced-motion: reduce) {
+      .entry-photo-background img { transition: opacity .25s ease; transform: none; }
+      .entry-photo-background img.active { transform: none; }
+    }
     .entry-screen::before,
     .entry-screen::after {
       content: "";
       position: fixed;
-      z-index: -1;
+      z-index: 1;
       border: 1px solid rgba(32,48,55,.08);
       border-radius: 50%;
       pointer-events: none;
@@ -265,6 +303,8 @@
     .entry-screen::before { width: 360px; height: 360px; left: -150px; top: -150px; box-shadow: 0 0 0 54px rgba(32,48,55,.025), 0 0 0 108px rgba(32,48,55,.018); }
     .entry-screen::after { width: 260px; height: 260px; right: -95px; bottom: -105px; box-shadow: 0 0 0 44px rgba(49,191,200,.035); }
     .entry-card {
+      position: relative;
+      z-index: 3;
       width: min(430px, 100%);
       padding: clamp(27px, 5vw, 42px);
       border: 1px solid rgba(32,48,55,.11);
@@ -275,15 +315,7 @@
       animation: entry-rise .45s ease both;
     }
     @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
-    .entry-brand { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 10px; }
-    .entry-mark {
-      width: 48px; height: 48px; display: grid; place-items: center;
-      border-radius: 50%; color: white; font: 700 1.25rem/1 Georgia, serif;
-      background: linear-gradient(135deg, var(--blue), var(--cyan));
-      box-shadow: 0 0 0 5px rgba(49,191,200,.11);
-    }
-    .entry-brand strong { font: 700 1.35rem/1.1 Georgia, "Songti SC", serif; letter-spacing: .08em; }
-    .entry-card h1 { margin-top: 28px; text-align: center; font-size: clamp(2rem, 7vw, 3.15rem); }
+    .entry-card h1 { margin: 0; text-align: center; font-size: clamp(2rem, 7vw, 3.15rem); }
     .entry-subtitle { margin: 10px auto 25px; text-align: center; color: var(--muted); line-height: 1.7; }
     .entry-form { display: grid; gap: 15px; }
     .entry-field { display: grid; gap: 7px; color: var(--ink); font-size: .88rem; font-weight: 700; }
@@ -551,8 +583,9 @@
        游客浏览；注册和找回密码流程继续复用 /login 页面。
        ======================================================== -->
   <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title">
+    <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留渐变底色。 -->
+    <div id="entry-photo-background" class="entry-photo-background" aria-hidden="true"></div>
     <div class="entry-card">
-      <div class="entry-brand"><span class="entry-mark" aria-hidden="true">月</span><strong>星月集</strong></div>
       <h1 id="entry-title">欢迎来到星月集</h1>
       <p class="entry-subtitle">登录账号以使用完整功能，或者选择游客身份浏览公开内容。</p>
 
@@ -639,7 +672,6 @@
       <section id="portfolio" class="content-section">
         <div class="section-inner">
           <h1>个人空间</h1>
-          <p class="section-desc">大板块和图片子板块均由站长后台维护。</p>
           <p id="portfolio-access-note" class="access-note">游客模式仅显示公开内容</p>
           <!-- 这两个容器完全根据 D1 数据生成，不再把“随笔/图片/指南”写死在 HTML。 -->
           <div id="portfolio-tabs" class="portfolio-tabs" role="tablist"></div>
@@ -838,6 +870,8 @@
       publicFeedback: [],
       pdfDownloading: false,
       pdfLibraryPromise: null,
+      bootstrapPromise: null,
+      entryBackgroundStarted: false,
     };
 
     // 两层界面的根节点：入口层和真正的网站主体永远只显示其中一个。
@@ -885,6 +919,72 @@
       const data = contentType.includes("application/json") ? await response.json() : null;
       if (!response.ok) throw new Error(data?.error || `请求失败（${response.status}）`);
       return data;
+    }
+
+    /*
+     * 入口背景与网站主体共用一次 bootstrap 请求，避免首次访问重复读取 D1。
+     * 登录身份发生改变时传入 fresh=true，重新取得该身份可以看到的内容。
+     */
+    function loadBootstrap({ fresh = false } = {}) {
+      if (fresh) state.bootstrapPromise = null;
+      if (!state.bootstrapPromise) {
+        state.bootstrapPromise = api("/api/bootstrap").catch((error) => {
+          state.bootstrapPromise = null;
+          throw error;
+        });
+      }
+      return state.bootstrapPromise;
+    }
+
+    /* 背景候选必须同时满足：照片公开、所属个人空间大板块也公开。 */
+    function publicPhotoUrls(data) {
+      const publicSectionIds = new Set(
+        (data?.sections || []).filter((section) => section.visibility !== "member").map((section) => section.id),
+      );
+      return [...new Set((data?.media || [])
+        .filter((photo) => (
+          photo.kind === "photo"
+          && photo.visibility !== "member"
+          && publicSectionIds.has(photo.section_id)
+        ))
+        .map((photo) => photo.previewUrl || photo.url)
+        .filter(Boolean))];
+    }
+
+    /*
+     * 只创建两个 img 节点并轮换 src，避免一次性下载个人空间的全部照片。
+     * 用户开启“减少动态效果”时只显示第一张，不启动定时轮播。
+     */
+    function startEntryPhotoBackground(urls) {
+      const host = document.getElementById("entry-photo-background");
+      if (!host || !urls.length || state.entryBackgroundStarted) return;
+      state.entryBackgroundStarted = true;
+
+      const frames = [document.createElement("img"), document.createElement("img")];
+      frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
+      let activeFrame = 0;
+      let photoIndex = 0;
+      frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
+      frames[0].src = urls[0];
+
+      if (urls.length === 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      window.setInterval(() => {
+        const nextFrame = activeFrame === 0 ? 1 : 0;
+        photoIndex = (photoIndex + 1) % urls.length;
+        const incoming = frames[nextFrame];
+        const outgoing = frames[activeFrame];
+        incoming.onload = () => {
+          incoming.classList.add("active");
+          outgoing.classList.remove("active");
+          activeFrame = nextFrame;
+        };
+        incoming.src = urls[photoIndex];
+      }, 7_000);
+    }
+
+    async function initializeEntryPhotoBackground() {
+      try { startEntryPhotoBackground(publicPhotoUrls(await loadBootstrap())); }
+      catch { /* 没有照片或数据服务暂时失败时继续使用 CSS 渐变背景。 */ }
     }
 
     const accountStatusLabels = {
@@ -1039,7 +1139,7 @@
       if (!photos.length) { gallery.append(empty("这个图片板块还没有上传图片。")); return; }
       photos.forEach((photo) => {
         const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
-        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.url; image.alt = photo.caption || photo.filename;
+        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || photo.filename;
         const caption = document.createElement("div"); caption.className = "caption"; caption.textContent = photo.caption || photo.filename;
         card.append(image, caption); card.addEventListener("click", () => openImage(photo));
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo); }); gallery.append(card);
@@ -1075,7 +1175,8 @@
     }
 
     function openImage(photo) {
-      document.getElementById("image-preview").src = photo.url;
+      // 弹窗仍展示压缩预览；只有“下载原片”链接会请求 download=1。
+      document.getElementById("image-preview").src = photo.previewUrl || photo.url;
       document.getElementById("image-caption").textContent = photo.caption || photo.filename;
       document.getElementById("image-download").href = photo.downloadUrl;
       document.getElementById("image-dialog").showModal();
@@ -1444,7 +1545,7 @@
         showWebsiteShell();
         if (state.siteLoaded) { renderAccount(); return; }
         const [bootstrap, feedbackData] = await Promise.all([
-          api("/api/bootstrap"),
+          loadBootstrap(),
           api("/api/feedback").catch(() => ({ feedback: [] })),
         ]);
         state.data = bootstrap;
@@ -1483,6 +1584,9 @@
           }),
         });
         notice.textContent = "登录成功，正在进入网站…";
+        // 登录前缓存的是游客数据；清除后重新读取，才能显示该账号的会员内容。
+        state.bootstrapPromise = null;
+        state.siteLoaded = false;
         await boot();
       } catch (error) {
         notice.textContent = error.message;
@@ -1607,7 +1711,7 @@
         const after = `${session.user?.status || "guest"}:${session.user?.nickname || ""}`;
         renderAccount();
         if (before !== after) {
-          state.data = await api("/api/bootstrap");
+          state.data = await loadBootstrap({ fresh: true });
           renderPortfolio();
         }
       } catch { /* 心跳失败不打断访客当前正在阅读的页面。 */ }
@@ -1710,6 +1814,7 @@
       if (event.target === dialog) dialog.close();
     }));
 
+    initializeEntryPhotoBackground();
     boot();
   </script>
 </body>

@@ -31,6 +31,7 @@
     .login-card p { color:var(--muted); line-height:1.7; }
     .field { display:grid; gap:7px; margin-bottom:15px; }
     .field label { font-size:.8rem; color:var(--muted); font-weight:700; }
+    .field small { color:var(--muted); font-size:.76rem; line-height:1.55; }
     input,textarea,select { width:100%; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:white; color:var(--ink); outline:none; }
     input:focus,textarea:focus,select:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(49,191,200,.12); }
     textarea { min-height:110px; resize:vertical; }
@@ -298,7 +299,7 @@
         <form id="media-form" class="panel">
           <h3>上传图片</h3>
           <div class="form-grid">
-            <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"></div>
+            <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 1280px 的 WebP 压缩预览。</small></div>
             <div class="field"><label>所属相册</label><select id="media-album"></select></div>
             <div class="field wide"><label>图片说明</label><input id="media-caption" maxlength="500"></div>
           </div>
@@ -380,6 +381,71 @@
     function clear(node){node.replaceChildren()}
     function button(text,className="btn small ghost"){const b=document.createElement("button");b.type="button";b.className=className;b.textContent=text;return b}
 
+    /* =========================================================
+       浏览器端图片压缩
+       ---------------------------------------------------------
+       原片不做任何改写；Canvas 只额外生成最长边 1280px、质量 0.72
+       的 WebP 预览件。Worker 会把两份文件写入不同的 R2 对象键。
+       ========================================================= */
+    const PREVIEW_MAX_EDGE = 1280;
+    const PREVIEW_WEBP_QUALITY = .72;
+
+    async function decodeLocalImage(file) {
+      // 新版浏览器优先使用 createImageBitmap，能正确读取大多数照片的 EXIF 方向。
+      if (typeof createImageBitmap === "function") {
+        try {
+          const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+          return { source: bitmap, width: bitmap.width, height: bitmap.height, close: () => bitmap.close?.() };
+        } catch { /* Safari 的部分格式不支持 ImageBitmap，继续使用普通 Image。 */ }
+      }
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image(); image.decoding = "async"; image.src = objectUrl;
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("浏览器无法读取这张图片"));
+      });
+      return {
+        source: image,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        close: () => URL.revokeObjectURL(objectUrl),
+      };
+    }
+
+    async function createCompressedPreview(file) {
+      const decoded = await decodeLocalImage(file);
+      try {
+        const scale = Math.min(1, PREVIEW_MAX_EDGE / Math.max(decoded.width, decoded.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(decoded.width * scale));
+        canvas.height = Math.max(1, Math.round(decoded.height * scale));
+        const context = canvas.getContext("2d", { alpha: true });
+        if (!context) throw new Error("浏览器无法建立图片压缩画布");
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", PREVIEW_WEBP_QUALITY));
+        if (!blob) throw new Error("当前浏览器不支持 WebP 预览压缩");
+        const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
+        return new File([blob], `${baseName}-preview.webp`, { type: "image/webp" });
+      } finally {
+        decoded.close();
+      }
+    }
+
+    async function appendCompressedPreview(form, file, { required = false } = {}) {
+      try {
+        const preview = await createCompressedPreview(file);
+        form.append("preview", preview, preview.name);
+        return preview;
+      } catch (error) {
+        if (required) throw error;
+        // 文章插图不因旧浏览器缺少 WebP 编码而阻断；图片专栏上传则要求预览成功。
+        console.warn("Preview compression skipped", error);
+        return null;
+      }
+    }
+
     async function checkSession(){try{await api("/api/admin/session");showStudio();await loadAll()}catch{document.getElementById("login-shell").classList.remove("hidden")}}
     function showStudio(){document.getElementById("login-shell").classList.add("hidden");document.getElementById("studio").classList.remove("hidden")}
 
@@ -412,7 +478,40 @@
 
     async function loadAlbumsAndMedia(){[app.albums,app.media]=await Promise.all([api("/api/admin/albums"),api("/api/admin/media")]);renderAlbums();renderMedia();refreshCoverOptions()}
     function renderAlbums(){const row=document.getElementById("album-row");const select=document.getElementById("media-album");const sectionId=document.getElementById("media-section").value;clear(row);clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.albums.filter(album=>album.section_id===sectionId||(!album.section_id&&sectionId==="section-photos")).forEach(album=>{const wrap=document.createElement("span");wrap.className="album-chip";const edit=button(`${album.name}（${album.media_count||0}）`);edit.addEventListener("click",()=>editAlbum(album));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAlbum(album));wrap.append(edit,del);row.append(wrap);const option=document.createElement("option");option.value=album.id;option.textContent=album.name;select.append(option)})}
-    function renderMedia(){const grid=document.getElementById("media-grid");const sectionId=document.getElementById("media-section").value;clear(grid);app.media.filter(item=>item.kind==="inline"||item.section_id===sectionId||(!item.section_id&&sectionId==="section-photos")).forEach(item=>{const card=document.createElement("article");card.className="media-card";const img=document.createElement("img");img.loading="lazy";img.src=item.url;img.alt=item.caption||item.filename;const info=document.createElement("div");info.className="media-info";const title=document.createElement("strong");title.textContent=item.caption||item.filename;const small=document.createElement("small");small.textContent=item.album_name|| (item.kind==="inline"?"文章插图":"未分类");const actions=document.createElement("div");actions.className="list-actions";const copy=button("复制地址");copy.addEventListener("click",async()=>{await navigator.clipboard.writeText(new URL(item.url,location.origin).href);copy.textContent="已复制"});const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteMedia(item));actions.append(copy,del);info.append(title,small,actions);card.append(img,info);grid.append(card)})}
+    function renderMedia() {
+      const grid = document.getElementById("media-grid");
+      const sectionId = document.getElementById("media-section").value;
+      clear(grid);
+      app.media
+        .filter((item) => item.kind === "inline" || item.section_id === sectionId || (!item.section_id && sectionId === "section-photos"))
+        .forEach((item) => {
+          const card = document.createElement("article"); card.className = "media-card";
+          const img = document.createElement("img");
+          img.loading = "lazy"; img.src = item.previewUrl || item.url; img.alt = item.caption || item.filename;
+          const info = document.createElement("div"); info.className = "media-info";
+          const title = document.createElement("strong"); title.textContent = item.caption || item.filename;
+          const small = document.createElement("small");
+          const locationLabel = item.album_name || (item.kind === "inline" ? "文章插图" : "未分类");
+          small.textContent = `${locationLabel} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
+
+          const actions = document.createElement("div"); actions.className = "list-actions";
+          const copy = button("复制预览地址");
+          copy.addEventListener("click", async () => {
+            await navigator.clipboard.writeText(new URL(item.previewUrl || item.url, location.origin).href);
+            copy.textContent = "已复制";
+          });
+          actions.append(copy);
+
+          // 升级前上传的照片没有 preview_object_key，可在这里从原片补建一次。
+          if (item.kind === "photo" && !item.hasPreview) {
+            const createPreview = button("生成压缩预览");
+            createPreview.addEventListener("click", () => backfillMediaPreview(item, createPreview));
+            actions.append(createPreview);
+          }
+          const del = button("删除", "btn small danger"); del.addEventListener("click", () => deleteMedia(item));
+          actions.append(del); info.append(title, small, actions); card.append(img, info); grid.append(card);
+        });
+    }
     function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});select.value=current}
 
     async function loadComments(){app.comments=await api("/api/admin/comments");renderAdminComments()}
@@ -524,7 +623,38 @@
 
     async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-site-version").value=app.settings.site_version||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-email").value=app.settings.contact_email||""}
 
-    async function uploadInline(file){const form=new FormData();form.append("file",file);form.append("kind","inline");form.append("visibility",document.getElementById("content-visibility").value);const item=await api("/api/admin/media",{method:"POST",body:form});app.media.unshift(item);refreshCoverOptions();return item}
+    async function uploadInline(file) {
+      const form = new FormData();
+      form.append("file", file); form.append("kind", "inline");
+      form.append("visibility", document.getElementById("content-visibility").value);
+      await appendCompressedPreview(form, file);
+      const item = await api("/api/admin/media", { method: "POST", body: form });
+      app.media.unshift(item); refreshCoverOptions(); return item;
+    }
+
+    /*
+     * 旧照片补建预览：只读取原片并上传新 WebP，服务器不会覆盖 object_key。
+     * 站长后台 Cookie 也能读取会员板块原片，普通游客仍然没有该权限。
+     */
+    async function backfillMediaPreview(item, control) {
+      const oldText = control.textContent;
+      control.disabled = true; control.textContent = "正在读取原片…";
+      try {
+        const response = await fetch(item.originalUrl || `/media/${item.id}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`原片读取失败（${response.status}）`);
+        const originalBlob = await response.blob();
+        const originalFile = new File([originalBlob], item.filename, { type: item.mime_type || originalBlob.type });
+        control.textContent = "正在压缩…";
+        const preview = await createCompressedPreview(originalFile);
+        const form = new FormData(); form.append("preview", preview, preview.name);
+        control.textContent = "正在保存…";
+        await api(`/api/admin/media/${item.id}/preview`, { method: "POST", body: form });
+        await loadAlbumsAndMedia();
+      } catch (error) {
+        alert(`生成压缩预览失败：${error.message}`);
+        control.disabled = false; control.textContent = oldText;
+      }
+    }
     async function deleteMedia(item){if(!confirm(`确定删除“${item.filename}”吗？原图将同时删除。`))return;await api(`/api/admin/media/${item.id}`,{method:"DELETE"});await loadAlbumsAndMedia();await loadDashboard()}
     async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value})});await loadAlbumsAndMedia()}
     async function deleteAlbum(album){if(!confirm(`确定删除相册“${album.name}”吗？相册内图片会保留为未分类。`))return;await api(`/api/admin/albums/${album.id}`,{method:"DELETE"});await loadAlbumsAndMedia()}
@@ -549,7 +679,32 @@
 
     document.getElementById("media-section").addEventListener("change",()=>{renderAlbums();renderMedia()});
     document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId})});await loadAlbumsAndMedia()});
-    document.getElementById("media-form").addEventListener("submit",async event=>{event.preventDefault();const file=document.getElementById("media-file").files[0];const notice=document.getElementById("media-notice");if(!file)return;const form=new FormData();form.append("file",file);form.append("sectionId",document.getElementById("media-section").value);form.append("albumId",document.getElementById("media-album").value);form.append("caption",document.getElementById("media-caption").value);form.append("kind","photo");notice.textContent="正在上传原图…";try{await api("/api/admin/media",{method:"POST",body:form});event.currentTarget.reset();notice.textContent="图片上传成功。";await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
+    document.getElementById("media-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const file = document.getElementById("media-file").files[0];
+      const notice = document.getElementById("media-notice");
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      if (!file) return;
+      submit.disabled = true;
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("sectionId", document.getElementById("media-section").value);
+        form.append("albumId", document.getElementById("media-album").value);
+        form.append("caption", document.getElementById("media-caption").value);
+        form.append("kind", "photo");
+        notice.textContent = "正在生成压缩预览…";
+        await appendCompressedPreview(form, file, { required: true });
+        notice.textContent = "正在上传原片和压缩预览…";
+        await api("/api/admin/media", { method: "POST", body: form });
+        event.currentTarget.reset(); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
+        await loadAlbumsAndMedia(); await loadDashboard();
+      } catch (error) {
+        notice.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
     document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
     document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});
