@@ -111,6 +111,10 @@
     .media-info { padding:10px; }
     .media-info strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.83rem; }
     .media-info small { color:var(--muted); }
+    /* 每张已上传图片都可以单独修改可见范围；保存时会立即同步到 D1。 */
+    .media-visibility { display:grid; gap:5px; margin-top:10px; }
+    .media-visibility label { color:var(--muted); font-size:.72rem; font-weight:700; }
+    .media-visibility select { padding:7px 9px; font-size:.78rem; }
     .album-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
     .album-chip { display:inline-flex; align-items:center; gap:5px; padding:5px; border:1px solid var(--line); border-radius:10px; background:white; }
     .checkbox-field { display:flex; align-items:center; gap:8px; min-height:42px; }
@@ -250,7 +254,15 @@
             <div class="form-grid">
               <div class="field"><label>所属大板块</label><select id="content-section"></select></div>
               <div class="field"><label>状态</label><select id="content-status"><option value="draft">草稿</option><option value="published">已发布</option></select></div>
-              <div class="field"><label>访问权限</label><select id="content-visibility"><option value="public">游客与用户均可见</option><option value="member">仅审核通过的用户可见</option></select></div>
+              <div class="field">
+                <label>文章可见范围</label>
+                <select id="content-visibility">
+                  <option value="public">公开（游客与登录用户均可见）</option>
+                  <option value="member">仅审核用户（审核通过后可见）</option>
+                  <option value="private">私密（仅站长后台可见）</option>
+                </select>
+                <small>“草稿”表示尚未发布；“私密”内容即使设为已发布，也不会出现在普通网站中。</small>
+              </div>
               <div class="field wide"><label>标题</label><input id="content-title" maxlength="120" required placeholder="输入标题"></div>
               <div class="field wide"><label>摘要</label><textarea id="content-excerpt" maxlength="500" style="min-height:75px" placeholder="列表中显示的简短介绍"></textarea></div>
               <div class="field wide"><label>封面图片</label><select id="content-cover"><option value="">无封面</option></select></div>
@@ -301,7 +313,16 @@
           <div class="form-grid">
             <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 1280px 的 WebP 压缩预览。</small></div>
             <div class="field"><label>所属相册</label><select id="media-album"></select></div>
-            <div class="field wide"><label>图片说明</label><input id="media-caption" maxlength="500"></div>
+            <div class="field">
+              <label>照片可见范围</label>
+              <select id="media-visibility">
+                <option value="public">公开（游客与登录用户均可见）</option>
+                <option value="member">仅审核用户（审核通过后可见）</option>
+                <option value="private">私密（仅站长后台可见）</option>
+              </select>
+              <small>可见范围同时保护压缩预览与原片下载；上传后仍可在照片卡片中修改。</small>
+            </div>
+            <div class="field"><label>图片说明</label><input id="media-caption" maxlength="500"></div>
           </div>
           <div class="actions"><button class="btn" type="submit">上传到图片专栏</button><span id="media-notice" class="status"></span></div>
         </form>
@@ -370,6 +391,12 @@
       comments:["评论管理","查看、隐藏或删除游客评论。"], feedback:["留言与反馈","处理游客留言、公开留言或标记为已解决。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页显示的公开资料和左下角版本号。"],
+    };
+    // 文章和照片共用同一套权限名称，避免列表文字与表单选项含义不一致。
+    const visibilityLabels = {
+      public: "公开",
+      member: "仅审核用户",
+      private: "私密（仅 Studio）",
     };
 
     async function api(path, options={}) {
@@ -466,7 +493,7 @@
     function refreshSectionOptions(){const contentSelect=document.getElementById("content-section");const mediaSelect=document.getElementById("media-section");const currentContent=contentSelect.value;const currentMedia=mediaSelect.value;clear(contentSelect);clear(mediaSelect);app.sections.filter(item=>item.kind==="content").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;contentSelect.append(option)});app.sections.filter(item=>item.kind==="gallery").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;mediaSelect.append(option)});if([...contentSelect.options].some(o=>o.value===currentContent))contentSelect.value=currentContent;if([...mediaSelect.options].some(o=>o.value===currentMedia))mediaSelect.value=currentMedia}
 
     async function loadContent(){app.content=await api("/api/admin/content");renderContentList();refreshCoverOptions()}
-    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
+    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
     function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";renderContentList()}
     function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
     function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,visibility:document.getElementById("content-visibility").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
@@ -492,7 +519,20 @@
           const title = document.createElement("strong"); title.textContent = item.caption || item.filename;
           const small = document.createElement("small");
           const locationLabel = item.album_name || (item.kind === "inline" ? "文章插图" : "未分类");
-          small.textContent = `${locationLabel} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
+          small.textContent = `${locationLabel} · ${visibilityLabels[item.visibility] || visibilityLabels.public} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
+
+          // 已上传照片不必删除重传，可直接在卡片内切换公开、会员或私密。
+          const visibilityField = document.createElement("div"); visibilityField.className = "media-visibility";
+          const visibilityLabel = document.createElement("label"); visibilityLabel.textContent = "可见范围";
+          const visibilitySelect = document.createElement("select");
+          visibilitySelect.setAttribute("aria-label", `${item.caption || item.filename}的可见范围`);
+          [["public", "公开（游客与用户）"], ["member", "仅审核用户"], ["private", "私密（仅站长后台）"]].forEach(([value, text]) => {
+            const option = document.createElement("option"); option.value = value; option.textContent = text;
+            visibilitySelect.append(option);
+          });
+          visibilitySelect.value = item.visibility || "public";
+          visibilitySelect.addEventListener("change", () => updateMediaVisibility(item, visibilitySelect));
+          visibilityField.append(visibilityLabel, visibilitySelect);
 
           const actions = document.createElement("div"); actions.className = "list-actions";
           const copy = button("复制预览地址");
@@ -509,7 +549,7 @@
             actions.append(createPreview);
           }
           const del = button("删除", "btn small danger"); del.addEventListener("click", () => deleteMedia(item));
-          actions.append(del); info.append(title, small, actions); card.append(img, info); grid.append(card);
+          actions.append(del); info.append(title, small, visibilityField, actions); card.append(img, info); grid.append(card);
         });
     }
     function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});select.value=current}
@@ -655,6 +695,35 @@
         control.disabled = false; control.textContent = oldText;
       }
     }
+    /*
+     * 修改单张图片的权限。请求会保留它原来的板块、相册、说明和类型，
+     * 只更改 visibility，防止调整权限时意外把照片移出原相册。
+     */
+    async function updateMediaVisibility(item, control) {
+      const previous = item.visibility || "public";
+      const next = control.value;
+      if (next === previous) return;
+      control.disabled = true;
+      try {
+        await api(`/api/admin/media/${item.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sectionId: item.section_id,
+            albumId: item.album_id,
+            caption: item.caption,
+            kind: item.kind,
+            visibility: next,
+          }),
+        });
+        item.visibility = next;
+        renderMedia();
+      } catch (error) {
+        control.value = previous;
+        control.disabled = false;
+        alert(`可见范围保存失败：${error.message}`);
+      }
+    }
     async function deleteMedia(item){if(!confirm(`确定删除“${item.filename}”吗？原图将同时删除。`))return;await api(`/api/admin/media/${item.id}`,{method:"DELETE"});await loadAlbumsAndMedia();await loadDashboard()}
     async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value})});await loadAlbumsAndMedia()}
     async function deleteAlbum(album){if(!confirm(`确定删除相册“${album.name}”吗？相册内图片会保留为未分类。`))return;await api(`/api/admin/albums/${album.id}`,{method:"DELETE"});await loadAlbumsAndMedia()}
@@ -681,9 +750,12 @@
     document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId})});await loadAlbumsAndMedia()});
     document.getElementById("media-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      // currentTarget 只在事件派发期间可靠；异步压缩/上传后它可能已变为 null。
+      // 因此必须在第一个 await 之前保存表单引用，上传成功后再用它 reset()。
+      const mediaForm = event.currentTarget;
       const file = document.getElementById("media-file").files[0];
       const notice = document.getElementById("media-notice");
-      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const submit = mediaForm.querySelector("button[type='submit']");
       if (!file) return;
       submit.disabled = true;
       try {
@@ -693,11 +765,12 @@
         form.append("albumId", document.getElementById("media-album").value);
         form.append("caption", document.getElementById("media-caption").value);
         form.append("kind", "photo");
+        form.append("visibility", document.getElementById("media-visibility").value);
         notice.textContent = "正在生成压缩预览…";
         await appendCompressedPreview(form, file, { required: true });
         notice.textContent = "正在上传原片和压缩预览…";
         await api("/api/admin/media", { method: "POST", body: form });
-        event.currentTarget.reset(); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
+        mediaForm.reset(); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
         await loadAlbumsAndMedia(); await loadDashboard();
       } catch (error) {
         notice.textContent = error.message;
