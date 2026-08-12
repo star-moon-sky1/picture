@@ -200,7 +200,18 @@ class HttpError extends Error {
 async function ensureColumn(env, table, column, definition) {
   const result = await env.DB.prepare(`PRAGMA table_info(${table})`).all();
   if (rows(result).some((item) => item.name === column)) return;
-  await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  try {
+    await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  } catch (error) {
+    /*
+     * Cloudflare 可能同时启动多个 Worker 实例：两个实例都先看到字段不存在，
+     * 随后只有第一个 ALTER 成功。第二个收到 duplicate column 时重新核对表结构；
+     * 字段确实已经建立就视为成功，其余数据库错误仍原样抛出。
+     */
+    const current = await env.DB.prepare(`PRAGMA table_info(${table})`).all();
+    if (rows(current).some((item) => item.name === column)) return;
+    throw error;
+  }
 }
 
 async function initializeSchema(env) {
