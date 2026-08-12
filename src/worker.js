@@ -95,6 +95,19 @@ function validId(value) {
   return /^[a-zA-Z0-9_-]{1,80}$/.test(String(value ?? ""));
 }
 
+/*
+ * 内容和照片统一使用三级可见范围：
+ * public  = 游客与用户均可访问；member = 仅审核通过的用户；private = 仅 Studio。
+ * 所有未知值都回退到 public，避免旧版本或手工请求写入无法判断的状态。
+ */
+function normalizedVisibility(value) {
+  return value === "member" || value === "private" ? value : "public";
+}
+
+function visibleToWebsite(visibility, fullAccess) {
+  return visibility === "public" || (visibility === "member" && fullAccess);
+}
+
 function slugify(value) {
   const base = String(value ?? "")
     .normalize("NFKC")
@@ -658,15 +671,15 @@ async function publicBootstrap(request, env) {
     settingsObject(env),
   ]);
 
-  const visibleSections = rows(sections).filter((item) => fullAccess || item.visibility !== "member");
+  const visibleSections = rows(sections).filter((item) => visibleToWebsite(item.visibility, fullAccess));
   const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
   const visibleContent = rows(content).filter((item) => (
-    visibleSectionIds.has(item.section_id) && (fullAccess || item.visibility !== "member")
+    visibleSectionIds.has(item.section_id) && visibleToWebsite(item.visibility, fullAccess)
   ));
   const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
-  // 照片自身和所属大板块都必须公开；避免登录用户的入口背景误用会员照片。
+  // 照片自身和所属大板块都必须对当前身份可见；private 永远不进入普通网站数据。
   const visibleMedia = rows(media).filter((item) => (
-    visibleSectionIds.has(item.section_id) && (fullAccess || item.visibility !== "member")
+    visibleSectionIds.has(item.section_id) && visibleToWebsite(item.visibility, fullAccess)
   ));
 
   return {
@@ -692,6 +705,10 @@ async function getPublicContent(request, env, id) {
     WHERE c.id = ? AND c.status = 'published'
   `).bind(id).first();
   if (!item) throw new HttpError(404, "内容不存在或尚未发布");
+  // 私密内容只在 Studio 编辑和预览，不通过普通网站内容接口暴露。
+  if (item.visibility === "private" || item.section_visibility === "private") {
+    throw new HttpError(404, "内容不存在或尚未发布");
+  }
   if (item.visibility === "member" || item.section_visibility === "member") {
     await requireApprovedUser(request, env);
   }
@@ -1984,8 +2001,13 @@ async function serveMedia(request, env, id) {
     WHERE m.id = ?
   `).bind(id).first();
   if (!media) throw new HttpError(404, "图片不存在");
-  const isProtected = media.section_visibility === "member" || media.media_visibility === "member";
-  if (isProtected && !(await isAdmin(request, env))) {
+  const isPrivate = media.section_visibility === "private" || media.media_visibility === "private";
+  const isProtected = isPrivate || media.section_visibility === "member" || media.media_visibility === "member";
+  // 受保护图片只验证一次 Studio 会话，避免私密图片重复读取/校验 Cookie。
+  const adminAccess = isProtected ? await isAdmin(request, env) : false;
+  // 私密图片只允许带有效 Studio 管理会话的请求读取。
+  if (isPrivate && !adminAccess) throw new HttpError(404, "图片不存在");
+  if (isProtected && !adminAccess) {
     await requireApprovedUser(request, env);
   }
 
@@ -2169,7 +2191,7 @@ async function adminContent(request, env, id) {
     const bodyHtml = sanitizeRichHtml(body.bodyHtml);
     const coverMediaId = validId(body.coverMediaId) ? body.coverMediaId : null;
     const status = body.status === "published" ? "published" : "draft";
-    const visibility = body.visibility === "member" ? "member" : "public";
+    const visibility = normalizedVisibility(body.visibility);
     if (!title) throw new HttpError(400, "标题不能为空");
     const timestamp = nowIso();
 
@@ -2332,7 +2354,8 @@ async function uploadMedia(request, env) {
   const albumId = validId(form.get("albumId")) ? String(form.get("albumId")) : null;
   const caption = clampText(form.get("caption"), 500);
   const kind = form.get("kind") === "inline" ? "inline" : "photo";
-  const visibility = kind === "inline" && form.get("visibility") === "member" ? "member" : "public";
+  // 图片专栏与文章插图都接受三级权限，后端不能依赖前端下拉框自行保证安全。
+  const visibility = normalizedVisibility(form.get("visibility"));
   let sectionId = null;
   if (kind === "photo") {
     if (albumId) {
@@ -2426,7 +2449,7 @@ async function adminMedia(request, env, id, action = "") {
     const albumId = validId(body.albumId) ? body.albumId : null;
     const caption = clampText(body.caption, 500);
     const kind = body.kind === "inline" ? "inline" : "photo";
-    const visibility = kind === "inline" && body.visibility === "member" ? "member" : "public";
+    const visibility = normalizedVisibility(body.visibility);
     let sectionId = null;
     if (kind === "photo") {
       if (albumId) {
