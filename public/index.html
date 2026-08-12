@@ -253,7 +253,8 @@
 
     /*
      * 登录入口的照片背景：图片地址只来自 /api/bootstrap 返回的公开照片。
-     * 背景改为纯底色加均匀浅遮罩，不再叠加圆形或渐变花纹，也不再模糊照片。
+     * 遮罩完全透明，照片使用 contain 完整放入屏幕；照片比例与屏幕不一致时，
+     * 两侧或上下会出现深色留白，但不会再通过 cover 裁掉照片边缘。
      */
     .entry-photo-background {
       position: fixed;
@@ -261,35 +262,35 @@
       z-index: 0;
       overflow: hidden;
       pointer-events: none;
-      background: #f3f2ed;
+      background: #15191b;
     }
     .entry-photo-background::after {
       content: "";
       position: absolute;
       inset: 0;
       z-index: 2;
-      background: rgba(246,244,238,.28);
+      background: transparent;
     }
     .entry-photo-background img {
       position: absolute;
-      inset: -3%;
+      inset: 0;
       z-index: 1;
-      width: 106%;
-      height: 106%;
-      object-fit: cover;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       opacity: 0;
-      filter: saturate(.96) contrast(1.02);
-      transform: scale(1.035);
-      transition: opacity 1.3s ease;
+      filter: none;
+      transform: none;
+      transition: opacity 1.15s ease;
     }
-    .entry-photo-background img.active { opacity: .68; animation: entry-bg-zoom 8s ease-out both; }
-    .entry-photo-background img.active.effect-pan-left { animation-name: entry-bg-pan-left; }
-    .entry-photo-background img.active.effect-pan-right { animation-name: entry-bg-pan-right; }
-    .entry-photo-background img.active.effect-rise { animation-name: entry-bg-rise; }
-    @keyframes entry-bg-zoom { from { transform: scale(1.025); } to { transform: scale(1.085); } }
-    @keyframes entry-bg-pan-left { from { transform: scale(1.09) translateX(1.8%); } to { transform: scale(1.09) translateX(-1.8%); } }
-    @keyframes entry-bg-pan-right { from { transform: scale(1.09) translateX(-1.8%); } to { transform: scale(1.09) translateX(1.8%); } }
-    @keyframes entry-bg-rise { from { transform: scale(1.085) translateY(1.5%); } to { transform: scale(1.085) translateY(-1.5%); } }
+    .entry-photo-background img.active { opacity: 1; animation: entry-bg-fade 1.25s ease both; }
+    .entry-photo-background img.active.effect-wipe-left { animation-name: entry-bg-wipe-left; }
+    .entry-photo-background img.active.effect-wipe-right { animation-name: entry-bg-wipe-right; }
+    .entry-photo-background img.active.effect-reveal-center { animation-name: entry-bg-reveal-center; }
+    @keyframes entry-bg-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes entry-bg-wipe-left { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+    @keyframes entry-bg-wipe-right { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0); } }
+    @keyframes entry-bg-reveal-center { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
     @media (prefers-reduced-motion: reduce) {
       .entry-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
       .entry-photo-background img.active { transform: none; }
@@ -515,7 +516,20 @@
 
     .image-dialog { width: min(1100px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); background: #111; color: white; }
     .image-view { padding: 18px; text-align: center; }
+    .image-stage { position: relative; min-height: 180px; display: grid; place-items: center; }
     .image-view img { max-width: 100%; max-height: calc(100dvh - 130px); object-fit: contain; }
+    /* 放大预览左右切换按钮覆盖在图片两侧，不会挤压图片可用宽度。 */
+    .image-nav {
+      position: absolute; z-index: 2; top: 50%; transform: translateY(-50%);
+      width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%;
+      display: grid; place-items: center; color: white; background: rgba(0,0,0,.48);
+      box-shadow: 0 8px 24px rgba(0,0,0,.28); font-size: 2rem; line-height: 1; cursor: pointer;
+      backdrop-filter: blur(6px); transition: background .18s, transform .18s;
+    }
+    .image-nav:hover { background: rgba(0,0,0,.72); transform: translateY(-50%) scale(1.06); }
+    .image-nav[hidden] { display: none; }
+    .image-nav.previous { left: 12px; }
+    .image-nav.next { right: 12px; }
     .image-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; text-align: left; }
 
     .notice { color: var(--accent); font-size: .85rem; min-height: 20px; }
@@ -563,6 +577,10 @@
       .chat-form { flex-wrap: wrap; }
       .chat-form button { width: 100%; }
       .bubble { max-width: 92%; }
+      .image-view { padding: 10px; }
+      .image-nav { width: 42px; height: 42px; font-size: 1.7rem; }
+      .image-nav.previous { left: 5px; }
+      .image-nav.next { right: 5px; }
     }
 
   </style>
@@ -834,9 +852,13 @@
   <!-- 图片预览弹窗：显示大图，并提供 R2 原片下载地址。 -->
   <dialog id="image-dialog" class="image-dialog">
     <div class="image-view">
-      <img id="image-preview" alt="图片预览">
+      <div class="image-stage">
+        <button id="image-previous" class="image-nav previous" type="button" aria-label="上一张照片" title="上一张照片">‹</button>
+        <img id="image-preview" alt="图片预览">
+        <button id="image-next" class="image-nav next" type="button" aria-label="下一张照片" title="下一张照片">›</button>
+      </div>
       <div class="image-toolbar">
-        <span id="image-caption"></span>
+        <span id="image-caption" aria-live="polite"></span>
         <div>
           <a id="image-download" class="btn small light" href="#" download>下载原片</a>
           <button class="btn small ghost" style="color:white" data-close-dialog="image-dialog">关闭</button>
@@ -859,6 +881,8 @@
       comments: [],
       activePortfolioSection: null,
       activeAlbums: {},
+      imageSequence: [],
+      currentImageIndex: -1,
       publicFeedback: [],
       pdfDownloading: false,
       pdfLibraryPromise: null,
@@ -945,8 +969,8 @@
 
     /*
      * 只创建两个 img 节点并轮换 src，避免一次性下载个人空间的全部照片。
-     * 每次换图依次使用放大、左右平移和上移四种效果；开启“减少动态效果”
-     * 时只显示第一张，不启动定时轮播。
+     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。这些效果只改变
+     * 图片出现方式，不缩放图片，因此最终画面始终能完整显示。
      */
     function startEntryPhotoBackground(urls) {
       const host = document.getElementById("entry-photo-background");
@@ -957,7 +981,7 @@
       frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
       let activeFrame = 0;
       let photoIndex = 0;
-      const effects = ["effect-zoom", "effect-pan-left", "effect-pan-right", "effect-rise"];
+      const effects = ["effect-fade", "effect-wipe-left", "effect-wipe-right", "effect-reveal-center"];
       let effectIndex = 0;
       frames[0].classList.add(effects[effectIndex]);
       frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
@@ -1141,8 +1165,8 @@
         card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
         const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || "照片";
         // 图片网格只展示照片本身，不显示上传文件名、文件编号或说明文字。
-        card.append(image); card.addEventListener("click", () => openImage(photo));
-        card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo); }); gallery.append(card);
+        card.append(image); card.addEventListener("click", () => openImage(photo, photos));
+        card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo, photos); }); gallery.append(card);
       });
     }
 
@@ -1174,12 +1198,35 @@
       renderPortfolioPanel();
     }
 
-    function openImage(photo) {
-      // 弹窗仍展示压缩预览；只有“下载原片”链接会请求 download=1。
+    /*
+     * 更新放大预览中的当前照片。索引会首尾循环，因此第一张向左切换会到
+     * 最后一张，最后一张向右切换会回到第一张。
+     */
+    function showImageAt(index) {
+      const photos = state.imageSequence;
+      if (!photos.length) return;
+      state.currentImageIndex = (index + photos.length) % photos.length;
+      const photo = photos[state.currentImageIndex];
+      // 弹窗展示压缩预览；只有“下载原片”链接会请求 download=1。
       document.getElementById("image-preview").src = photo.previewUrl || photo.url;
-      // 弹窗可以显示站长填写的说明，但绝不再用内部文件名或文件编号兜底。
+      document.getElementById("image-preview").alt = photo.caption || "照片预览";
+      // 可以显示站长填写的说明，但绝不使用内部文件名或文件编号兜底。
       document.getElementById("image-caption").textContent = photo.caption || "";
       document.getElementById("image-download").href = photo.downloadUrl;
+      const hasMultiple = photos.length > 1;
+      document.getElementById("image-previous").hidden = !hasMultiple;
+      document.getElementById("image-next").hidden = !hasMultiple;
+    }
+
+    function stepImage(offset) {
+      if (!document.getElementById("image-dialog").open || state.imageSequence.length < 2) return;
+      showImageAt(state.currentImageIndex + offset);
+    }
+
+    function openImage(photo, photos = [photo]) {
+      state.imageSequence = photos.length ? photos : [photo];
+      const selectedIndex = state.imageSequence.findIndex((item) => item.id === photo.id);
+      showImageAt(selectedIndex >= 0 ? selectedIndex : 0);
       document.getElementById("image-dialog").showModal();
     }
 
@@ -1646,6 +1693,14 @@
     });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
+    const imageDialog = document.getElementById("image-dialog");
+    document.getElementById("image-previous").addEventListener("click", () => stepImage(-1));
+    document.getElementById("image-next").addEventListener("click", () => stepImage(1));
+    // 键盘左右方向键与屏幕按钮使用同一套切换逻辑，Esc 仍由 dialog 原生关闭。
+    imageDialog.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") { event.preventDefault(); stepImage(-1); }
+      if (event.key === "ArrowRight") { event.preventDefault(); stepImage(1); }
+    });
     document.getElementById("content-like").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, 1, event.currentTarget));
     document.getElementById("content-dislike").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, -1, event.currentTarget));
     document.getElementById("content-pdf").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
@@ -1811,7 +1866,7 @@
       }
     });
 
-    [document.getElementById("reader-dialog"), document.getElementById("image-dialog")].forEach((dialog) => dialog.addEventListener("click", (event) => {
+    [document.getElementById("reader-dialog"), imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     }));
 

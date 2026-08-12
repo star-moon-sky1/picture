@@ -54,9 +54,8 @@
     }
 
     /*
-     * 全屏照片背景使用两个图层交替显示。这里只保留一层均匀浅色遮罩，
-     * 不再叠加渐变花纹或模糊滤镜，让公开照片尽量保持原有颜色和细节。
-     * 如果公开照片为空或接口不可用，则显示纯米白色底色。
+     * 全屏照片背景使用两个图层交替显示。遮罩完全透明，照片以 contain
+     * 完整放进屏幕，不再使用 cover 裁切边缘；比例不一致处使用深色留白。
      */
     .auth-photo-background {
       position: fixed;
@@ -64,35 +63,35 @@
       z-index: 0;
       overflow: hidden;
       pointer-events: none;
-      background: #f3f2ed;
+      background: #15191b;
     }
     .auth-photo-background::after {
       content: "";
       position: absolute;
       inset: 0;
       z-index: 2;
-      background: rgba(246,244,238,.28);
+      background: transparent;
     }
     .auth-photo-background img {
       position: absolute;
-      inset: -3%;
+      inset: 0;
       z-index: 1;
-      width: 106%;
-      height: 106%;
-      object-fit: cover;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       opacity: 0;
-      filter: saturate(.96) contrast(1.02);
-      transform: scale(1.035);
-      transition: opacity 1.3s ease;
+      filter: none;
+      transform: none;
+      transition: opacity 1.15s ease;
     }
-    .auth-photo-background img.active { opacity: .68; animation: auth-bg-zoom 8s ease-out both; }
-    .auth-photo-background img.active.effect-pan-left { animation-name: auth-bg-pan-left; }
-    .auth-photo-background img.active.effect-pan-right { animation-name: auth-bg-pan-right; }
-    .auth-photo-background img.active.effect-rise { animation-name: auth-bg-rise; }
-    @keyframes auth-bg-zoom { from { transform: scale(1.025); } to { transform: scale(1.085); } }
-    @keyframes auth-bg-pan-left { from { transform: scale(1.09) translateX(1.8%); } to { transform: scale(1.09) translateX(-1.8%); } }
-    @keyframes auth-bg-pan-right { from { transform: scale(1.09) translateX(-1.8%); } to { transform: scale(1.09) translateX(1.8%); } }
-    @keyframes auth-bg-rise { from { transform: scale(1.085) translateY(1.5%); } to { transform: scale(1.085) translateY(-1.5%); } }
+    .auth-photo-background img.active { opacity: 1; animation: auth-bg-fade 1.25s ease both; }
+    .auth-photo-background img.active.effect-wipe-left { animation-name: auth-bg-wipe-left; }
+    .auth-photo-background img.active.effect-wipe-right { animation-name: auth-bg-wipe-right; }
+    .auth-photo-background img.active.effect-reveal-center { animation-name: auth-bg-reveal-center; }
+    @keyframes auth-bg-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes auth-bg-wipe-left { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+    @keyframes auth-bg-wipe-right { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0); } }
+    @keyframes auth-bg-reveal-center { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
     @media (prefers-reduced-motion: reduce) {
       .auth-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
       .auth-photo-background img.active { transform: none; }
@@ -378,7 +377,8 @@
 
     /*
      * 两个 img 节点循环复用，避免一次加载所有公开照片。
-     * 每次换图依次使用放大、左右平移和上移四种效果，避免轮播过于单一。
+     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果；不缩放照片，
+     * 避免为了动态效果再次裁掉照片边缘。
      */
     function startPhotoBackground(urls) {
       const host = document.getElementById("auth-photo-background");
@@ -387,7 +387,7 @@
       frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
       let activeFrame = 0;
       let photoIndex = 0;
-      const effects = ["effect-zoom", "effect-pan-left", "effect-pan-right", "effect-rise"];
+      const effects = ["effect-fade", "effect-wipe-left", "effect-wipe-right", "effect-reveal-center"];
       let effectIndex = 0;
       frames[0].classList.add(effects[effectIndex]);
       frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
