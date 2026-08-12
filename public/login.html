@@ -125,8 +125,12 @@
       justify-content: center;
     }
     .auth-card {
-      width: min(100%, 610px);
-      padding: clamp(26px, 5vw, 52px);
+      /*
+         独立登录/注册框由 610px 加宽到 720px，并把桌面端上下留白压缩到
+         30px。左右仍保留较宽空间，使表单显得舒展但整体高度更低。
+      */
+      width: min(100%, 720px);
+      padding: 30px clamp(34px, 5vw, 52px);
       border: 1px solid rgba(204, 195, 184, .62);
       border-radius: 24px;
       /* 白色降到 70% 不透明度，让背景照片透过登录、注册和找回密码卡片。 */
@@ -135,36 +139,36 @@
       -webkit-backdrop-filter: blur(10px) saturate(1.05);
       backdrop-filter: blur(10px) saturate(1.05);
     }
-    .card-head { margin-bottom: 28px; text-align: center; }
+    .card-head { margin-bottom: 20px; text-align: center; }
     /* 中文标题已经足够明确，不再额外显示 ACCOUNT LOGIN 等英文装饰行。 */
     .eyebrow { display: none; }
-    .card-head h2 { margin: 0 0 9px; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 3.15rem); font-weight: 500; }
-    .card-head p { margin: 0; color: var(--muted); line-height: 1.7; }
+    .card-head h2 { margin: 0 0 7px; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 500; }
+    .card-head p { margin: 0; color: var(--muted); line-height: 1.55; }
 
     /* ========================================================
        03. 表单、按钮与状态提示
        ======================================================== */
     .panel[hidden] { display: none !important; }
-    .field { display: grid; gap: 7px; margin-bottom: 17px; }
+    .field { display: grid; gap: 6px; margin-bottom: 13px; }
     .field label { font-size: .84rem; font-weight: 800; }
     .field small { color: var(--muted); line-height: 1.55; }
     .field input, .field select, .field textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 12px;
-      padding: 13px 14px;
+      padding: 11px 14px;
       color: var(--ink);
       background: #fff;
       outline: none;
       transition: border-color .18s, box-shadow .18s;
     }
-    .field textarea { min-height: 92px; resize: vertical; line-height: 1.65; }
+    .field textarea { min-height: 76px; resize: vertical; line-height: 1.6; }
     .field input:focus, .field select:focus, .field textarea:focus {
       border-color: var(--cyan);
       box-shadow: 0 0 0 4px rgba(40,184,204,.12);
     }
     .two-fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; }
-    .check-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -2px 0 20px; }
+    .check-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -1px 0 15px; }
     .remember { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .88rem; }
     .remember input { accent-color: var(--cyan-deep); }
     .text-button {
@@ -187,7 +191,7 @@
     .btn.block { width: 100%; }
     .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .button-row .btn { flex: 1 1 130px; }
-    .divider { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: #aaa39b; font-size: .78rem; }
+    .divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: #aaa39b; font-size: .78rem; }
     .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
     .notice { min-height: 24px; margin: 15px 0 0; color: var(--muted); line-height: 1.55; font-size: .88rem; }
     .notice.error { color: var(--danger); }
@@ -199,7 +203,7 @@
     }
 
     /* 注册进度条只表示页面位置，不代表账户已经审核通过。 */
-    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 27px; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 20px; }
     .step { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; color: #aaa39b; font-size: .76rem; }
     .step::after { content: ""; grid-column: 1 / -1; height: 3px; border-radius: 9px; background: var(--line); }
     .step-number { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--paper-deep); font-weight: 900; }
@@ -223,6 +227,7 @@
       .auth-card { position: relative; z-index: 2; border-radius: 19px; }
     }
     @media (max-width: 540px) {
+      /* 手机端保持单列和足够大的触控区域，不套用桌面端横向压缩方式。 */
       .auth-card { padding: 25px 18px; }
       .two-fields { grid-template-columns: 1fr; gap: 0; }
       .step { grid-template-columns: 27px 1fr; font-size: .69rem; }
