@@ -24,6 +24,18 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
 
 /*
+ * “本站使用说明”的初始正文只保存在数据层，不再硬编码进 index.html。
+ * Worker 首次升级会把它写入 D1；之后站长可在 Studio 中自由编辑或清空。
+ * 段落之间使用一个空行，前端会据此安全地生成独立段落。
+ */
+const DEFAULT_USAGE_GUIDE = [
+  "欢迎来到星月集的网站！",
+  "本站为星月集的个人空间，可视作朋友圈/QQ空间的平替。不论是生活中的感悟，还是学术上的探索，抑或是一些文章随笔，日后都将在该网站上进行发表，朋友圈/QQ空间除特殊事件以外，将逐步停更。",
+  "同时，该网站目前仍处于建设状态，网站功能将持续丰富。受限于掌握知识有限，目前该网站仍由 ChatGPT 参与建设。随着前端学习的深入，GPT 将逐渐退出建设者的角色。",
+  "本站托管在海外平台，故建议浏览者使用非公用网络进行登录，以防被拦截从而导致浏览失败。若有更多关于网站建设的想法，也欢迎与星月集进行联系沟通！",
+].join("\n\n");
+
+/*
  * QQ 官方机器人通知配置：
  * - QQ_BOT_APP_ID：机器人 AppID，可以放在 wrangler.jsonc 的 vars 中；
  * - QQ_BOT_SECRET：机器人 AppSecret，只能保存为 Cloudflare Secret；
@@ -491,6 +503,8 @@ async function initializeSchema(env) {
       .bind("school", "北京理工大学 计算机学院", timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("intro", "", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("usage_guide", DEFAULT_USAGE_GUIDE, timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("contact_email", "1598116329@qq.com", timestamp),
   ]);
@@ -2551,7 +2565,8 @@ async function adminSettings(request, env) {
     const body = await readJson(request);
     const allowed = new Map([
       ["site_title", 80], ["owner_name", 80], ["school", 160],
-      ["intro", 1000], ["contact_email", 240], ["site_version", 30],
+      ["intro", 1000], ["usage_guide", 6000],
+      ["contact_email", 240], ["site_version", 30],
     ]);
     const statements = [];
     for (const [key, max] of allowed) {
