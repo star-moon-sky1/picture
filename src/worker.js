@@ -11,7 +11,13 @@ const USER_SESSION_COOKIE = "xyj_user";
 const USER_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_REMEMBER_TTL_SECONDS = 60 * 60 * 24 * 30;
 const PASSWORD_RESET_TTL_SECONDS = 60 * 60 * 24;
-const PASSWORD_HASH_ITERATIONS = 600_000;
+/*
+ * Cloudflare Workers 免费方案的单次 CPU 时间很短。600,000 次 PBKDF2 在本地
+ * workerd 中约需 97ms，会导致正式站注册请求在密码处理阶段被中断。
+ * 这里使用 50,000 次，并继续配合每个密码独立随机盐、登录限流和 HTTPS。
+ * 迭代次数会随哈希一同保存，日后调整不会影响已有账号的校验。
+ */
+const PASSWORD_HASH_ITERATIONS = 50_000;
 const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -1317,12 +1323,15 @@ async function createPasswordRecord(password) {
 
 async function verifyPassword(password, user) {
   if (!user?.password_hash || !user?.password_salt) return false;
+  const storedIterations = Number(user.password_iterations);
+  // 拒绝被篡改或明显异常的参数，避免数据库脏数据触发超大计算任务。
+  if (!Number.isInteger(storedIterations) || storedIterations < 10_000 || storedIterations > 1_000_000) return false;
   let actual = "";
   try {
     actual = await derivePasswordHash(
       String(password || ""),
       decodeBase64Url(user.password_salt),
-      Math.max(100_000, Number(user.password_iterations) || PASSWORD_HASH_ITERATIONS),
+      storedIterations,
     );
   } catch {
     return false;
@@ -1448,7 +1457,13 @@ async function registerUser(request, env, ctx) {
 
   const id = crypto.randomUUID();
   const timestamp = nowIso();
-  const passwordRecord = await createPasswordRecord(password);
+  let passwordRecord;
+  try {
+    passwordRecord = await createPasswordRecord(password);
+  } catch (error) {
+    console.error("Registration password hashing failed", error);
+    throw new HttpError(503, "密码安全处理暂时繁忙，请稍后重新提交");
+  }
   try {
     await env.DB.batch([
       env.DB.prepare(`
@@ -1468,21 +1483,30 @@ async function registerUser(request, env, ctx) {
     ]);
   } catch (error) {
     if (/unique/i.test(String(error?.message || error))) throw new HttpError(409, "该登录用户名已被使用");
-    throw error;
+    console.error("Registration database write failed", error);
+    throw new HttpError(503, "注册资料暂时无法保存，请稍后重新提交");
   }
 
-  await recordLoginEvent(env, request, "register", id, username);
-  const session = await createUserSession(request, env, id, false);
+  /*
+   * 账号及审核资料保存成功就是注册成功。访问日志或自动登录会话属于附加步骤，
+   * 单项异常只写入日志，不再让用户看到笼统的“服务器处理请求时发生错误”。
+   */
+  await recordLoginEvent(env, request, "register", id, username)
+    .catch((error) => console.error("Registration event logging failed", error));
+  const session = await createUserSession(request, env, id, false)
+    .catch((error) => {
+      console.error("Registration session creation failed", error);
+      return null;
+    });
   const user = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first();
   const noticeJob = notifyRegistration(env, {
     id, username, nickname, displayName, contactType: type, contact,
     note, inviteCode, createdAt: timestamp,
   }).catch((error) => console.error("Registration notification failed", error));
   if (ctx) ctx.waitUntil(noticeJob); else await noticeJob;
-  return json({ ok: true, user: publicUser(user) }, 201, {
-    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
-    "Cache-Control": "no-store",
-  });
+  const responseHeaders = { "Cache-Control": "no-store" };
+  if (session) responseHeaders["Set-Cookie"] = userSessionCookie(request, session.token, session.ttl);
+  return json({ ok: true, user: publicUser(user), authenticated: Boolean(session) }, 201, responseHeaders);
 }
 
 async function loginUser(request, env) {
