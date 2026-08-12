@@ -253,8 +253,8 @@
 
     /*
      * 登录入口的照片背景：图片地址只来自 /api/bootstrap 返回的公开照片。
-     * 遮罩完全透明，照片使用 contain 完整放入屏幕；照片比例与屏幕不一致时，
-     * 两侧或上下会出现深色留白，但不会再通过 cover 裁掉照片边缘。
+     * object-fit: cover 会让照片始终铺满整个屏幕；当照片比例和屏幕比例不同
+     * 时，浏览器会从四周适量裁切。object-position 控制优先保留照片中心区域。
      */
     .entry-photo-background {
       position: fixed;
@@ -277,7 +277,8 @@
       z-index: 1;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
+      object-position: center center;
       opacity: 0;
       filter: none;
       transform: none;
@@ -302,9 +303,11 @@
       padding: clamp(27px, 5vw, 42px);
       border: 1px solid rgba(32,48,55,.11);
       border-radius: 26px;
-      background: rgba(255,255,255,.88);
+      /* 白色降到 70% 不透明度，让背景照片能从卡片中透出，同时保证文字清晰。 */
+      background: rgba(255,255,255,.70);
       box-shadow: 0 28px 75px rgba(28,52,60,.15);
-      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(10px) saturate(1.05);
+      backdrop-filter: blur(10px) saturate(1.05);
       animation: entry-rise .45s ease both;
     }
     @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
@@ -969,8 +972,8 @@
 
     /*
      * 只创建两个 img 节点并轮换 src，避免一次性下载个人空间的全部照片。
-     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。这些效果只改变
-     * 图片出现方式，不缩放图片，因此最终画面始终能完整显示。
+     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。照片本身由
+     * object-fit: cover 铺满屏幕，动画只负责切换，不额外放大照片。
      */
     function startEntryPhotoBackground(urls) {
       const host = document.getElementById("entry-photo-background");

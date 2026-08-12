@@ -54,8 +54,8 @@
     }
 
     /*
-     * 全屏照片背景使用两个图层交替显示。遮罩完全透明，照片以 contain
-     * 完整放进屏幕，不再使用 cover 裁切边缘；比例不一致处使用深色留白。
+     * 全屏照片背景使用两个图层交替显示。object-fit: cover 会让照片铺满
+     * 整个视口；照片比例不同时允许从四周适量裁切，并优先保留中央内容。
      */
     .auth-photo-background {
       position: fixed;
@@ -78,7 +78,8 @@
       z-index: 1;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
+      object-position: center center;
       opacity: 0;
       filter: none;
       transform: none;
@@ -126,11 +127,13 @@
     .auth-card {
       width: min(100%, 610px);
       padding: clamp(26px, 5vw, 52px);
-      border: 1px solid rgba(204, 195, 184, .82);
+      border: 1px solid rgba(204, 195, 184, .62);
       border-radius: 24px;
-      background: rgba(255,255,255,.91);
+      /* 白色降到 70% 不透明度，让背景照片透过登录、注册和找回密码卡片。 */
+      background: rgba(255,255,255,.70);
       box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(10px) saturate(1.05);
+      backdrop-filter: blur(10px) saturate(1.05);
     }
     .card-head { margin-bottom: 28px; text-align: center; }
     /* 中文标题已经足够明确，不再额外显示 ACCOUNT LOGIN 等英文装饰行。 */
@@ -377,8 +380,8 @@
 
     /*
      * 两个 img 节点循环复用，避免一次加载所有公开照片。
-     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果；不缩放照片，
-     * 避免为了动态效果再次裁掉照片边缘。
+     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。照片本身由
+     * object-fit: cover 铺满屏幕，动画只负责切换，不额外放大照片。
      */
     function startPhotoBackground(urls) {
       const host = document.getElementById("auth-photo-background");
