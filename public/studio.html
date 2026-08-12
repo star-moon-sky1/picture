@@ -37,25 +37,27 @@
     .login-shell { min-height:100dvh; display:grid; place-items:center; padding:20px; background:radial-gradient(circle at 15% 10%,rgba(49,191,200,.22),transparent 35%),radial-gradient(circle at 87% 82%,rgba(33,127,186,.18),transparent 38%),#eef5f5; }
     .login-card {
       position:relative; isolation:isolate; overflow:hidden; width:min(520px,100%); padding:34px 42px;
-      border:1px solid rgba(255,255,255,.72); border-radius:30px;
-      background:linear-gradient(145deg,rgba(255,255,255,.44),rgba(236,250,251,.2));
-      box-shadow:0 28px 72px rgba(30,60,70,.16),inset 0 1px 0 rgba(255,255,255,.92),inset 0 -1px 0 rgba(255,255,255,.24);
-      backdrop-filter:blur(31px) saturate(178%); -webkit-backdrop-filter:blur(31px) saturate(178%);
+      border:1px solid rgba(255,255,255,.68); border-radius:30px;
+      background:linear-gradient(125deg,rgba(255,255,255,.14),rgba(255,255,255,.016) 43%,rgba(49,191,200,.045));
+      box-shadow:0 28px 72px rgba(30,60,70,.17),inset 0 1px 0 rgba(255,255,255,.94),inset 0 -1px 0 rgba(49,90,105,.17);
+      backdrop-filter:blur(2px) saturate(114%) contrast(104%); -webkit-backdrop-filter:blur(2px) saturate(114%) contrast(104%);
     }
-    .login-card::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:linear-gradient(120deg,rgba(255,255,255,.52),transparent 34%,transparent 68%,rgba(255,255,255,.16)); }
+    .login-card::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:linear-gradient(118deg,rgba(255,255,255,.31),transparent 9% 75%,rgba(255,255,255,.10)); }
     .login-card h1 { margin:0 0 8px; font-family:var(--font-display); font-size:2.25rem; font-weight:880; letter-spacing:-.04em; }
     .login-card p { color:var(--muted); line-height:1.7; }
     .field { display:grid; gap:7px; margin-bottom:15px; }
     .field label { font-size:.8rem; color:var(--muted); font-weight:700; }
     .field small { color:var(--muted); font-size:.76rem; line-height:1.55; }
     input,textarea,select { width:100%; border:1px solid rgba(255,255,255,.76); border-radius:12px; padding:10px 12px; background:rgba(255,255,255,.64); color:var(--ink); outline:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.9); }
+    /* 只有 Studio 登录框中的输入项使用透明晶体；后台白色工作面板保持清晰表单。 */
+    .login-card input { background:rgba(255,255,255,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 0 rgba(49,90,105,.10); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
     input:focus,textarea:focus,select:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(49,191,200,.12); }
     textarea { min-height:110px; resize:vertical; }
-    .btn { border:1px solid rgba(255,255,255,.55); border-radius:13px; padding:10px 14px; color:white; background:linear-gradient(145deg,rgba(33,127,186,.94),rgba(49,191,200,.78)); box-shadow:0 8px 20px rgba(33,127,186,.18),inset 0 1px 0 rgba(255,255,255,.45); backdrop-filter:blur(18px) saturate(160%); -webkit-backdrop-filter:blur(18px) saturate(160%); display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+    .btn { border:1px solid rgba(255,255,255,.66); border-radius:13px; padding:10px 14px; color:white; background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(33,127,186,.25) 46%,rgba(49,191,200,.19)); box-shadow:0 8px 20px rgba(33,127,186,.18),inset 0 1px 0 rgba(255,255,255,.88),inset 0 -1px 0 rgba(12,81,98,.22); backdrop-filter:blur(2px) saturate(114%) contrast(104%); -webkit-backdrop-filter:blur(2px) saturate(114%) contrast(104%); display:inline-flex; align-items:center; justify-content:center; gap:6px; text-shadow:0 1px 5px rgba(10,58,73,.55); }
     .btn:hover { filter:brightness(.96); }
-    .btn.secondary { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.7),rgba(215,241,243,.55)); }
-    .btn.ghost { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.72),rgba(255,255,255,.34)); border:1px solid rgba(255,255,255,.8); }
-    .btn.danger { background:linear-gradient(145deg,rgba(189,79,69,.94),rgba(221,114,104,.78)); }
+    .btn.secondary { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(215,241,243,.04)); text-shadow:0 1px 2px rgba(255,255,255,.9); }
+    .btn.ghost { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.018)); border:1px solid rgba(255,255,255,.8); text-shadow:0 1px 2px rgba(255,255,255,.9); }
+    .btn.danger { background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(189,79,69,.31) 48%,rgba(221,114,104,.22)); }
     .btn.small { padding:7px 10px; font-size:.8rem; }
     .notice { min-height:20px; color:var(--danger); font-size:.82rem; margin-top:10px; }
 
@@ -69,9 +71,9 @@
     .side h1 { margin:0 10px 5px; font-family:var(--font-display); font-size:1.45rem; font-weight:880; letter-spacing:-.03em; }
     .side small { margin:0 10px 24px; color:#a9c0c6; }
     .side-nav { display:grid; gap:6px; }
-    .side-nav button { border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; text-align:left; color:#d4e1e4; background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.025)); box-shadow:inset 0 1px 0 rgba(255,255,255,.08); backdrop-filter:blur(16px) saturate(145%); -webkit-backdrop-filter:blur(16px) saturate(145%); }
+    .side-nav button { border:1px solid rgba(255,255,255,.20); border-radius:12px; padding:10px 12px; text-align:left; color:#d4e1e4; background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.012)); box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.08); backdrop-filter:blur(2px) saturate(112%); -webkit-backdrop-filter:blur(2px) saturate(112%); }
     .side-nav button:hover { background:rgba(255,255,255,.08); color:white; }
-    .side-nav button.active { border-color:rgba(255,255,255,.34); background:linear-gradient(135deg,rgba(33,127,186,.9),rgba(49,191,200,.72)); color:white; box-shadow:0 8px 20px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.38); }
+    .side-nav button.active { border-color:rgba(255,255,255,.48); background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(33,127,186,.25) 48%,rgba(49,191,200,.18)); color:white; box-shadow:0 8px 20px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.11); }
     .side-footer { margin-top:auto; display:grid; gap:8px; }
     .side-footer a { color:#bcd0d4; text-decoration:none; padding:8px 10px; font-size:.84rem; }
 
@@ -138,6 +140,11 @@
     .feedback-admin-row { padding:16px; border:1px solid var(--line); border-radius:12px; background:white; }
     .feedback-admin-row.unread { border-color:var(--cyan); box-shadow:inset 4px 0 0 var(--cyan); }
     .feedback-admin-row p { white-space:pre-wrap; line-height:1.7; }
+    .feedback-reply-editor { margin-top:14px; padding:13px; border:1px solid #cfe6e8; border-radius:11px; background:#f7fbfb; }
+    .feedback-reply-editor label { display:block; margin-bottom:7px; color:#397983; font-size:.78rem; font-weight:800; }
+    .feedback-reply-editor textarea { min-height:82px; background:white; line-height:1.65; }
+    .feedback-reply-editor .list-actions { align-items:center; }
+    .feedback-reply-hint { color:var(--muted); font-size:.75rem; }
     .comment-row { padding:15px 0; border-top:1px solid var(--line); }
     .comment-row:first-child { border-top:0; }
     .comment-row p { margin:8px 0; white-space:pre-wrap; }
@@ -170,23 +177,39 @@
     .reset-link input { margin-bottom:8px; font-family:var(--font-code); font-size:.76rem; }
 
     /* =========================================================
-       08. 全后台按钮的液态玻璃回弹
+       08. 全后台按钮的单次晶体回弹与沉浸光感
        ---------------------------------------------------------
        JavaScript 只切换下面两个类，因此后台动态生成的按钮同样生效。
-       按下时先缩小；松开后放大并像果冻一样回到原尺寸。
+       按下时先缩小；松开后只越过原尺寸一次，然后直接回到原位。
        ========================================================= */
     button,.btn,.side-footer a,.list-item {
       transform:translateZ(0) scale(1); transform-origin:center;
       transition:transform .16s cubic-bezier(.2,.75,.25,1),filter .2s ease,box-shadow .2s ease;
     }
     .is-control-pressed { transform:translateY(1px) scale(.955) !important; filter:brightness(.97); }
-    .control-jelly-release { animation:control-jelly-release .48s cubic-bezier(.2,.78,.22,1) both; }
-    @keyframes control-jelly-release {
+    .control-bounce-release { animation:control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both; }
+    @keyframes control-single-rebound {
       0% { transform:translateY(1px) scale(.955,.95); }
-      43% { transform:translateY(-1px) scale(1.075,.985); }
-      68% { transform:translateY(0) scale(.982,1.025); }
-      84% { transform:scale(1.018,.992); }
+      58% { transform:translateY(-2px) scale(1.075); }
       100% { transform:scale(1); }
+    }
+    /* 白光由多个偏心径向渐变构成，因此扩散时不会显示成规则圆环。 */
+    .harmony-light-bloom {
+      --bloom-size:96px; position:fixed; z-index:2147483646; left:0; top:0;
+      width:var(--bloom-size); height:var(--bloom-size); pointer-events:none; opacity:0;
+      border-radius:46% 54% 58% 42% / 52% 42% 58% 48%;
+      transform:translate(-50%,-50%) scale(.16);
+      background:radial-gradient(ellipse at 42% 48%,rgba(255,255,255,.92) 0 7%,rgba(255,255,255,.43) 24%,rgba(255,255,255,.11) 48%,transparent 72%),radial-gradient(ellipse at 66% 35%,rgba(255,255,255,.54),transparent 52%),radial-gradient(ellipse at 29% 70%,rgba(229,251,255,.44),transparent 54%);
+      filter:blur(1.8px); mix-blend-mode:screen;
+      animation:studio-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+    }
+    .harmony-light-bloom::before,.harmony-light-bloom::after { content:""; position:absolute; pointer-events:none; border-radius:inherit; background:radial-gradient(ellipse,rgba(255,255,255,.52),transparent 68%); }
+    .harmony-light-bloom::before { inset:18% -13% 4% 31%; transform:rotate(23deg); }
+    .harmony-light-bloom::after { inset:35% 29% -12% -9%; transform:rotate(-31deg); }
+    @keyframes studio-light-diffuse {
+      0% { opacity:.94; transform:translate(-50%,-50%) scale(.16) rotate(-5deg); }
+      48% { opacity:.57; transform:translate(-50%,-50%) scale(1.55) rotate(5deg); }
+      100% { opacity:0; transform:translate(-50%,-50%) scale(3.1,2.75) rotate(9deg); filter:blur(7px); }
     }
     @keyframes studio-view-arrive {
       from { opacity:0; transform:translateY(13px) scale(.988); filter:blur(5px); }
@@ -213,7 +236,8 @@
       .user-grid { grid-template-columns:1fr; }
     }
     @media(prefers-reduced-motion:reduce) {
-      .view.active,.control-jelly-release { animation:none !important; }
+      .view.active,.control-bounce-release { animation:none !important; }
+      .harmony-light-bloom { display:none !important; }
       button,.btn,.side-footer a,.list-item { transition:none !important; }
     }
   </style>
@@ -437,7 +461,7 @@
       dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","增加、改名、排序或删除文章类与图片类大板块。"],
       content:["文章内容","在任意文章类大板块中撰写、保存草稿并发布内容。"],
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
-      comments:["评论管理","查看、隐藏或删除游客评论。"], feedback:["留言与反馈","处理游客留言、公开留言或标记为已解决。"],
+      comments:["评论管理","查看、隐藏或永久删除文章评论及其全部回复。"], feedback:["留言与反馈","处理、删除游客留言；公开留言只有站长能够回复。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页公开资料、本站使用说明和左下角版本号。"],
     };
@@ -457,40 +481,72 @@
     function clear(node){node.replaceChildren()}
     function button(text,className="btn small ghost"){const b=document.createElement("button");b.type="button";b.className=className;b.textContent=text;return b}
 
+    /* 在实际点击点创建不规则白光；0.72 秒后自动删除临时节点。 */
+    function emitHarmonyLightBloom(control, point = null) {
+      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const rect = control.getBoundingClientRect();
+      const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
+      const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
+      const y = hasPointerPoint ? point.y : rect.top + rect.height / 2;
+      const bloomSize = Math.min(190, Math.max(64, Math.max(rect.width, rect.height) * 1.12));
+      const bloom = document.createElement("span");
+      bloom.className = "harmony-light-bloom";
+      bloom.style.left = `${x}px`;
+      bloom.style.top = `${y}px`;
+      bloom.style.setProperty("--bloom-size", `${bloomSize}px`);
+      bloom.setAttribute("aria-hidden", "true");
+      document.body.append(bloom);
+      bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
+      window.setTimeout(() => bloom.remove(), 900);
+    }
+
     /*
-     * 统一液态玻璃按钮动效：使用事件委托，之后由 JavaScript 新建的按钮
-     * 无需单独绑定。键盘操作也会触发回弹，保留可访问性。
+     * 统一晶体玻璃按钮动效：使用事件委托，之后由 JavaScript 新建的按钮
+     * 无需单独绑定。鼠标、触控和键盘都只触发一次回弹与一次白光扩散。
      */
     function installLiquidGlassControlMotion() {
       const selector = "button,.btn,.side-footer a,.list-item";
-      const release = (control) => {
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      let pressedControl = null;
+      let pressedPoint = null;
+      const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
+      const canAnimate = (control) => control && !control.matches(":disabled");
+      const release = (control, point = null) => {
         if (!control) return;
-        control.classList.remove("is-control-pressed", "control-jelly-release");
+        control.classList.remove("is-control-pressed");
+        if (reducedMotion.matches || !canAnimate(control)) return;
+        emitHarmonyLightBloom(control, point);
+        control.classList.remove("control-bounce-release");
         void control.offsetWidth;
-        control.classList.add("control-jelly-release");
-        window.setTimeout(() => control.classList.remove("control-jelly-release"), 520);
+        control.classList.add("control-bounce-release");
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
       };
       document.addEventListener("pointerdown", (event) => {
-        const control = event.target.closest(selector);
-        if (!control || control.matches(":disabled")) return;
-        control.classList.remove("control-jelly-release");
+        const control = findControl(event.target);
+        if (!canAnimate(control)) return;
+        pressedControl = control;
+        pressedPoint = { x: event.clientX, y: event.clientY };
+        control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
       });
-      ["pointerup", "pointercancel"].forEach((type) => document.addEventListener(type, (event) => {
-        const control = event.target.closest(selector) || document.querySelector(".is-control-pressed");
-        release(control);
-      }));
-      document.addEventListener("pointerout", (event) => {
-        const control = event.target.closest(selector);
-        if (control && control.classList.contains("is-control-pressed") && !control.contains(event.relatedTarget)) release(control);
+      window.addEventListener("pointerup", (event) => {
+        const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
+        release(pressedControl, point);
+        pressedControl = null;
+        pressedPoint = null;
+      });
+      window.addEventListener("pointercancel", () => {
+        pressedControl?.classList.remove("is-control-pressed");
+        pressedControl = null;
+        pressedPoint = null;
       });
       document.addEventListener("keydown", (event) => {
-        if (!["Enter", " "].includes(event.key)) return;
-        const control = event.target.closest(selector);
-        if (control && !control.matches(":disabled")) control.classList.add("is-control-pressed");
+        if (!["Enter", " "].includes(event.key) || event.repeat) return;
+        const control = findControl(event.target);
+        if (canAnimate(control)) control.classList.add("is-control-pressed");
       });
       document.addEventListener("keyup", (event) => {
-        if (["Enter", " "].includes(event.key)) release(event.target.closest(selector));
+        if (["Enter", " "].includes(event.key)) release(findControl(event.target));
       });
     }
     installLiquidGlassControlMotion();
@@ -645,7 +701,60 @@
     function renderAdminComments(){const list=document.getElementById("comment-admin-list");clear(list);if(!app.comments.length){const p=document.createElement("p");p.className="status";p.textContent="暂无评论。";list.append(p);return}app.comments.forEach(item=>{const row=document.createElement("article");row.className="comment-row";const head=document.createElement("strong");head.textContent=`${item.guest_name} · ${item.content_title||"内容已删除"}`;const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)} · ${item.status==="hidden"?"已隐藏":"公开"}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const toggle=button(item.status==="hidden"?"恢复显示":"隐藏");toggle.addEventListener("click",()=>toggleComment(item));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteComment(item));actions.append(toggle,del);row.append(head,document.createElement("br"),meta,body,actions);list.append(row)})}
 
     async function loadFeedback(){app.feedback=await api("/api/admin/feedback");renderAdminFeedback()}
-    function renderAdminFeedback(){const list=document.getElementById("feedback-admin-list");clear(list);if(!app.feedback.length){const p=document.createElement("p");p.className="status";p.textContent="暂无留言。";list.append(p);return}const labels={message:"留言",bug:"网站问题",suggestion:"功能建议"};app.feedback.forEach(item=>{const row=document.createElement("article");row.className=`feedback-admin-row${item.status==="new"?" unread":""}`;const title=document.createElement("strong");title.textContent=`${labels[item.category]||"留言"} · ${item.guest_name}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${formatDate(item.created_at)} · ${item.contact?`联系方式：${item.contact}`:"未留联系方式"} · ${item.status==="new"?"未读":item.status==="resolved"?"已解决":"已读"} · ${Number(item.is_public)?"公开":"不公开"}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const read=button("标为已读");read.addEventListener("click",()=>updateFeedback(item,"read",Number(item.is_public)===1));const resolved=button("标为已解决");resolved.addEventListener("click",()=>updateFeedback(item,"resolved",Number(item.is_public)===1));const publish=button(Number(item.is_public)?"取消公开":"公开到留言板");publish.addEventListener("click",()=>updateFeedback(item,item.status==="new"?"read":item.status,Number(item.is_public)!==1));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteFeedback(item));actions.append(read,resolved,publish,del);row.append(title,meta,body,actions);list.append(row)})}
+
+    /*
+     * 留言板不会向游客提供回复按钮。这里的编辑器只存在于已通过
+     * ADMIN_PASSWORD 验证的 Studio 中，保存时调用受保护的 /api/admin 路由。
+     */
+    function renderAdminFeedback(){
+      const list=document.getElementById("feedback-admin-list");clear(list);
+      if(!app.feedback.length){const p=document.createElement("p");p.className="status";p.textContent="暂无留言。";list.append(p);return}
+      const labels={message:"留言",bug:"网站问题",suggestion:"功能建议"};
+      app.feedback.forEach(item=>{
+        const row=document.createElement("article");row.className=`feedback-admin-row${item.status==="new"?" unread":""}`;
+        const title=document.createElement("strong");title.textContent=`${labels[item.category]||"留言"} · ${item.guest_name}`;
+        const meta=document.createElement("div");meta.className="list-meta";
+        meta.textContent=`${formatDate(item.created_at)} · ${item.contact?`联系方式：${item.contact}`:"未留联系方式"} · ${item.status==="new"?"未读":item.status==="resolved"?"已解决":"已读"} · ${Number(item.is_public)?"公开":"不公开"}`;
+        const body=document.createElement("p");body.textContent=item.body;
+
+        const replyEditor=document.createElement("section");replyEditor.className="feedback-reply-editor";
+        const replyLabel=document.createElement("label");replyLabel.textContent="站长回复（只有你能填写）";
+        const replyInput=document.createElement("textarea");replyInput.maxLength=3000;replyInput.placeholder="填写后会显示在这条公开留言下方";replyInput.value=item.admin_reply||"";
+        const replyActions=document.createElement("div");replyActions.className="list-actions";
+        const saveReply=button(item.admin_reply?"更新站长回复":"发表站长回复","btn small");
+        saveReply.addEventListener("click",()=>saveFeedbackReply(item,replyInput.value,saveReply));
+        replyActions.append(saveReply);
+        if(item.admin_reply){
+          const clearReply=button("清空回复","btn small ghost");
+          clearReply.addEventListener("click",()=>clearFeedbackReply(item,clearReply));
+          replyActions.append(clearReply);
+        }
+        const replyHint=document.createElement("span");replyHint.className="feedback-reply-hint";
+        replyHint.textContent=Number(item.is_public)
+          ? (item.admin_replied_at?`最近回复：${formatDate(item.admin_replied_at)}`:"回复保存后会立即公开显示")
+          : "这条留言当前未公开，回复会保存但不会在网站显示";
+        replyActions.append(replyHint);replyEditor.append(replyLabel,replyInput,replyActions);
+
+        const actions=document.createElement("div");actions.className="list-actions";
+        const read=button("标为已读");read.addEventListener("click",()=>updateFeedback(item,"read",Number(item.is_public)===1));
+        const resolved=button("标为已解决");resolved.addEventListener("click",()=>updateFeedback(item,"resolved",Number(item.is_public)===1));
+        const publish=button(Number(item.is_public)?"取消公开":"公开到留言板");publish.addEventListener("click",()=>updateFeedback(item,item.status==="new"?"read":item.status,Number(item.is_public)!==1));
+        const del=button("永久删除留言","btn small danger");del.addEventListener("click",()=>deleteFeedback(item));
+        actions.append(read,resolved,publish,del);row.append(title,meta,body,replyEditor,actions);list.append(row);
+      })
+    }
+
+    async function saveFeedbackReply(item,adminReply,control){
+      control.disabled=true;
+      try{
+        await api(`/api/admin/feedback/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:item.status==="new"?"read":item.status,isPublic:Number(item.is_public)===1,adminReply})});
+        await loadFeedback();await loadDashboard();
+      }catch(error){alert(`站长回复保存失败：${error.message}`)}finally{control.disabled=false}
+    }
+    async function clearFeedbackReply(item,control){
+      if(!confirm("确定清空这条站长回复吗？留言本身会保留。"))return;
+      await saveFeedbackReply(item,"",control);
+    }
     async function updateFeedback(item,status,isPublic){await api(`/api/admin/feedback/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,isPublic})});await loadFeedback();await loadDashboard()}
     async function deleteFeedback(item){if(!confirm("确定永久删除这条留言吗？"))return;await api(`/api/admin/feedback/${item.id}`,{method:"DELETE"});await loadFeedback();await loadDashboard()}
 

@@ -102,7 +102,7 @@
       .auth-photo-background img.active { transform: none; }
     }
 
-    /* 左下角唯一保留的页面外入口；半透明底色保证手机上也清晰可点。 */
+    /* 左下角唯一保留的页面外入口；使用低模糊透明晶体，背景照片直接透出。 */
     .home-link {
       position: fixed;
       z-index: 5;
@@ -112,13 +112,13 @@
       border: 1px solid rgba(255,255,255,.76);
       border-radius: 14px;
       color: var(--muted);
-      background: rgba(255,255,255,.27);
+      background: linear-gradient(135deg, rgba(255,255,255,.15), rgba(255,255,255,.018));
       font-size: .84rem;
       font-weight: 700;
       text-decoration: none;
       box-shadow: 0 10px 28px rgba(20,43,50,.17), inset 0 1px 0 rgba(255,255,255,.90);
-      -webkit-backdrop-filter: blur(20px) saturate(1.25);
-      backdrop-filter: blur(20px) saturate(1.25);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
       transition: color .18s, border-color .18s, transform .18s;
     }
     .home-link:hover { color: var(--ink); border-color: #bcb4a9; transform: translateX(-2px); }
@@ -138,18 +138,28 @@
       width: min(100%, 720px);
       padding: 30px clamp(34px, 5vw, 52px);
       position: relative; isolation: isolate; overflow: hidden;
-      border: 1px solid rgba(255,255,255,.80);
+      border: 1px solid rgba(255,255,255,.68);
       border-radius: 30px;
+      /*
+         纯透明晶体卡片：白色填充压到很低，只保留斜向折射、清晰边线和
+         2px 的轻微光学扰动。照片不再被 31px 的毛玻璃模糊成白雾。
+      */
       background:
-        radial-gradient(circle at 10% 0%, rgba(255,255,255,.72), transparent 38%),
-        linear-gradient(145deg, rgba(255,255,255,.29), rgba(216,237,240,.16));
-      box-shadow: 0 32px 90px rgba(14,35,42,.27), inset 0 1px 0 rgba(255,255,255,.96), inset 0 -1px 0 rgba(64,103,116,.10);
-      -webkit-backdrop-filter: blur(31px) saturate(1.36);
-      backdrop-filter: blur(31px) saturate(1.36);
+        linear-gradient(125deg, rgba(255,255,255,.13), rgba(255,255,255,.012) 40%, rgba(91,207,222,.038) 72%, rgba(255,255,255,.085));
+      box-shadow:
+        0 32px 90px rgba(14,35,42,.28),
+        inset 0 1px 0 rgba(255,255,255,.96),
+        inset 1px 0 0 rgba(255,255,255,.27),
+        inset 0 -1px 0 rgba(42,83,99,.22);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
+      text-shadow: 0 1px 2px rgba(255,255,255,.92), 0 0 9px rgba(255,255,255,.44);
     }
     .auth-card::before {
       content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-      background: linear-gradient(120deg, rgba(255,255,255,.30), transparent 28% 72%, rgba(255,255,255,.13));
+      background:
+        linear-gradient(118deg, rgba(255,255,255,.31), transparent 8% 76%, rgba(255,255,255,.10)),
+        linear-gradient(90deg, rgba(255,255,255,.11), transparent 2% 98%, rgba(255,255,255,.07));
     }
     .auth-card > * { position: relative; z-index: 1; }
     .card-head { margin-bottom: 20px; text-align: center; }
@@ -177,9 +187,10 @@
       border-radius: 14px;
       padding: 11px 14px;
       color: var(--ink);
-      background: rgba(255,255,255,.34);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.90), 0 7px 18px rgba(31,62,72,.06);
-      -webkit-backdrop-filter: blur(17px); backdrop-filter: blur(17px);
+      background: rgba(255,255,255,.075);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(44,85,99,.12), 0 7px 18px rgba(31,62,72,.07);
+      -webkit-backdrop-filter: blur(2px) saturate(1.08); backdrop-filter: blur(2px) saturate(1.08);
+      text-shadow: 0 1px 2px rgba(255,255,255,.90);
       outline: none;
       transition: border-color .18s, box-shadow .18s;
     }
@@ -203,20 +214,21 @@
       gap: 8px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px;
       padding: 11px 17px; cursor: pointer; color: #fff;
       background:
-        radial-gradient(circle at 18% 0%, rgba(255,255,255,.42), transparent 40%),
-        linear-gradient(135deg, rgba(22,141,161,.80), rgba(40,184,204,.64));
-      box-shadow: 0 12px 28px rgba(16,105,122,.24), inset 0 1px 0 rgba(255,255,255,.74);
-      -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+        linear-gradient(135deg, rgba(255,255,255,.20), rgba(22,141,161,.24) 45%, rgba(40,184,204,.18));
+      box-shadow: 0 12px 28px rgba(16,105,122,.23), inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(11,83,97,.22);
+      -webkit-backdrop-filter: blur(2px) saturate(1.14) contrast(1.04); backdrop-filter: blur(2px) saturate(1.14) contrast(1.04);
       font-weight: 820; text-decoration: none;
+      text-shadow: 0 1px 5px rgba(10,70,82,.56);
       transition: transform .15s, background .15s, box-shadow .15s;
     }
     .btn:hover { transform: translateY(-2px); filter: brightness(1.04); box-shadow: 0 16px 34px rgba(16,105,122,.29), inset 0 1px 0 #fff; }
     .btn:disabled { opacity: .55; cursor: wait; transform: none; }
     .btn.ghost {
-      color: var(--ink); border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.26);
+      color: var(--ink); border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.065);
       box-shadow: 0 9px 22px rgba(31,62,72,.10), inset 0 1px 0 rgba(255,255,255,.92);
+      text-shadow: 0 1px 2px rgba(255,255,255,.90);
     }
-    .btn.ghost:hover { border-color: rgba(255,255,255,.96); background: rgba(255,255,255,.40); }
+    .btn.ghost:hover { border-color: rgba(255,255,255,.96); background: rgba(255,255,255,.15); }
     .btn.block { width: 100%; }
     .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .button-row .btn { flex: 1 1 130px; }
@@ -227,9 +239,9 @@
     .notice.success { color: var(--success); }
     .privacy-note {
       margin: 3px 0 20px; padding: 13px 15px; border-left: 3px solid var(--cyan);
-      border-radius: 4px 12px 12px 4px; background: rgba(230,248,250,.46);
+      border-radius: 4px 12px 12px 4px; background: rgba(230,248,250,.075);
       color: #4b6468; line-height: 1.7; font-size: .86rem;
-      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(2px) saturate(1.08); backdrop-filter: blur(2px) saturate(1.08);
     }
 
     /* 注册进度条只表示页面位置，不代表账户已经审核通过。 */
@@ -238,16 +250,17 @@
     .step::after { content: ""; grid-column: 1 / -1; height: 3px; border-radius: 9px; background: var(--line); }
     .step-number {
       width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%;
-      border: 1px solid rgba(255,255,255,.72); background: rgba(255,255,255,.27); font-weight: 900;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.90); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,.72); background: rgba(255,255,255,.065); font-weight: 900;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.90); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
     }
     .step.active { color: var(--cyan-deep); }
     .step.active::after, .step.done::after { background: var(--cyan); }
     .step.active .step-number, .step.done .step-number {
-      color: #fff; background: linear-gradient(135deg, rgba(22,141,161,.80), rgba(40,184,204,.66));
+      color: #fff; background: linear-gradient(135deg, rgba(22,141,161,.25), rgba(40,184,204,.18));
+      text-shadow: 0 1px 4px rgba(10,70,82,.55);
     }
     .register-step[hidden] { display: none; }
-    .summary-list { margin: 0 0 22px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.20); }
+    .summary-list { margin: 0 0 22px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.055); }
     .summary-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
     .summary-row:last-child { border-bottom: 0; }
     .summary-row dt { color: var(--muted); }
@@ -255,23 +268,52 @@
     .status-badge { display: inline-flex; padding: 5px 10px; border-radius: 99px; background: #fff1ce; color: #7b5c18; font-size: .78rem; font-weight: 900; }
     .status-badge.approved { background: #e4f5ed; color: #2e7158; }
     .status-badge.rejected, .status-badge.disabled { background: #fde9e8; color: #984341; }
-    .success-box { padding: 22px; border: 1px solid rgba(215,255,237,.72); border-radius: 16px; background: rgba(240,250,245,.38); line-height: 1.8; backdrop-filter: blur(15px); }
+    .success-box { padding: 22px; border: 1px solid rgba(215,255,237,.72); border-radius: 16px; background: rgba(240,250,245,.065); line-height: 1.8; backdrop-filter: blur(2px); }
 
-    /* 登录与注册页使用和主站一致的按压、放大、果冻回弹。 */
+    /* 登录与注册页使用和主站一致的按压、单次回弹。 */
     :is(button, a.btn, .home-link) { transform-origin: center; will-change: transform; }
     :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(2px) scale(.93) !important; transition-duration: .08s !important; }
-    :is(button, a.btn, .home-link).control-jelly-release { animation: auth-control-jelly .52s cubic-bezier(.22,.82,.22,1) both !important; }
-    @keyframes auth-control-jelly {
+    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both !important; }
+    @keyframes auth-control-single-rebound {
       0% { transform: translateY(2px) scale(.93); }
-      34% { transform: translateY(-3px) scale(1.095,.94); }
-      52% { transform: translateY(1px) scale(.965,1.055); }
-      69% { transform: translateY(-1px) scale(1.035,.982); }
-      84% { transform: scale(.992,1.018); }
+      58% { transform: translateY(-2px) scale(1.075); }
       100% { transform: none; }
     }
 
+    /*
+       点击释放的白光不是描边圆环，而是由三个偏心光团叠成的不规则扩散。
+       它会在 0.72 秒内像白色染料一样散开，随后由 JavaScript 自动删除。
+    */
+    .harmony-light-bloom {
+      --bloom-size: 96px;
+      position: fixed; z-index: 2147483646; left: 0; top: 0;
+      width: var(--bloom-size); height: var(--bloom-size);
+      border-radius: 46% 54% 58% 42% / 52% 42% 58% 48%;
+      pointer-events: none; opacity: 0;
+      transform: translate(-50%, -50%) scale(.16);
+      background:
+        radial-gradient(ellipse at 42% 48%, rgba(255,255,255,.92) 0 7%, rgba(255,255,255,.43) 24%, rgba(255,255,255,.11) 48%, transparent 72%),
+        radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
+        radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
+      filter: blur(1.8px); mix-blend-mode: screen;
+      animation: auth-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+    }
+    .harmony-light-bloom::before,
+    .harmony-light-bloom::after {
+      content: ""; position: absolute; pointer-events: none; border-radius: inherit;
+      background: radial-gradient(ellipse, rgba(255,255,255,.52), transparent 68%);
+    }
+    .harmony-light-bloom::before { inset: 18% -13% 4% 31%; transform: rotate(23deg); }
+    .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
+    @keyframes auth-light-diffuse {
+      0% { opacity: .94; transform: translate(-50%, -50%) scale(.16) rotate(-5deg); }
+      48% { opacity: .57; transform: translate(-50%, -50%) scale(1.55) rotate(5deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(3.1, 2.75) rotate(9deg); filter: blur(7px); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
-      .panel:not([hidden]), :is(button, a.btn, .home-link).control-jelly-release { animation: none !important; }
+      .panel:not([hidden]), :is(button, a.btn, .home-link).control-bounce-release { animation: none !important; }
+      .harmony-light-bloom { display: none !important; }
     }
 
     @media (max-width: 850px) {
@@ -470,31 +512,62 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    /* 所有静态和后续动态生成的按钮统一播放液态玻璃回弹动效。 */
+    /* 在实际点击点创建一次不规则白光；动画结束后节点会自动销毁。 */
+    function emitHarmonyLightBloom(control, point = null) {
+      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const rect = control.getBoundingClientRect();
+      const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
+      const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
+      const y = hasPointerPoint ? point.y : rect.top + rect.height / 2;
+      const bloomSize = Math.min(190, Math.max(64, Math.max(rect.width, rect.height) * 1.12));
+      const bloom = document.createElement("span");
+      bloom.className = "harmony-light-bloom";
+      bloom.style.left = `${x}px`;
+      bloom.style.top = `${y}px`;
+      bloom.style.setProperty("--bloom-size", `${bloomSize}px`);
+      bloom.setAttribute("aria-hidden", "true");
+      document.body.append(bloom);
+      bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
+      window.setTimeout(() => bloom.remove(), 900);
+    }
+
+    /* 所有静态和后续动态生成的按钮统一播放单次回弹与白光扩散。 */
     function installLiquidGlassControlMotion() {
       const selector = "button, a.btn, .home-link";
       const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
       let pressedControl = null;
+      let pressedPoint = null;
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       const canAnimate = (control) => control && !control.matches(":disabled");
-      const release = (control) => {
+      const release = (control, point = null) => {
         if (!control) return;
         control.classList.remove("is-control-pressed");
         if (reducedMotion.matches || !canAnimate(control)) return;
-        control.classList.remove("control-jelly-release");
+        emitHarmonyLightBloom(control, point);
+        control.classList.remove("control-bounce-release");
         void control.offsetWidth;
-        control.classList.add("control-jelly-release");
-        window.setTimeout(() => control.classList.remove("control-jelly-release"), 560);
+        control.classList.add("control-bounce-release");
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
         if (!canAnimate(control)) return;
         pressedControl = control;
-        control.classList.remove("control-jelly-release");
+        pressedPoint = { x: event.clientX, y: event.clientY };
+        control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
       });
-      window.addEventListener("pointerup", () => { release(pressedControl); pressedControl = null; });
-      window.addEventListener("pointercancel", () => { pressedControl?.classList.remove("is-control-pressed"); pressedControl = null; });
+      window.addEventListener("pointerup", (event) => {
+        const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
+        release(pressedControl, point);
+        pressedControl = null;
+        pressedPoint = null;
+      });
+      window.addEventListener("pointercancel", () => {
+        pressedControl?.classList.remove("is-control-pressed");
+        pressedControl = null;
+        pressedPoint = null;
+      });
       document.addEventListener("keydown", (event) => {
         if (!['Enter', ' '].includes(event.key) || event.repeat) return;
         const control = findControl(event.target);
@@ -510,7 +583,7 @@
         const destination = new URL(link.href, location.href);
         if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
         event.preventDefault();
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 340);
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 360);
       });
     }
 

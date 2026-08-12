@@ -70,21 +70,21 @@
       --font-code: ui-monospace, "SFMono-Regular", Consolas, monospace;
 
       /*
-         毛玻璃控件的统一参数
+         纯玻璃控件的统一参数
          ------------------------------------------------------
-         --glass-fill：普通玻璃按钮的透明白色；数值越小越透明。
-         --glass-fill-hover：鼠标经过时稍微变亮，提示当前按钮可以点击。
-         --glass-line：玻璃边缘的细亮线，用来模拟光线落在玻璃边缘。
-         --glass-shadow：外部悬浮阴影 + 顶部内高光 + 底部内暗边。
-         以后若想整体调整玻璃强度，优先修改这里，不必逐个找按钮。
+         “纯玻璃”不再依靠大面积半透明白色和强模糊，而是依靠：
+         1. 极低透明度的环境色；2. 清晰的高光边缘；3. 上亮下暗的内折射。
+         --glass-fill / --glass-fill-hover 控制玻璃本体，保持较低数值才能
+         让背景真正透出来；--glass-line 与 --glass-shadow 负责晶体轮廓。
       */
-      --glass-fill: rgba(255, 255, 255, .34);
-      --glass-fill-hover: rgba(255, 255, 255, .56);
-      --glass-line: rgba(255, 255, 255, .72);
+      --glass-fill: rgba(255, 255, 255, .065);
+      --glass-fill-hover: rgba(255, 255, 255, .14);
+      --glass-line: rgba(255, 255, 255, .70);
       --glass-shadow:
-        0 10px 28px rgba(32, 48, 55, .10),
-        inset 0 1px 0 rgba(255, 255, 255, .82),
-        inset 0 -1px 0 rgba(80, 113, 126, .10);
+        0 9px 24px rgba(32, 48, 55, .11),
+        inset 0 1px 0 rgba(255, 255, 255, .88),
+        inset 1px 0 0 rgba(255, 255, 255, .25),
+        inset 0 -1px 0 rgba(64, 94, 108, .16);
     }
 
     html, body { margin: 0; min-height: 100%; }
@@ -135,15 +135,16 @@
     .sidebar-toggle {
       width: 40px; height: 40px; flex: 0 0 40px; margin: -11px 0 16px -7px;
       border: 1px solid var(--glass-line); border-radius: 13px; cursor: pointer;
-      background: linear-gradient(145deg, rgba(255,255,255,.58), rgba(224,239,241,.28));
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.16), rgba(255,255,255,.018) 48%, rgba(119,161,205,.055));
       box-shadow: var(--glass-shadow);
-      -webkit-backdrop-filter: blur(14px) saturate(1.2);
-      backdrop-filter: blur(14px) saturate(1.2);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
       display: grid; place-items: center; color: var(--muted); font-size: 1.2rem;
       transition: color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
     }
     .sidebar-toggle:hover {
-      color: var(--ink); background: rgba(255,255,255,.72);
+      color: var(--ink); background: rgba(255,255,255,.15);
       transform: translateY(-1px); box-shadow: 0 13px 30px rgba(32,48,55,.14), inset 0 1px 0 white;
     }
     .sidebar-toggle:active { transform: translateY(1px) scale(.95); }
@@ -151,72 +152,71 @@
     .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 28px; }
 
     /* =========================================================
-       03. 头像按钮与果冻刷新动画
+       03. 头像按钮与单次回弹刷新动画
        ---------------------------------------------------------
        尺寸：修改 .avatar-refresh 的 width/height。
-       动画强度：修改 @keyframes avatar-jelly-refresh 中的 scale。
+       动画强度：修改 @keyframes avatar-single-rebound 中的 scale。
        点击后的刷新逻辑在文件底部搜索“头像点击刷新”。
        ========================================================= */
     .avatar-refresh {
       width: 66px; height: 66px; flex: 0 0 66px; padding: 4px;
-      border: 1px solid rgba(255,255,255,.82); border-radius: 50%; overflow: visible;
-      /* 外圈与侧边栏同色，图片自身的 border 构成内侧蓝色圈。 */
-      background: linear-gradient(145deg, rgba(245,251,251,.55), rgba(222,239,241,.28));
+      border: 3px solid transparent; border-radius: 50%; overflow: visible;
+      /*
+         头像只使用一条连续渐变玻璃边：蓝色自然过渡到侧栏的浅青白色。
+         padding-box 是透明玻璃内面，border-box 是唯一的渐变外缘；这里没有
+         额外的 box-shadow 圆环，因此不会再出现“一圈套一圈”。
+      */
+      background:
+        linear-gradient(145deg, rgba(255,255,255,.08), rgba(255,255,255,.012)) padding-box,
+        conic-gradient(from 215deg, rgba(119,161,205,.96), rgba(49,191,200,.72), rgba(239,249,249,.72), rgba(119,161,205,.96)) border-box;
       box-shadow:
-        0 0 0 3px rgba(236,246,246,.56),
         0 10px 24px rgba(44,88,104,.16),
-        inset 0 1px 0 rgba(255,255,255,.92);
-      -webkit-backdrop-filter: blur(18px) saturate(1.28);
-      backdrop-filter: blur(18px) saturate(1.28);
+        inset 0 1px 0 rgba(255,255,255,.88),
+        inset 0 -1px 0 rgba(59,103,120,.18);
+      -webkit-backdrop-filter: blur(2px) saturate(1.16) contrast(1.04);
+      backdrop-filter: blur(2px) saturate(1.16) contrast(1.04);
       cursor: pointer;
       transition: transform .1s cubic-bezier(.175,.885,.32,1.275), box-shadow .1s ease;
       user-select: none; -webkit-tap-highlight-color: transparent;
     }
     .avatar-refresh:hover {
       transform: scale(1.09) rotate(-4deg);
-      box-shadow: 0 0 0 4px rgba(236,246,246,.72), 0 14px 30px rgba(44,88,104,.22), inset 0 1px 0 #fff;
+      box-shadow: 0 14px 30px rgba(44,88,104,.22), inset 0 1px 0 #fff, inset 0 -1px 0 rgba(59,103,120,.18);
     }
     .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
     /*
-       头像使用 1.18 秒的慢速果冻回弹。时间太短时，压扁与拉长会连成一次
-       普通缩放；现在每次形变都保留更长时间，触感会明显得多。
+       头像只回弹一次：先按压，再越过原尺寸一次，最后直接停在原位。
+       0.92 秒保留了柔软感，同时取消之前来回振荡的多次果冻形变。
     */
-    .avatar-refresh.jelly { animation: avatar-jelly-refresh 1.18s cubic-bezier(.22,.72,.22,1) both; }
+    .avatar-refresh.jelly { animation: avatar-single-rebound .92s cubic-bezier(.16,.82,.24,1) both; }
     .avatar {
       width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none;
-      border: 3px solid var(--blue); border-radius: 50%;
+      border: 0; border-radius: 50%;
     }
-    @keyframes avatar-jelly-refresh {
-      0%   { transform: translateY(0) scale(1,1) rotate(0); }
-      11%  { transform: translateY(7px) scale(1.25,.75) rotate(-6deg); }
-      24%  { transform: translateY(-11px) scale(.82,1.25) rotate(7deg); }
-      38%  { transform: translateY(3px) scale(1.17,.86) rotate(-5deg); }
-      52%  { transform: translateY(-5px) scale(.90,1.14) rotate(4deg); }
-      66%  { transform: translateY(2px) scale(1.09,.93) rotate(-2.5deg); }
-      79%  { transform: translateY(-2px) scale(.965,1.06) rotate(1.5deg); }
-      90%  { transform: translateY(1px) scale(1.025,.985) rotate(-.6deg); }
+    @keyframes avatar-single-rebound {
+      0%   { transform: translateY(5px) scale(.88,.82) rotate(-3deg); }
+      58%  { transform: translateY(-5px) scale(1.13,.97) rotate(2deg); }
       100% { transform: translateY(0) scale(1,1) rotate(0); }
     }
 
     /*
        侧边栏名称、导航按钮和后台入口
        --------------------------------------------------------
-       导航采用“双层玻璃”：默认状态低透明，悬停时变亮；当前页面使用带
-       蓝青色环境光的玻璃，而不是一块完全不透明的纯色矩形。
+       导航采用透明晶体玻璃：背景几乎完全透出，只用边缘高光、微弱折射
+       与内阴影表现厚度；当前页面额外加入少量蓝青环境色。
     */
-    .brand h2 { margin: 0; font-family: var(--font-display); font-size: 1.28rem; font-weight: 820; }
+    .brand h2 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: 1.28rem; font-weight: 700; }
     .brand small { color: var(--muted); letter-spacing: .12em; }
     .nav { display: grid; gap: 7px; }
     .nav button {
       width: 100%; border: 1px solid rgba(255,255,255,.72); border-radius: 15px;
       background:
-        radial-gradient(circle at 12% 0%, rgba(255,255,255,.62), transparent 42%),
-        linear-gradient(145deg, rgba(255,255,255,.25), rgba(219,238,240,.12));
+        linear-gradient(135deg, rgba(255,255,255,.15), rgba(255,255,255,.012) 46%, rgba(119,161,205,.045));
       padding: 11px 13px; text-align: left; cursor: pointer; color: var(--ink);
       display: flex; align-items: center; gap: 11px; white-space: nowrap;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.66), inset 0 -1px 0 rgba(77,105,116,.06);
-      -webkit-backdrop-filter: blur(18px) saturate(1.28);
-      backdrop-filter: blur(18px) saturate(1.28);
+      box-shadow: var(--glass-shadow);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
       transition: color .18s ease, background .18s ease, border-color .18s ease,
                   transform .18s ease, box-shadow .18s ease;
     }
@@ -224,7 +224,7 @@
     .nav-label { min-width: 0; }
     .nav button:hover {
       color: var(--ink); border-color: rgba(255,255,255,.88);
-      background: linear-gradient(145deg, var(--glass-fill-hover), rgba(187,222,226,.34));
+      background: linear-gradient(145deg, rgba(255,255,255,.18), rgba(187,222,226,.07));
       box-shadow: var(--glass-shadow); transform: translateY(-1px);
     }
     .nav button:active { transform: translateY(1px) scale(.975); }
@@ -237,9 +237,8 @@
     .nav button.active {
       color: #17343d; border-color: rgba(255,255,255,.82);
       background:
-        radial-gradient(circle at 18% 0%, rgba(255,255,255,.88), transparent 42%),
-        linear-gradient(135deg, rgba(119,161,205,.58), rgba(49,191,200,.38));
-      box-shadow: 0 12px 27px rgba(74,129,146,.20), inset 0 1px 0 rgba(255,255,255,.92);
+        linear-gradient(135deg, rgba(119,161,205,.20), rgba(255,255,255,.035) 48%, rgba(49,191,200,.13));
+      box-shadow: 0 11px 25px rgba(74,129,146,.17), inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(45,110,126,.17);
     }
     .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
     .studio-link {
@@ -247,7 +246,7 @@
       border: 1px solid rgba(255,255,255,.58); border-radius: 999px;
       color: var(--muted); text-decoration: none; background: var(--glass-fill);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.74);
-      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(2px) saturate(1.1); backdrop-filter: blur(2px) saturate(1.1);
       transition: color .18s ease, background .18s ease, transform .18s ease;
     }
     .studio-link:hover { color: var(--ink); background: var(--glass-fill-hover); transform: translateY(-1px); }
@@ -296,7 +295,8 @@
       letter-spacing: .14em;
       text-transform: uppercase;
     }
-    h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.08; font-weight: 860; letter-spacing: -.025em; }
+    /* 恢复网站最初的大标题字形；圆润字体继续用于正文、表单和小型控件。 */
+    h1 { margin: 0; font-family: KaiTi, "Songti SC", serif; font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.08; font-weight: 700; letter-spacing: normal; }
     .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
     /* 首页“本站使用说明”：正文由 Studio 的网站设置读取，此处只负责毛玻璃外观。 */
     .usage-guide {
@@ -319,7 +319,7 @@
     }
     .usage-guide p:last-child { margin-bottom: 0; }
     .divider { height: 1px; background: var(--line); margin: 30px 0; }
-    .section-title { margin: 0 0 8px; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 820; line-height: 1.2; }
+    .section-title { margin: 0 0 8px; font: 400 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; }
     .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
 
     /* =========================================================
@@ -354,8 +354,8 @@
        基础 .btn 仍供登录入口使用；下面只覆盖进入网站后的 .app-shell 与
        各类弹窗，因此不会改变刚刚确认好的登录界面层级。
 
-       主要操作（提交、发送、保存）使用蓝青色玻璃；ghost/light 作为次要
-       操作使用透明白玻璃。边缘高光、背景模糊和按压缩放共同形成玻璃质感。
+       主要操作（提交、发送、保存）使用带蓝青环境色的透明晶体玻璃；
+       ghost/light 作为无色晶体。背景模糊只有 2px，不会再形成白雾。
     */
     .app-shell .btn,
     dialog .btn {
@@ -365,14 +365,15 @@
       border: 1px solid rgba(255,255,255,.72);
       color: #fff;
       background:
-        radial-gradient(circle at 16% 0%, rgba(255,255,255,.34), transparent 38%),
-        linear-gradient(135deg, rgba(42,105,126,.86), rgba(49,191,200,.70));
+        linear-gradient(135deg, rgba(255,255,255,.19), rgba(42,105,126,.22) 45%, rgba(49,191,200,.18));
       box-shadow:
-        0 9px 23px rgba(43,102,119,.17),
-        inset 0 1px 0 rgba(255,255,255,.72),
-        inset 0 -1px 0 rgba(20,74,91,.18);
-      -webkit-backdrop-filter: blur(14px) saturate(1.18);
-      backdrop-filter: blur(14px) saturate(1.18);
+        0 9px 23px rgba(43,102,119,.16),
+        inset 0 1px 0 rgba(255,255,255,.90),
+        inset 1px 0 0 rgba(255,255,255,.25),
+        inset 0 -1px 0 rgba(20,74,91,.22);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      text-shadow: 0 1px 5px rgba(18,71,85,.55);
       transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease,
                   background .18s ease, opacity .18s ease;
     }
@@ -380,15 +381,17 @@
     dialog .btn.ghost {
       color: var(--ink);
       border-color: var(--glass-line);
-      background: linear-gradient(145deg, rgba(255,255,255,.54), rgba(222,239,241,.25));
+      background: linear-gradient(145deg, rgba(255,255,255,.15), rgba(222,239,241,.035));
       box-shadow: var(--glass-shadow);
+      text-shadow: 0 1px 2px rgba(255,255,255,.86);
     }
     .app-shell .btn.light,
     dialog .btn.light {
       color: #356f98;
       border-color: rgba(255,255,255,.82);
-      background: linear-gradient(145deg, rgba(255,255,255,.76), rgba(224,241,242,.40));
+      background: linear-gradient(145deg, rgba(255,255,255,.18), rgba(224,241,242,.045));
       box-shadow: var(--glass-shadow);
+      text-shadow: 0 1px 2px rgba(255,255,255,.88);
     }
     .app-shell .btn:hover,
     dialog .btn:hover {
@@ -404,9 +407,10 @@
     dialog .btn:disabled { transform: none; box-shadow: none; }
 
     /*
-       全站按钮的“按下 → 弹起放大 → 果冻回弹”动效。
-       is-control-pressed 由 pointerdown 添加；control-jelly-release 在松手时播放。
-       JavaScript 使用事件委托，因此后台数据动态生成的按钮也能自动获得动效。
+       全站按钮的“按下 → 单次越界回弹 → 回到原位”动效。
+       is-control-pressed 由 pointerdown 添加；control-bounce-release 在松手时
+       只越过原尺寸一次，不再来回振荡。JavaScript 使用事件委托，所以后台
+       数据动态生成的按钮也能自动获得动效。
     */
     :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card) {
       -webkit-tap-highlight-color: transparent;
@@ -417,16 +421,51 @@
       transform: translateY(2px) scale(.93) !important;
       transition-duration: .08s !important;
     }
-    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-jelly-release {
-      animation: control-jelly-release .52s cubic-bezier(.22,.82,.22,1) both !important;
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-bounce-release {
+      animation: control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both !important;
     }
-    @keyframes control-jelly-release {
-      0%   { transform: translateY(2px) scale(.93, .93); }
-      34%  { transform: translateY(-3px) scale(1.095, .94); }
-      52%  { transform: translateY(1px) scale(.965, 1.055); }
-      69%  { transform: translateY(-1px) scale(1.035, .982); }
-      84%  { transform: scale(.992, 1.018); }
+    @keyframes control-single-rebound {
+      0%   { transform: translateY(2px) scale(.93); }
+      58%  { transform: translateY(-2px) scale(1.075); }
       100% { transform: none; }
+    }
+
+    /*
+       “沉浸光感”白光扩散
+       --------------------------------------------------------
+       每次按钮松开时，JavaScript 会在点击点创建一个临时 span。多个偏心
+       径向渐变叠在一起，形成不规则的柔光团；它向四周扩散并逐渐消失，
+       刻意不使用圆形描边，因此看起来更像白色染料在水中散开，而非波纹圈。
+    */
+    .harmony-light-bloom {
+      --bloom-size: 96px;
+      position: fixed;
+      z-index: 2147483646;
+      left: 0; top: 0;
+      width: var(--bloom-size); height: var(--bloom-size);
+      border-radius: 46% 54% 58% 42% / 52% 42% 58% 48%;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(.16);
+      background:
+        radial-gradient(ellipse at 42% 48%, rgba(255,255,255,.92) 0 7%, rgba(255,255,255,.43) 24%, rgba(255,255,255,.11) 48%, transparent 72%),
+        radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
+        radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
+      filter: blur(1.8px);
+      mix-blend-mode: screen;
+      animation: harmony-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+    }
+    .harmony-light-bloom::before,
+    .harmony-light-bloom::after {
+      content: ""; position: absolute; pointer-events: none; border-radius: inherit;
+      background: radial-gradient(ellipse, rgba(255,255,255,.52), transparent 68%);
+    }
+    .harmony-light-bloom::before { inset: 18% -13% 4% 31%; transform: rotate(23deg); }
+    .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
+    @keyframes harmony-light-diffuse {
+      0%   { opacity: .94; transform: translate(-50%, -50%) scale(.16) rotate(-5deg); }
+      48%  { opacity: .57; transform: translate(-50%, -50%) scale(1.55) rotate(5deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(3.1, 2.75) rotate(9deg); filter: blur(7px); }
     }
 
     /* =========================================================
@@ -502,20 +541,29 @@
       width: min(520px, 100%);
       padding: 28px clamp(30px, 5vw, 50px);
       overflow: hidden;
-      border: 1px solid rgba(255,255,255,.78);
+      border: 1px solid rgba(255,255,255,.68);
       border-radius: 30px;
-      /* 低不透明底色 + 强模糊 + 内高光，形成接近 iOS 液态玻璃的纯玻璃卡片。 */
+      /*
+         纯晶体登录框：底色接近透明，只留下斜向折射色、明亮边缘和很轻的
+         2px 背景折射。与 blur(30px) 的毛玻璃不同，照片细节会直接透出来。
+      */
       background:
-        radial-gradient(circle at 12% 0%, rgba(255,255,255,.72), transparent 38%),
-        linear-gradient(145deg, rgba(255,255,255,.30), rgba(220,239,241,.16));
-      box-shadow: 0 30px 84px rgba(17,38,45,.24), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(66,104,116,.10);
-      -webkit-backdrop-filter: blur(30px) saturate(1.35);
-      backdrop-filter: blur(30px) saturate(1.35);
+        linear-gradient(125deg, rgba(255,255,255,.13), rgba(255,255,255,.012) 40%, rgba(102,210,225,.038) 72%, rgba(255,255,255,.085));
+      box-shadow:
+        0 30px 84px rgba(17,38,45,.25),
+        inset 0 1px 0 rgba(255,255,255,.96),
+        inset 1px 0 0 rgba(255,255,255,.28),
+        inset 0 -1px 0 rgba(43,85,101,.22);
+      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
+      backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
       animation: entry-rise .45s ease both;
+      text-shadow: 0 1px 2px rgba(255,255,255,.92), 0 0 9px rgba(255,255,255,.46);
     }
     .entry-card::before {
       content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-      background: linear-gradient(120deg, rgba(255,255,255,.28), transparent 28% 70%, rgba(255,255,255,.14));
+      background:
+        linear-gradient(118deg, rgba(255,255,255,.31), transparent 8% 76%, rgba(255,255,255,.10)),
+        linear-gradient(90deg, rgba(255,255,255,.12), transparent 2% 98%, rgba(255,255,255,.07));
     }
     .entry-card > * { position: relative; z-index: 1; }
     @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
@@ -526,9 +574,10 @@
     .entry-field { display: grid; gap: 7px; color: var(--ink); font-size: .88rem; font-weight: 700; }
     .entry-field input {
       width: 100%; border: 1px solid rgba(255,255,255,.78); border-radius: 15px;
-      padding: 12px 14px; background: rgba(255,255,255,.34); color: var(--ink); outline: none;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.88), 0 7px 18px rgba(31,62,72,.06);
-      -webkit-backdrop-filter: blur(17px); backdrop-filter: blur(17px);
+      padding: 12px 14px; background: rgba(255,255,255,.075); color: var(--ink); outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(44,85,99,.12), 0 7px 18px rgba(31,62,72,.07);
+      -webkit-backdrop-filter: blur(2px) saturate(1.08); backdrop-filter: blur(2px) saturate(1.08);
+      text-shadow: 0 1px 2px rgba(255,255,255,.90);
     }
     .entry-field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(49,191,200,.12); }
     .entry-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .82rem; }
@@ -539,15 +588,14 @@
     .entry-primary {
       width: 100%; min-height: 46px; border: 1px solid rgba(255,255,255,.72);
       background:
-        radial-gradient(circle at 18% 0%, rgba(255,255,255,.42), transparent 38%),
-        linear-gradient(135deg, rgba(39,143,156,.78), rgba(49,191,200,.62));
-      box-shadow: 0 12px 27px rgba(26,112,127,.23), inset 0 1px 0 rgba(255,255,255,.72);
-      -webkit-backdrop-filter: blur(17px) saturate(1.3); backdrop-filter: blur(17px) saturate(1.3);
+        linear-gradient(135deg, rgba(255,255,255,.19), rgba(39,143,156,.23) 46%, rgba(49,191,200,.18));
+      box-shadow: 0 12px 27px rgba(26,112,127,.22), inset 0 1px 0 rgba(255,255,255,.90), inset 0 -1px 0 rgba(17,91,105,.20);
+      -webkit-backdrop-filter: blur(2px) saturate(1.14) contrast(1.04); backdrop-filter: blur(2px) saturate(1.14) contrast(1.04);
     }
     .entry-actions .btn.ghost {
-      border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.28);
+      border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.065);
       box-shadow: 0 9px 22px rgba(31,62,72,.09), inset 0 1px 0 rgba(255,255,255,.90);
-      -webkit-backdrop-filter: blur(17px) saturate(1.25); backdrop-filter: blur(17px) saturate(1.25);
+      -webkit-backdrop-filter: blur(2px) saturate(1.1); backdrop-filter: blur(2px) saturate(1.1);
     }
     .entry-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: .78rem; }
     .entry-divider::before, .entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
@@ -618,17 +666,17 @@
     .tab-button {
       position: relative; isolation: isolate; overflow: hidden;
       border: 1px solid var(--glass-line); padding: 9px 15px; border-radius: 999px; cursor: pointer;
-      color: var(--ink); background: linear-gradient(145deg, var(--glass-fill), rgba(223,239,241,.20));
+      color: var(--ink); background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(223,239,241,.025));
       box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 6px 16px rgba(32,48,55,.06);
-      -webkit-backdrop-filter: blur(13px) saturate(1.15);
-      backdrop-filter: blur(13px) saturate(1.15);
+      -webkit-backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
+      backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
       transition: background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
     }
     .tab-button:hover { background: var(--glass-fill-hover); transform: translateY(-1px); box-shadow: var(--glass-shadow); }
     .tab-button:active { transform: translateY(1px) scale(.97); }
     .tab-button.active {
       color: #17343d; border-color: rgba(255,255,255,.86);
-      background: linear-gradient(135deg, rgba(119,161,205,.62), rgba(49,191,200,.42));
+      background: linear-gradient(135deg, rgba(119,161,205,.21), rgba(255,255,255,.03) 48%, rgba(49,191,200,.14));
       box-shadow: 0 9px 22px rgba(74,129,146,.18), inset 0 1px 0 rgba(255,255,255,.9);
     }
 
@@ -675,6 +723,18 @@
     .feedback-item header { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: .78rem; }
     .feedback-item strong { color: var(--ink); }
     .feedback-item p { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.7; }
+    /*
+       公开留言下方只显示由 Studio 写入的站长回复。普通网站没有回复表单，
+       即使手工调用公开 API 也没有写入 admin_reply 的路由。
+    */
+    .feedback-owner-reply {
+      margin: 14px 0 0 18px; padding: 13px 15px;
+      border: 1px solid rgba(49,191,200,.28); border-radius: 12px;
+      background: rgba(226,247,248,.42); box-shadow: inset 3px 0 0 rgba(49,191,200,.66);
+    }
+    .feedback-owner-reply header { color: #43818a; }
+    .feedback-owner-reply strong { color: #267784; }
+    .feedback-board-note { margin: 4px 0 18px; color: var(--muted); font-size: .82rem; line-height: 1.6; }
 
     /* =========================================================
        07. AI 聊天区域
@@ -784,13 +844,13 @@
       position: relative; isolation: isolate; overflow: hidden;
       min-width: 38px; height: 38px; padding-inline: 12px; cursor: pointer;
       border: 1px solid var(--glass-line); border-radius: 999px;
-      color: var(--ink); background: linear-gradient(145deg, rgba(255,255,255,.62), rgba(222,239,241,.28));
+      color: var(--ink); background: linear-gradient(145deg, rgba(255,255,255,.15), rgba(222,239,241,.03));
       box-shadow: var(--glass-shadow);
-      -webkit-backdrop-filter: blur(13px) saturate(1.15);
-      backdrop-filter: blur(13px) saturate(1.15);
+      -webkit-backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
+      backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
       transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
     }
-    .icon-button:hover { transform: translateY(-2px); background: rgba(255,255,255,.82); box-shadow: 0 13px 28px rgba(32,48,55,.15), inset 0 1px 0 #fff; }
+    .icon-button:hover { transform: translateY(-2px); background: rgba(255,255,255,.16); box-shadow: 0 13px 28px rgba(32,48,55,.15), inset 0 1px 0 #fff; }
     .icon-button:active { transform: translateY(1px) scale(.94); }
     .icon-button:focus-visible { outline: 3px solid rgba(49,191,200,.30); outline-offset: 2px; }
     .reader-header { margin: 20px 0 28px; }
@@ -856,13 +916,13 @@
       position: relative; isolation: isolate; overflow: hidden;
       border: 1px solid rgba(255,255,255,.66); border-radius: 999px;
       color: #526c76; cursor: pointer; padding: 5px 9px; font-size: .78rem;
-      background: linear-gradient(145deg, rgba(255,255,255,.48), rgba(224,239,241,.22));
+      background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(224,239,241,.025));
       box-shadow: 0 5px 13px rgba(32,48,55,.07), inset 0 1px 0 rgba(255,255,255,.76);
-      -webkit-backdrop-filter: blur(10px) saturate(1.12);
-      backdrop-filter: blur(10px) saturate(1.12);
+      -webkit-backdrop-filter: blur(2px) saturate(1.1);
+      backdrop-filter: blur(2px) saturate(1.1);
       transition: color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
     }
-    .text-button:hover { color: var(--ink); background: rgba(255,255,255,.72); transform: translateY(-1px); box-shadow: var(--glass-shadow); }
+    .text-button:hover { color: var(--ink); background: rgba(255,255,255,.15); transform: translateY(-1px); box-shadow: var(--glass-shadow); }
     .text-button:active { transform: translateY(1px) scale(.95); }
     .text-button:focus-visible { outline: 3px solid rgba(49,191,200,.26); outline-offset: 1px; }
     .reply-form { margin: 10px 0 0 32px; display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; }
@@ -926,8 +986,9 @@
     @media (prefers-reduced-motion: reduce) {
       .content-section.active,
       dialog[open] :is(.auth-lock-card, .reader-wrap, .image-view),
-      :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-jelly-release,
+      :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-bounce-release,
       .bubble.ai.streaming::after { animation: none !important; }
+      .harmony-light-bloom { display: none !important; }
       .app-shell .btn,
       dialog .btn,
       .icon-button,
@@ -1155,6 +1216,7 @@
             </form>
             <div class="feedback-board">
               <h2 class="section-title">公开留言板</h2>
+              <p class="feedback-board-note">游客可以发布留言；留言下方只有站长能够回复。</p>
               <div id="feedback-list" class="feedback-list"><p class="loading">正在读取留言…</p></div>
             </div>
           </div>
@@ -2078,7 +2140,16 @@
         const name = document.createElement("strong"); name.textContent = `${item.guest_name} · ${categoryNames[item.category] || "留言"}`;
         const date = document.createElement("span"); date.textContent = formatDate(item.created_at);
         const body = document.createElement("p"); body.textContent = item.body;
-        header.append(name, date); card.append(header, body); list.append(card);
+        header.append(name, date); card.append(header, body);
+        if (item.admin_reply) {
+          const reply = document.createElement("section"); reply.className = "feedback-owner-reply";
+          const replyHeader = document.createElement("header");
+          const replyName = document.createElement("strong"); replyName.textContent = "站长回复";
+          const replyDate = document.createElement("span"); replyDate.textContent = formatDate(item.admin_replied_at);
+          const replyBody = document.createElement("p"); replyBody.textContent = item.admin_reply;
+          replyHeader.append(replyName, replyDate); reply.append(replyHeader, replyBody); card.append(reply);
+        }
+        list.append(card);
       });
     }
 
@@ -2196,37 +2267,68 @@
     }
 
     /*
-     * 全站液态玻璃按钮动效：按下时压缩，松手后播放一次果冻回弹。
+     * 在控件中心或实际点击点生成一次不规则白光。光团只存在 0.72 秒，
+     * animationend 后立即从 DOM 删除，不会累积节点或影响按钮的点击区域。
+     */
+    function emitHarmonyLightBloom(control, point = null) {
+      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const rect = control.getBoundingClientRect();
+      const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
+      const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
+      const y = hasPointerPoint ? point.y : rect.top + rect.height / 2;
+      const bloomSize = Math.min(190, Math.max(64, Math.max(rect.width, rect.height) * 1.12));
+      const bloom = document.createElement("span");
+      bloom.className = "harmony-light-bloom";
+      bloom.style.left = `${x}px`;
+      bloom.style.top = `${y}px`;
+      bloom.style.setProperty("--bloom-size", `${bloomSize}px`);
+      bloom.setAttribute("aria-hidden", "true");
+      document.body.append(bloom);
+      bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
+      window.setTimeout(() => bloom.remove(), 900);
+    }
+
+    /*
+     * 全站晶体玻璃按钮动效：按下时压缩，松手后只回弹一次，同时释放白光。
      * 事件委托同时覆盖以后由 JavaScript 新建的专栏、相册、评论和图片卡片。
      */
     function installLiquidGlassControlMotion() {
       const selector = "button, a.btn, .tab-button, .studio-link, [role='button'], .content-card, .photo-card";
       const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
       let pressedControl = null;
+      let pressedPoint = null;
 
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       const canAnimate = (control) => control && !control.matches(":disabled") && control.id !== "avatar-refresh";
-      const release = (control) => {
+      const release = (control, point = null) => {
         if (!control) return;
         control.classList.remove("is-control-pressed");
         if (reducedMotion.matches || !canAnimate(control)) return;
-        control.classList.remove("control-jelly-release");
+        emitHarmonyLightBloom(control, point);
+        control.classList.remove("control-bounce-release");
         void control.offsetWidth;
-        control.classList.add("control-jelly-release");
-        window.setTimeout(() => control.classList.remove("control-jelly-release"), 560);
+        control.classList.add("control-bounce-release");
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
       };
 
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
         if (!canAnimate(control)) return;
         pressedControl = control;
-        control.classList.remove("control-jelly-release");
+        pressedPoint = { x: event.clientX, y: event.clientY };
+        control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
       });
-      window.addEventListener("pointerup", () => { release(pressedControl); pressedControl = null; });
+      window.addEventListener("pointerup", (event) => {
+        const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
+        release(pressedControl, point);
+        pressedControl = null;
+        pressedPoint = null;
+      });
       window.addEventListener("pointercancel", () => {
         pressedControl?.classList.remove("is-control-pressed");
         pressedControl = null;
+        pressedPoint = null;
       });
       document.addEventListener("keydown", (event) => {
         if (!['Enter', ' '].includes(event.key) || event.repeat) return;
@@ -2239,7 +2341,8 @@
       });
 
       /*
-       * 站内链接延迟 340ms 再跳转，让离开当前文档前也能看完主要回弹阶段。
+       * 站内链接延迟 360ms 再跳转，让离开当前文档前能看见单次回弹和
+       * 白光扩散的主要阶段。
        * 下载链接、外部链接、组合键新开窗口以及已被业务逻辑阻止的点击不延迟。
        */
       document.addEventListener("click", (event) => {
@@ -2249,7 +2352,7 @@
         const destination = new URL(link.href, location.href);
         if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
         event.preventDefault();
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 340);
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 360);
       });
     }
 
@@ -2314,8 +2417,8 @@
 
     /*
      * 头像点击刷新：
-     * 1. 添加 jelly 类播放明显的果冻动画；
-     * 2. 等 1.18 秒果冻动画完整播放后，再加时间戳并 replace 强制刷新；
+     * 1. 添加 jelly 类播放一次较慢、清晰的回弹，并同时释放白光；
+     * 2. 等 0.92 秒回弹完整播放后，再加时间戳并 replace 强制刷新；
      * 3. 新页面启动时会自动移除这个临时参数。
      */
     document.getElementById("avatar-refresh").addEventListener("click", (event) => {
@@ -2325,6 +2428,7 @@
       avatar.classList.remove("jelly");
       void avatar.offsetWidth;
       avatar.classList.add("jelly");
+      emitHarmonyLightBloom(avatar);
 
       // animationend 能确保修改 CSS 时仍会等动画播完；定时器只用于极少数
       // 浏览器没有派发动画事件时兜底。once + reloaded 防止刷新被执行两次。
@@ -2337,7 +2441,7 @@
         window.location.replace(refreshUrl.toString());
       };
       avatar.addEventListener("animationend", reloadAfterJelly, { once: true });
-      window.setTimeout(reloadAfterJelly, 1_350);
+      window.setTimeout(reloadAfterJelly, 1_100);
     });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
