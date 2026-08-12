@@ -602,7 +602,8 @@
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
-        <button data-section="account" title="账户中心"><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">登录 / 账户</span></button>
+        <!-- 游客不显示账户入口；renderAccount() 只在检测到登录会话后取消 hidden。 -->
+        <button id="account-nav-button" data-section="account" title="账户中心" hidden><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">账户中心</span></button>
       </nav>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
@@ -1108,8 +1109,11 @@
     /* ---------- 07. 普通用户账户状态、昵称和密码。 ---------- */
     function renderAccount() {
       const user = state.auth.user;
+      const navButton = document.getElementById("account-nav-button");
       const navLabel = document.getElementById("account-nav-label");
-      navLabel.textContent = user ? user.nickname : "登录 / 账户";
+      // 游客不需要“登录 / 账户”导航；登录后才显示以昵称命名的账户入口。
+      navButton.hidden = !user;
+      navLabel.textContent = user ? user.nickname : "账户中心";
       const accessNote = document.getElementById("portfolio-access-note");
       accessNote.textContent = hasFullAccess() ? "已显示个人空间完整内容" : "游客或待审核账号仅显示公开内容";
       if (!user) return;

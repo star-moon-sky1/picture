@@ -31,79 +31,52 @@
     body {
       margin: 0;
       color: var(--ink);
-      background:
-        radial-gradient(circle at 16% 14%, rgba(40, 184, 204, .16), transparent 28rem),
-        radial-gradient(circle at 92% 88%, rgba(218, 190, 164, .24), transparent 31rem),
-        var(--paper);
+      background: var(--paper);
       font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
     }
     button, input, select, textarea { font: inherit; }
     button, a { -webkit-tap-highlight-color: transparent; }
 
     /* ========================================================
-       02. 页面双栏结构
+       02. 单栏居中结构
        --------------------------------------------------------
-       桌面端左边只保留站点标识和返回首页入口，避免注册时出现
-       大段英文和介绍文字；右边专门承载登录、注册及找回密码。
-       手机端会把左栏压缩成一条简洁的顶部品牌栏。
+       登录、注册和找回密码都在页面正中显示，不再设置左侧品牌
+       区域或任何装饰图样。“返回网站首页”固定在左下角。
        ======================================================== */
     .auth-page {
-      min-height: 100dvh;
-      display: grid;
-      grid-template-columns: minmax(220px, 300px) minmax(480px, 1fr);
-      align-items: stretch;
-    }
-    .brand-panel {
       position: relative;
+      min-height: 100dvh;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
       align-items: center;
-      gap: 24px;
-      overflow: hidden;
-      padding: 38px 26px;
-      background: linear-gradient(145deg, #273337 0%, #1c2528 100%);
-      color: #fff;
-      text-align: center;
+      justify-content: center;
+      padding: clamp(24px, 5vw, 64px) clamp(13px, 4vw, 44px) 88px;
     }
-    /* 仅保留一个很淡的装饰圆，不再让左栏承担复杂的视觉信息。 */
-    .brand-panel::before {
-      content: "";
-      position: absolute;
-      border-radius: 50%;
-      pointer-events: none;
-      width: 310px; height: 310px; left: -185px; top: -185px;
-      border: 1px solid rgba(255,255,255,.12);
-      box-shadow: 0 0 0 62px rgba(255,255,255,.022);
+
+    /* 左下角唯一保留的页面外入口；半透明底色保证手机上也清晰可点。 */
+    .home-link {
+      position: fixed;
+      z-index: 5;
+      left: max(18px, env(safe-area-inset-left));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(250,248,244,.92);
+      font-size: .84rem;
+      font-weight: 700;
+      text-decoration: none;
+      backdrop-filter: blur(10px);
+      transition: color .18s, border-color .18s, transform .18s;
     }
-    .brand, .brand-back { position: relative; z-index: 1; }
-    .brand { display: grid; justify-items: center; gap: 13px; }
-    .brand-mark {
-      width: 58px; height: 58px; display: grid; place-items: center;
-      border: 1px solid rgba(255,255,255,.34); border-radius: 50%;
-      color: #8ee8f1; font-family: Georgia, serif; font-size: 1.75rem;
-    }
-    .brand-name {
-      display: grid;
-      gap: 6px;
-      font-weight: 800;
-      font-size: 1.38rem;
-      letter-spacing: .12em;
-    }
-    .brand-name small { color: rgba(255,255,255,.58); font-size: .78rem; font-weight: 500; letter-spacing: .08em; }
-    .brand-back {
-      color: rgba(255,255,255,.72); font-size: .84rem; font-weight: 700;
-      text-decoration: none; transition: color .18s, transform .18s;
-    }
-    .brand-back:hover { color: #fff; transform: translateX(-2px); }
+    .home-link:hover { color: var(--ink); border-color: #bcb4a9; transform: translateX(-2px); }
 
     .card-side {
+      width: 100%;
       min-width: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: clamp(24px, 6vw, 86px);
-      overflow-y: auto;
     }
     .auth-card {
       width: min(100%, 610px);
@@ -114,8 +87,9 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(16px);
     }
-    .card-head { margin-bottom: 28px; }
-    .eyebrow { margin: 0 0 8px; color: var(--cyan-deep); font-weight: 800; font-size: .78rem; letter-spacing: .16em; }
+    .card-head { margin-bottom: 28px; text-align: center; }
+    /* 中文标题已经足够明确，不再额外显示 ACCOUNT LOGIN 等英文装饰行。 */
+    .eyebrow { display: none; }
     .card-head h2 { margin: 0 0 9px; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 3.15rem); font-weight: 500; }
     .card-head p { margin: 0; color: var(--muted); line-height: 1.7; }
 
@@ -196,15 +170,8 @@
     .success-box { padding: 22px; border: 1px solid #bcdccd; border-radius: 14px; background: #f0faf5; line-height: 1.8; }
 
     @media (max-width: 850px) {
-      .auth-page { grid-template-columns: 1fr; }
-      .brand-panel {
-        min-height: auto; padding: 17px 20px; flex-direction: row;
-        justify-content: space-between; gap: 16px; text-align: left;
-      }
-      .brand { display: flex; justify-items: initial; gap: 10px; }
-      .brand-mark { width: 40px; height: 40px; font-size: 1.3rem; }
-      .brand-name { gap: 2px; font-size: 1.05rem; }
-      .card-side { align-items: flex-start; padding: 18px 13px 44px; overflow: visible; }
+      .auth-page { align-items: flex-start; padding-top: 18px; }
+      .card-side { align-items: flex-start; }
       .auth-card { position: relative; z-index: 2; border-radius: 19px; }
     }
     @media (max-width: 540px) {
@@ -219,15 +186,8 @@
 </head>
 <body>
   <main class="auth-page">
-    <!-- 左侧品牌区域：只保留站点名称和返回入口，不参与任何登录逻辑。 -->
-    <aside class="brand-panel">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">月</span>
-        <span class="brand-name">星月集<small>账号中心</small></span>
-      </div>
-      <a class="brand-back" href="/">← 返回网站首页</a>
-    </aside>
-
+    <!-- 页面左下角只保留返回入口，登录与注册表单自身位于屏幕正中。 -->
+    <a class="home-link" href="/">← 返回网站首页</a>
     <section class="card-side">
       <div class="auth-card">
         <!-- 登录面板 -->
