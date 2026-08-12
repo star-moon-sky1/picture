@@ -657,6 +657,24 @@
     .reader-meta { color: var(--muted); font-size: .85rem; }
     .reader-body { font-family: Georgia, "Songti SC", serif; font-size: 1.06rem; line-height: 2; }
     .reader-body img { display: block; max-width: 100%; height: auto; margin: 24px auto; border-radius: 12px; }
+    /*
+      正文图片会在 JavaScript 中变成可操作的预览入口：鼠标、键盘都能打开大图。
+      这里仅提示“可以放大查看”，是否显示原片下载仍由登录权限统一控制。
+    */
+    .reader-body img.reader-inline-image {
+      cursor: zoom-in;
+      box-shadow: 0 10px 24px rgba(27,50,58,.10);
+      transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+    }
+    .reader-body img.reader-inline-image:hover {
+      transform: translateY(-2px) scale(1.008);
+      box-shadow: 0 16px 34px rgba(27,50,58,.18);
+      filter: saturate(1.04);
+    }
+    .reader-body img.reader-inline-image:focus-visible {
+      outline: 3px solid rgba(49,191,200,.38);
+      outline-offset: 4px;
+    }
     .reader-body blockquote { margin: 24px 0; padding: 4px 0 4px 18px; border-left: 4px solid var(--cyan); color: var(--muted); }
     .reader-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 25px 0; border-block: 1px solid var(--line); margin-top: 34px; }
 
@@ -1063,18 +1081,21 @@
       <h2 id="auth-lock-title">请登录以使用完整功能</h2>
       <p id="auth-lock-message">登录并通过审核后即可使用 AI 助手并查看个人空间完整内容。</p>
       <div class="auth-lock-actions">
-        <a id="auth-login-link" class="btn" href="/login?mode=login">登录</a>
+        <a id="auth-login-link" class="btn" href="/?login=1">登录</a>
         <a id="auth-register-link" class="btn ghost" href="/login?mode=register">注册</a>
         <button class="btn ghost" type="button" data-close-dialog="auth-lock-dialog">暂不登录</button>
       </div>
     </div>
   </dialog>
 
-  <!-- 文章阅读弹窗：文章正文、点赞/点踩、PDF 和评论都在这里。 -->
+  <!--
+    文章阅读弹窗：正文、点赞/点踩和评论对当前可见文章开放；
+    两个 PDF 按钮默认 hidden，只有审核通过的登录账号才由 JavaScript 显示。
+  -->
   <dialog id="reader-dialog" class="reader-dialog">
     <div class="reader-wrap">
       <div class="dialog-top">
-        <button id="reader-print" class="icon-button" type="button" title="下载 PDF">下载 PDF</button>
+        <button id="reader-print" class="icon-button" type="button" title="下载 PDF" hidden>下载 PDF</button>
         <button class="icon-button" data-close-dialog="reader-dialog" title="关闭">✕</button>
       </div>
       <article>
@@ -1087,7 +1108,7 @@
         <div class="reader-actions">
           <button id="content-like" class="btn small ghost">👍 <span>0</span></button>
           <button id="content-dislike" class="btn small ghost">👎 <span>0</span></button>
-          <button id="content-pdf" class="btn small ghost" type="button">下载 PDF</button>
+          <button id="content-pdf" class="btn small ghost" type="button" hidden>下载 PDF</button>
         </div>
       </article>
       <section class="comments">
@@ -1103,7 +1124,10 @@
     </div>
   </dialog>
 
-  <!-- 图片预览弹窗：显示大图，并提供 R2 原片下载地址。 -->
+  <!--
+    图片预览弹窗：游客可以查看压缩预览；“下载原片”默认 hidden，
+    只有审核通过的登录账号且当前图片属于本站 R2 媒体时才会显示。
+  -->
   <dialog id="image-dialog" class="image-dialog">
     <div class="image-view">
       <div class="image-stage">
@@ -1114,7 +1138,7 @@
       <div class="image-toolbar">
         <span id="image-caption" aria-live="polite"></span>
         <div>
-          <a id="image-download" class="btn small light" href="#" download>下载原片</a>
+          <a id="image-download" class="btn small light" download hidden>下载原片</a>
           <button class="btn small ghost" style="color:white" data-close-dialog="image-dialog">关闭</button>
         </div>
       </div>
@@ -1160,10 +1184,15 @@
       document.body.classList.remove("entry-active");
     }
 
-    /* 如果本次访问由头像强制刷新产生，清理地址栏中的临时防缓存参数。 */
+    /*
+     * _xyj_refresh 用于头像强制刷新，login=1 用于从站内受限功能重新打开
+     * 首页登录层。页面完成重新载入后即可清理，两者都不需要长期留在地址栏。
+     */
     const initialUrl = new URL(window.location.href);
-    if (initialUrl.searchParams.has("_xyj_refresh")) {
-      initialUrl.searchParams.delete("_xyj_refresh");
+    const transientParameters = ["_xyj_refresh", "login"];
+    const hasTransientParameter = transientParameters.some((name) => initialUrl.searchParams.has(name));
+    if (hasTransientParameter) {
+      transientParameters.forEach((name) => initialUrl.searchParams.delete(name));
       history.replaceState(null, "", `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`);
     }
 
@@ -1274,6 +1303,26 @@
     }
 
     /*
+     * 下载权限同时控制三个入口：文章顶部 PDF、文章底部 PDF、图片原片。
+     * 只有审核通过的登录账号可以看到入口；图片还必须确实存在原片下载地址。
+     * 后端会再次验证身份，因此手工取消 hidden 也不能绕过权限。
+     */
+    function syncProtectedDownloadControls() {
+      const fullAccess = hasFullAccess();
+      document.querySelectorAll("#reader-print, #content-pdf").forEach((button) => {
+        button.hidden = !fullAccess;
+      });
+
+      const download = document.getElementById("image-download");
+      const currentPhoto = state.imageSequence[state.currentImageIndex];
+      const downloadUrl = String(currentPhoto?.downloadUrl || "");
+      const canDownloadOriginal = fullAccess && Boolean(downloadUrl);
+      download.hidden = !canDownloadOriginal;
+      if (canDownloadOriginal) download.href = downloadUrl;
+      else download.removeAttribute("href");
+    }
+
+    /*
      * 受限功能统一使用同一个登录提示框。游客看到登录/注册快捷入口；
      * 已登录但未通过审核的用户会看到自己的具体审核状态。
      */
@@ -1283,21 +1332,33 @@
       const message = document.getElementById("auth-lock-message");
       const loginLink = document.getElementById("auth-login-link");
       const registerLink = document.getElementById("auth-register-link");
-      const next = encodeURIComponent(feature === "ai" ? "/#ai-helper" : "/#account");
+      const nextTarget = feature === "ai" ? "/#ai-helper" : (feature === "download" ? "/#portfolio" : "/#account");
+      const next = encodeURIComponent(nextTarget);
+      const nextHash = new URL(nextTarget, location.origin).hash;
 
       if (!state.auth.authenticated) {
         title.textContent = "请登录以使用完整功能";
         message.textContent = feature === "ai"
           ? "AI 助手仅向审核通过的账号开放。你可以立即登录或提交注册申请。"
-          : "登录后可以查看账户状态、修改昵称和密码。";
-        loginLink.textContent = "登录"; loginLink.href = `/login?mode=login&next=${next}`;
+          : (feature === "download"
+            ? "文章 PDF 与图片原片仅向审核通过的账号开放；游客仍可阅读文章和查看图片预览。"
+            : "登录后可以查看账户状态、修改昵称和密码。");
+        /*
+         * login=1 会让同一域名下的链接发生一次真正的页面重载，而不是只触发
+         * hashchange；重新载入后根页面显示唯一的全屏登录框，并保留目标板块。
+         */
+        loginLink.textContent = "登录"; loginLink.href = `/?login=1${nextHash}`;
         registerLink.hidden = false; registerLink.href = `/login?mode=register&next=${next}`;
       } else {
         const status = state.auth.user.status;
         title.textContent = status === "pending" ? "账号正在等待审核" : "账号暂时没有完整权限";
-        message.textContent = status === "pending"
-          ? "站长审核通过后，AI 助手和个人空间完整内容会自动开放。"
-          : "请前往账户中心查看审核状态；如有疑问，可以通过留言与反馈联系站长。";
+        message.textContent = feature === "download"
+          ? (status === "pending"
+            ? "站长审核通过后，文章 PDF 与图片原片下载会自动开放。"
+            : "当前账号暂时不能下载文章 PDF 或图片原片，请前往账户中心查看审核状态。")
+          : (status === "pending"
+            ? "站长审核通过后，AI 助手和个人空间完整内容会自动开放。"
+            : "请前往账户中心查看审核状态；如有疑问，可以通过留言与反馈联系站长。");
         loginLink.textContent = "查看账户状态"; loginLink.href = "/#account";
         registerLink.hidden = true;
       }
@@ -1453,6 +1514,79 @@
     }
 
     /*
+     * 从正文图片地址中识别本站 R2 媒体编号。只有本站 /media/:id 图片才有
+     * 可验证的“原片”概念；外部图片可以放大预览，但不会伪造下载地址。
+     */
+    function mediaIdFromUrl(source) {
+      const value = String(source || "").trim();
+      if (!value) return null;
+      try {
+        const url = new URL(value, location.href);
+        if (url.origin !== location.origin) return null;
+        return url.pathname.match(/^\/media\/([A-Za-z0-9_-]{1,80})$/)?.[1] || null;
+      } catch {
+        return null;
+      }
+    }
+
+    /*
+     * 安全地装载文章正文，并把正文中的图片接入与照片专栏相同的大图弹窗。
+     * 旧文章可能保存的是 /media/:id 原片地址，所以在节点进入页面前统一改写为
+     * ?preview=1；这样游客浏览正文时只会请求压缩预览，不会误取原片。
+     */
+    function renderReaderBody(html) {
+      const root = document.getElementById("reader-body");
+      const template = document.createElement("template");
+      template.innerHTML = html || "<p>暂无正文。</p>";
+
+      template.content.querySelectorAll("img").forEach((image) => {
+        const source = image.getAttribute("src") || "";
+        const mediaId = mediaIdFromUrl(source);
+        if (!mediaId) return;
+        const previewUrl = new URL(source, location.href);
+        previewUrl.searchParams.delete("download");
+        previewUrl.searchParams.set("preview", "1");
+        image.setAttribute("src", `${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`);
+      });
+
+      root.replaceChildren(template.content);
+      const images = Array.from(root.querySelectorAll("img"));
+      const photos = images.map((image, index) => {
+        const source = image.getAttribute("src") || image.src;
+        const mediaId = mediaIdFromUrl(source);
+        const caption = String(image.getAttribute("alt") || image.getAttribute("title") || "").trim();
+        return {
+          // 同一张图片可能在一篇文章出现多次，因此预览序列使用“文章 + 位置”作为唯一编号。
+          id: `reader-${state.currentContent?.id || "content"}-${index}`,
+          previewUrl: source,
+          url: source,
+          downloadUrl: mediaId ? `/media/${encodeURIComponent(mediaId)}?download=1` : "",
+          caption,
+        };
+      });
+
+      images.forEach((image, index) => {
+        const photo = photos[index];
+        image.classList.add("reader-inline-image");
+        image.tabIndex = 0;
+        image.setAttribute("role", "button");
+        image.setAttribute("aria-label", photo.caption ? `查看图片：${photo.caption}` : "查看文章图片");
+        if (!image.title) image.title = "点击放大查看";
+
+        const openPreview = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openImage(photo, photos);
+        };
+        image.addEventListener("click", openPreview);
+        image.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          openPreview(event);
+        });
+      });
+    }
+
+    /*
      * 更新放大预览中的当前照片。索引会首尾循环，因此第一张向左切换会到
      * 最后一张，最后一张向右切换会回到第一张。
      */
@@ -1466,10 +1600,10 @@
       document.getElementById("image-preview").alt = photo.caption || "照片预览";
       // 可以显示站长填写的说明，但绝不使用内部文件名或文件编号兜底。
       document.getElementById("image-caption").textContent = photo.caption || "";
-      document.getElementById("image-download").href = photo.downloadUrl;
       const hasMultiple = photos.length > 1;
       document.getElementById("image-previous").hidden = !hasMultiple;
       document.getElementById("image-next").hidden = !hasMultiple;
+      syncProtectedDownloadControls();
     }
 
     function stepImage(offset) {
@@ -1519,6 +1653,8 @@
       navLabel.textContent = user ? user.nickname : "账户中心";
       const accessNote = document.getElementById("portfolio-access-note");
       accessNote.textContent = hasFullAccess() ? "已显示个人空间完整内容" : "游客或待审核账号仅显示公开内容";
+      // 登录状态可能由定时心跳更新，下载入口也要立即跟随权限变化。
+      syncProtectedDownloadControls();
       if (!user) return;
 
       const status = document.getElementById("account-status");
@@ -1545,6 +1681,8 @@
     /* ---------- 08. 文章阅读器、点赞/点踩和评论回复。 ---------- */
     async function openContent(id) {
       const dialog = document.getElementById("reader-dialog");
+      state.currentContent = null;
+      syncProtectedDownloadControls();
       document.getElementById("reader-title").textContent = "正在读取…";
       document.getElementById("reader-body").replaceChildren();
       dialog.showModal();
@@ -1558,7 +1696,8 @@
         document.getElementById("reader-kind").textContent = sectionName;
         document.getElementById("reader-title").textContent = content.title;
         document.getElementById("reader-meta").textContent = `${formatDate(content.published_at)} · ${sectionName}`;
-        document.getElementById("reader-body").innerHTML = content.body_html || "<p>暂无正文。</p>";
+        renderReaderBody(content.body_html);
+        syncProtectedDownloadControls();
         document.querySelector("#content-like span").textContent = content.like_count;
         document.querySelector("#content-dislike span").textContent = content.dislike_count;
         renderComments();
@@ -1691,6 +1830,8 @@
     }
 
     async function downloadCurrentContentPdf(button) {
+      // 前端隐藏只是界面层保护；这里再次校验，防止通过控制台直接调用函数。
+      if (!hasFullAccess()) { showAuthLock("download"); return; }
       if (!state.currentContent || state.pdfDownloading) return;
 
       const originalLabel = button.textContent;
@@ -1950,6 +2091,16 @@
     const imageDialog = document.getElementById("image-dialog");
     document.getElementById("image-previous").addEventListener("click", () => stepImage(-1));
     document.getElementById("image-next").addEventListener("click", () => stepImage(1));
+    document.getElementById("image-download").addEventListener("click", (event) => {
+      // 即使有人手工取消 hidden，也必须满足登录审核状态并且当前图片确有原片地址。
+      if (!hasFullAccess()) {
+        event.preventDefault();
+        showAuthLock("download");
+        return;
+      }
+      const currentPhoto = state.imageSequence[state.currentImageIndex];
+      if (!currentPhoto?.downloadUrl) event.preventDefault();
+    });
     // 键盘左右方向键与屏幕按钮使用同一套切换逻辑，Esc 仍由 dialog 原生关闭。
     imageDialog.addEventListener("keydown", (event) => {
       if (event.key === "ArrowLeft") { event.preventDefault(); stepImage(-1); }

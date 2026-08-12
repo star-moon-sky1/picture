@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
-  <title>登录与注册 - 星月集</title>
+  <title>注册与账户帮助 - 星月集</title>
   <style>
     /* ========================================================
        01. 登录页颜色与基础重置
@@ -40,7 +40,8 @@
     /* ========================================================
        02. 单栏居中结构
        --------------------------------------------------------
-       登录、注册和找回密码都在页面正中显示，不再设置左侧品牌。
+       注册和找回密码都在页面正中显示，不再设置左侧品牌。
+       网站登录统一由根页面 / 的全屏入口负责，本页不再保留第二套登录框。
        背景只轮播个人空间中的公开照片，“返回网站首页”固定在左下角。
        ======================================================== */
     .auth-page {
@@ -245,26 +246,6 @@
     <a class="home-link" href="/">← 返回网站首页</a>
     <section class="card-side">
       <div class="auth-card">
-        <!-- 登录面板 -->
-        <section id="panel-login" class="panel">
-          <header class="card-head"><p class="eyebrow">ACCOUNT LOGIN</p><h2>登录星月集</h2><p>使用已注册账号进入，或者选择游客身份浏览。</p></header>
-          <form id="login-form">
-            <div class="field"><label for="login-username">登录用户名</label><input id="login-username" required autocomplete="username" maxlength="32" placeholder="输入登录用户名"></div>
-            <div class="field"><label for="login-password">密码</label><input id="login-password" type="password" required autocomplete="current-password" maxlength="128" placeholder="输入密码"></div>
-            <div class="check-row">
-              <label class="remember"><input id="login-remember" type="checkbox">保持登录30天</label>
-              <button class="text-button" type="button" data-show-panel="forgot">忘记密码？</button>
-            </div>
-            <button class="btn block" type="submit">登录</button>
-            <p id="login-notice" class="notice" aria-live="polite"></p>
-          </form>
-          <div class="divider">或者</div>
-          <div class="button-row">
-            <button id="guest-entry" class="btn ghost" type="button">以游客身份进入</button>
-            <button class="btn ghost" type="button" data-show-panel="register">注册账号</button>
-          </div>
-        </section>
-
         <!-- 三步注册面板 -->
         <section id="panel-register" class="panel" hidden>
           <header class="card-head"><p class="eyebrow">CREATE ACCOUNT</p><h2>申请注册</h2><p>提交后需要由站长审核，审核期间仍可按游客权限浏览。</p></header>
@@ -280,7 +261,7 @@
               <div class="field"><label for="register-nickname">昵称</label><input id="register-nickname" required maxlength="30" autocomplete="nickname" placeholder="在网站中显示的名称"></div>
               <div class="field"><label for="register-password">设置密码</label><input id="register-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="至少8位，包含字母和数字"></div>
               <div class="field"><label for="register-password-confirm">确认密码</label><input id="register-password-confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="再次输入密码"></div>
-              <div class="button-row"><button class="btn ghost" type="button" data-show-panel="login">返回登录</button><button class="btn" type="button" data-register-next>下一步</button></div>
+              <div class="button-row"><a class="btn ghost" href="/?login=1" data-canonical-login>返回登录</a><button class="btn" type="button" data-register-next>下一步</button></div>
             </div>
 
             <div class="register-step" data-register-step="2" hidden>
@@ -317,7 +298,7 @@
             <p id="forgot-notice" class="notice" aria-live="polite"></p>
           </form>
           <div class="divider">返回</div>
-          <button class="btn ghost block" type="button" data-show-panel="login">返回登录</button>
+          <a class="btn ghost block" href="/?login=1" data-canonical-login>返回登录</a>
         </section>
 
         <!-- 一次性重置链接会直接打开此面板，链接有效期为24小时。 -->
@@ -329,7 +310,7 @@
             <button class="btn block" type="submit">确认重置密码</button>
             <p id="reset-notice" class="notice" aria-live="polite"></p>
           </form>
-          <button id="reset-back" class="btn ghost block" type="button" data-show-panel="login" hidden>返回登录</button>
+          <a id="reset-back" class="btn ghost block" href="/?login=1" data-canonical-login hidden>返回登录</a>
         </section>
 
         <!-- 浏览器已有有效账号会话时显示，避免重复登录。 -->
@@ -348,8 +329,9 @@
 
   <script>
     /* ========================================================
-       登录页 JavaScript
-       负责切换面板、三步注册、登录、游客入口和密码重置。
+       注册与账户帮助页 JavaScript
+       负责切换面板、三步注册、找回密码和一次性密码重置。
+       登录与游客入口只存在于网站根页面，避免维护两套外观不同的登录框。
        ======================================================== */
     const params = new URLSearchParams(location.search);
     const resetToken = params.get("reset") || "";
@@ -358,6 +340,8 @@
 
     /* 只允许跳转到本站内部路径，阻止 next 参数把用户带到外部网站。 */
     const nextPath = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+    const nextHash = new URL(nextPath, location.origin).hash;
+    const canonicalLoginPath = `/?login=1${nextHash}`;
     let registerStep = 1;
 
     async function api(path, options = {}) {
@@ -434,41 +418,9 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    document.querySelectorAll("[data-show-panel]").forEach((button) => {
-      button.addEventListener("click", () => showPanel(button.dataset.showPanel));
-    });
-
-    /* ---------- 登录与游客入口 ---------- */
-    document.getElementById("login-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const submit = event.currentTarget.querySelector("button[type='submit']");
-      const notice = document.getElementById("login-notice");
-      submit.disabled = true; setNotice(notice, "正在登录…");
-      try {
-        await api("/api/auth/login", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username: document.getElementById("login-username").value,
-            password: document.getElementById("login-password").value,
-            remember: document.getElementById("login-remember").checked,
-          }),
-        });
-        // 账号身份由服务器的安全 Cookie 判断，不再依赖浏览器中的永久入口标记。
-        localStorage.removeItem("xyj_entry_mode");
-        location.replace(nextPath);
-      } catch (error) {
-        setNotice(notice, error.message, "error");
-      } finally { submit.disabled = false; }
-    });
-
-    document.getElementById("guest-entry").addEventListener("click", () => {
-      /*
-       * 从独立登录页进入游客模式时，只传递一次“已选择游客”的信号。
-       * 根页面读取后立即删除，因此游客刷新网站会重新看到全屏身份入口。
-       */
-      localStorage.removeItem("xyj_entry_mode");
-      sessionStorage.setItem("xyj_guest_handoff", "1");
-      location.replace(nextPath);
+    /* “返回登录”统一回到根页面，并保留用户最初想访问的板块 hash。 */
+    document.querySelectorAll("[data-canonical-login]").forEach((link) => {
+      link.href = canonicalLoginPath;
     });
 
     /* ---------- 三步注册 ---------- */
@@ -617,6 +569,14 @@
     const statusLabels = { pending: "等待审核", approved: "已通过审核", rejected: "审核未通过", disabled: "账号已停用" };
     async function initialize() {
       if (resetToken) { await prepareResetPanel(); return; }
+      /*
+       * 旧书签或旧页面仍可能访问 /login?mode=login。统一跳回根页面后，
+       * 浏览器只会显示 index.html 中那一套全屏登录框。
+       */
+      if (!["register", "forgot"].includes(requestedMode)) {
+        location.replace(canonicalLoginPath);
+        return;
+      }
       try {
         const session = await api("/api/auth/session");
         if (session.authenticated) {
@@ -629,7 +589,7 @@
           showPanel("signed"); return;
         }
       } catch { /* 会话检查失败时仍允许显示普通登录表单。 */ }
-      showPanel(["register", "forgot"].includes(requestedMode) ? requestedMode : "login");
+      showPanel(requestedMode);
     }
 
     document.getElementById("signed-logout").addEventListener("click", async () => {
