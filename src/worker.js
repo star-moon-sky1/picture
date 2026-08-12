@@ -616,7 +616,7 @@ function rows(result) {
   return result?.results || [];
 }
 
-function mediaDto(row) {
+function mediaDto(row, { includeOriginal = true } = {}) {
   // R2 对象键只供 Worker 内部使用，公开接口和后台页面都只拿受控媒体地址。
   const { object_key: _objectKey, preview_object_key: previewObjectKey, ...safeRow } = row;
   const previewVersion = encodeURIComponent(String(safeRow.updated_at || safeRow.created_at || "1"));
@@ -626,8 +626,11 @@ function mediaDto(row) {
     // url/previewUrl 均为压缩预览；originalUrl 只用于明确需要原片的后台操作。
     url: `/media/${row.id}?preview=1&v=${previewVersion}`,
     previewUrl: `/media/${row.id}?preview=1&v=${previewVersion}`,
-    originalUrl: `/media/${row.id}`,
-    downloadUrl: `/media/${row.id}?download=1`,
+    // 游客 bootstrap 不下发原片地址；审核通过的账号与 Studio 才会收到。
+    ...(includeOriginal ? {
+      originalUrl: `/media/${row.id}`,
+      downloadUrl: `/media/${row.id}?download=1`,
+    } : {}),
   };
 }
 
@@ -692,7 +695,8 @@ async function publicBootstrap(request, env) {
       coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}?preview=1` : null,
     })),
     albums: visibleAlbums,
-    media: visibleMedia.map(mediaDto),
+    // 未通过审核的会话只能取得压缩预览地址，不能从接口响应中发现原片地址。
+    media: visibleMedia.map((item) => mediaDto(item, { includeOriginal: fullAccess })),
   };
 }
 
@@ -2001,18 +2005,27 @@ async function serveMedia(request, env, id) {
     WHERE m.id = ?
   `).bind(id).first();
   if (!media) throw new HttpError(404, "图片不存在");
+  const params = new URL(request.url).searchParams;
+  const wantsDownload = params.get("download") === "1";
+  /*
+   * 只有 ?preview=1 属于普通网站预览。去掉 preview 参数、直接访问 /media/id
+   * 或使用 download=1 都是在请求原片，必须是审核通过的账号或 Studio 管理员。
+   * 这样即使游客手工修改地址，也不能绕过前端隐藏的下载按钮。
+   */
+  const requestsOriginal = wantsDownload || params.get("preview") !== "1";
   const isPrivate = media.section_visibility === "private" || media.media_visibility === "private";
   const isProtected = isPrivate || media.section_visibility === "member" || media.media_visibility === "member";
-  // 受保护图片只验证一次 Studio 会话，避免私密图片重复读取/校验 Cookie。
-  const adminAccess = isProtected ? await isAdmin(request, env) : false;
+  // 受保护图片或原片请求只验证一次 Studio 会话，避免重复读取/校验 Cookie。
+  const adminAccess = (isProtected || requestsOriginal) ? await isAdmin(request, env) : false;
   // 私密图片只允许带有效 Studio 管理会话的请求读取。
   if (isPrivate && !adminAccess) throw new HttpError(404, "图片不存在");
   if (isProtected && !adminAccess) {
     await requireApprovedUser(request, env);
   }
-
-  const params = new URL(request.url).searchParams;
-  const wantsDownload = params.get("download") === "1";
+  // 即使图片本身是公开的，读取或下载原片也只开放给审核通过的登录用户。
+  if (requestsOriginal && !adminAccess && !isProtected) {
+    await requireApprovedUser(request, env);
+  }
   // 下载操作永远使用 object_key；只有普通展示请求才允许读取 WebP 预览件。
   const servesPreview = !wantsDownload && params.get("preview") === "1" && Boolean(media.preview_object_key);
   const object = await env.BUCKET.get(servesPreview ? media.preview_object_key : media.object_key);
@@ -2023,7 +2036,7 @@ async function serveMedia(request, env, id) {
   headers.set("ETag", object.httpEtag);
   headers.set(
     "Cache-Control",
-    isProtected
+    (isProtected || requestsOriginal)
       ? "private, no-store"
       // 旧照片尚无预览时只短暂缓存原片；补建成功后相同地址会很快切换到 WebP。
       : (params.get("preview") === "1" && !servesPreview
