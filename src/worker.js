@@ -59,7 +59,7 @@ const FALLBACK_AI_CONTEXT = [
   "网站名称：星月集（xingyueji）",
   "网站性质：个人网站，收录文章、图片、北京旅行指南和历史版本更新说明。",
   "网站主人就读于北京理工大学计算机学院。",
-  "网站包含游客评论、回复、点赞、点踩、文章 PDF 和原图下载功能。",
+  "网站包含游客文章评论、回复、点赞、点踩、文章 PDF 和原图下载功能。公开留言板允许游客留言，但只有站长可以回复留言。",
 ].join("\n");
 
 const AI_FORMAT_INSTRUCTION = [
@@ -365,6 +365,8 @@ async function initializeSchema(env) {
       body TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new', 'read', 'resolved')),
       is_public INTEGER NOT NULL DEFAULT 0,
+      admin_reply TEXT NOT NULL DEFAULT '',
+      admin_replied_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )
@@ -469,6 +471,9 @@ async function initializeSchema(env) {
   await ensureColumn(env, "media", "preview_object_key", "TEXT");
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
+  await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(env, "feedback", "admin_replied_at", "TEXT");
   await env.DB.batch([
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_section ON content(section_id, status, published_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_albums_section ON albums(section_id, sort_order)"),
@@ -808,7 +813,7 @@ async function createComment(request, env) {
 
 async function listPublicFeedback(env) {
   const result = await env.DB.prepare(`
-    SELECT id, guest_name, category, body, status, created_at
+    SELECT id, guest_name, category, body, status, admin_reply, admin_replied_at, created_at
     FROM feedback
     WHERE is_public = 1
     ORDER BY created_at DESC
@@ -2524,14 +2529,30 @@ async function adminComments(request, env, id) {
     return { id, status };
   }
   if (request.method === "DELETE") {
-    const descendants = rows(await env.DB.prepare("SELECT id FROM comments WHERE parent_id = ?").bind(id).all());
-    const ids = [id, ...descendants.map((item) => item.id)];
-    const statements = [];
-    for (const commentId of ids) {
-      statements.push(env.DB.prepare("DELETE FROM reactions WHERE target_type = 'comment' AND target_id = ?").bind(commentId));
-      statements.push(env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(commentId));
-    }
-    await env.DB.batch(statements);
+    if (!validId(id)) throw new HttpError(400, "评论 ID 错误");
+    const existing = await env.DB.prepare("SELECT id FROM comments WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "评论不存在或已经删除");
+
+    /*
+     * 递归 CTE 会找出目标评论、直接回复以及更深层的全部回复。先清理这些
+     * 评论的点赞/点踩，再删除评论树，避免只删一层后留下孤立回复。
+     */
+    const commentTreeSql = `
+      WITH RECURSIVE comment_tree(id) AS (
+        SELECT id FROM comments WHERE id = ?
+        UNION ALL
+        SELECT child.id
+        FROM comments child JOIN comment_tree parent ON child.parent_id = parent.id
+      )
+      SELECT id FROM comment_tree
+    `;
+    await env.DB.batch([
+      env.DB.prepare(`
+        DELETE FROM reactions
+        WHERE target_type = 'comment' AND target_id IN (${commentTreeSql})
+      `).bind(id),
+      env.DB.prepare(`DELETE FROM comments WHERE id IN (${commentTreeSql})`).bind(id),
+    ]);
     return { ok: true };
   }
   throw new HttpError(405, "不支持的请求方法");
@@ -2544,16 +2565,26 @@ async function adminFeedback(request, env, id) {
   if (request.method === "PUT") {
     if (!validId(id)) throw new HttpError(400, "留言 ID 错误");
     const input = await readJson(request);
+    const existing = await env.DB.prepare(
+      "SELECT id, status, is_public, admin_reply, admin_replied_at FROM feedback WHERE id = ?",
+    ).bind(id).first();
+    if (!existing) throw new HttpError(404, "留言不存在或已经删除");
     const status = ["new", "read", "resolved"].includes(input.status) ? input.status : "read";
     const isPublic = input.isPublic === true ? 1 : 0;
+    const updatesReply = Object.prototype.hasOwnProperty.call(input, "adminReply");
+    const adminReply = updatesReply ? clampText(input.adminReply, 3000) : String(existing.admin_reply || "");
+    const repliedAt = updatesReply
+      ? (adminReply ? nowIso() : null)
+      : (existing.admin_replied_at || null);
     await env.DB.prepare(
-      "UPDATE feedback SET status = ?, is_public = ?, updated_at = ? WHERE id = ?",
-    ).bind(status, isPublic, nowIso(), id).run();
-    return { id, status, is_public: isPublic };
+      "UPDATE feedback SET status = ?, is_public = ?, admin_reply = ?, admin_replied_at = ?, updated_at = ? WHERE id = ?",
+    ).bind(status, isPublic, adminReply, repliedAt, nowIso(), id).run();
+    return { id, status, is_public: isPublic, admin_reply: adminReply, admin_replied_at: repliedAt };
   }
   if (request.method === "DELETE") {
     if (!validId(id)) throw new HttpError(400, "留言 ID 错误");
-    await env.DB.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
+    const result = await env.DB.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
+    if (!Number(result.meta?.changes || 0)) throw new HttpError(404, "留言不存在或已经删除");
     return { ok: true };
   }
   throw new HttpError(405, "不支持的请求方法");
