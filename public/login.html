@@ -27,6 +27,7 @@
       --shadow: 0 26px 80px rgba(49, 45, 39, .13);
       --font-ui: ui-rounded, "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
       --font-display: "Yuanti SC", "YouYuan", ui-rounded, "Arial Rounded MT Bold", "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --font-hei: "Heiti SC", "SimHei", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     }
     * { box-sizing: border-box; }
     html, body { min-height: 100%; }
@@ -102,7 +103,7 @@
       .auth-photo-background img.active { transform: none; }
     }
 
-    /* 左下角唯一保留的页面外入口；使用低模糊透明晶体，背景照片直接透出。 */
+    /* 左下角入口使用有色毛玻璃；蓝灰底色保证它在浅色照片上仍有层次。 */
     .home-link {
       position: fixed;
       z-index: 5;
@@ -111,14 +112,15 @@
       padding: 9px 12px;
       border: 1px solid rgba(255,255,255,.76);
       border-radius: 14px;
-      color: var(--muted);
-      background: linear-gradient(135deg, rgba(255,255,255,.15), rgba(255,255,255,.018));
+      color: #17343d;
+      background: rgba(104,158,194,.32);
       font-size: .84rem;
-      font-weight: 700;
+      font-family: var(--font-hei);
+      font-weight: 800;
       text-decoration: none;
       box-shadow: 0 10px 28px rgba(20,43,50,.17), inset 0 1px 0 rgba(255,255,255,.90);
-      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
-      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
+      -webkit-backdrop-filter: blur(15px) saturate(1.14);
+      backdrop-filter: blur(15px) saturate(1.14);
       transition: color .18s, border-color .18s, transform .18s;
     }
     .home-link:hover { color: var(--ink); border-color: #bcb4a9; transform: translateX(-2px); }
@@ -153,7 +155,8 @@
         inset 0 -1px 0 rgba(42,83,99,.22);
       -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
       backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
-      text-shadow: 0 1px 2px rgba(255,255,255,.92), 0 0 9px rgba(255,255,255,.44);
+      /* 取消整张卡片继承的白色字晕，浅色照片前文字边缘会更清晰。 */
+      text-shadow: none;
     }
     .auth-card::before {
       content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
@@ -172,7 +175,7 @@
        03. 表单、按钮与状态提示
        ======================================================== */
     .panel[hidden] { display: none !important; }
-    .panel:not([hidden]) { animation: auth-panel-arrive .52s .06s cubic-bezier(.18,.78,.2,1) both; }
+    .panel:not([hidden]) { animation: auth-panel-arrive .34s cubic-bezier(.18,.78,.2,1) both; }
     @keyframes auth-panel-arrive {
       0% { opacity: 0; transform: translateY(13px) scale(.985); filter: blur(7px); }
       62% { opacity: .94; transform: translateY(-1px) scale(1.006); filter: blur(1px); }
@@ -190,7 +193,7 @@
       background: rgba(255,255,255,.075);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(44,85,99,.12), 0 7px 18px rgba(31,62,72,.07);
       -webkit-backdrop-filter: blur(2px) saturate(1.08); backdrop-filter: blur(2px) saturate(1.08);
-      text-shadow: 0 1px 2px rgba(255,255,255,.90);
+      text-shadow: none;
       outline: none;
       transition: border-color .18s, box-shadow .18s;
     }
@@ -212,23 +215,23 @@
       min-height: 46px;
       display: inline-flex; align-items: center; justify-content: center;
       gap: 8px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px;
-      padding: 11px 17px; cursor: pointer; color: #fff;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.20), rgba(22,141,161,.24) 45%, rgba(40,184,204,.18));
+      padding: 11px 17px; cursor: pointer; color: #12343c;
+      /* 单一蓝青色半透明底，不使用明显渐变，也不会退成与背景相融的白色。 */
+      background: rgba(43,166,185,.56);
       box-shadow: 0 12px 28px rgba(16,105,122,.23), inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(11,83,97,.22);
-      -webkit-backdrop-filter: blur(2px) saturate(1.14) contrast(1.04); backdrop-filter: blur(2px) saturate(1.14) contrast(1.04);
-      font-weight: 820; text-decoration: none;
-      text-shadow: 0 1px 5px rgba(10,70,82,.56);
-      transition: transform .15s, background .15s, box-shadow .15s;
+      -webkit-backdrop-filter: blur(15px) saturate(1.16); backdrop-filter: blur(15px) saturate(1.16);
+      font-family: var(--font-hei); font-weight: 800; text-decoration: none;
+      text-shadow: none;
+      transition: transform .10s, background-color .10s, box-shadow .10s;
     }
     .btn:hover { transform: translateY(-2px); filter: brightness(1.04); box-shadow: 0 16px 34px rgba(16,105,122,.29), inset 0 1px 0 #fff; }
     .btn:disabled { opacity: .55; cursor: wait; transform: none; }
     .btn.ghost {
-      color: var(--ink); border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.065);
+      color: #17343d; border-color: rgba(255,255,255,.78); background: rgba(104,158,194,.32);
       box-shadow: 0 9px 22px rgba(31,62,72,.10), inset 0 1px 0 rgba(255,255,255,.92);
-      text-shadow: 0 1px 2px rgba(255,255,255,.90);
+      text-shadow: none;
     }
-    .btn.ghost:hover { border-color: rgba(255,255,255,.96); background: rgba(255,255,255,.15); }
+    .btn.ghost:hover { border-color: rgba(255,255,255,.96); background: rgba(88,158,190,.43); }
     .btn.block { width: 100%; }
     .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .button-row .btn { flex: 1 1 130px; }
@@ -256,8 +259,8 @@
     .step.active { color: var(--cyan-deep); }
     .step.active::after, .step.done::after { background: var(--cyan); }
     .step.active .step-number, .step.done .step-number {
-      color: #fff; background: linear-gradient(135deg, rgba(22,141,161,.25), rgba(40,184,204,.18));
-      text-shadow: 0 1px 4px rgba(10,70,82,.55);
+      color: #15343c; background: rgba(40,184,204,.44);
+      text-shadow: none;
     }
     .register-step[hidden] { display: none; }
     .summary-list { margin: 0 0 22px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.055); }
@@ -270,19 +273,24 @@
     .status-badge.rejected, .status-badge.disabled { background: #fde9e8; color: #984341; }
     .success-box { padding: 22px; border: 1px solid rgba(215,255,237,.72); border-radius: 16px; background: rgba(240,250,245,.065); line-height: 1.8; backdrop-filter: blur(2px); }
 
-    /* 登录与注册页使用和主站一致的按压、单次回弹。 */
+    /* 登录与注册页使用更短的按压、单次回弹，完整过程约 0.28 秒。 */
     :is(button, a.btn, .home-link) { transform-origin: center; will-change: transform; }
-    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(2px) scale(.93) !important; transition-duration: .08s !important; }
-    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both !important; }
+    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(1px) scale(.95) !important; transition-duration: .055s !important; }
+    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both !important; }
     @keyframes auth-control-single-rebound {
-      0% { transform: translateY(2px) scale(.93); }
-      58% { transform: translateY(-2px) scale(1.075); }
+      0% { transform: translateY(1px) scale(.95); }
+      56% { transform: translateY(-1px) scale(1.055); }
       100% { transform: none; }
+    }
+    /* 松手后短暂加深按钮颜色，随后恢复；步骤指示器会持续保留 active 颜色。 */
+    :is(button, a.btn, .home-link).control-bounce-release:not(.active) {
+      background-color: rgba(38,157,178,.62) !important;
+      border-color: rgba(30,135,158,.62) !important;
     }
 
     /*
        点击释放的白光不是描边圆环，而是由三个偏心光团叠成的不规则扩散。
-       它会在 0.72 秒内像白色染料一样散开，随后由 JavaScript 自动删除。
+       它会在约 0.42 秒内散开，保留光感但不再拖慢按钮反馈。
     */
     .harmony-light-bloom {
       --bloom-size: 96px;
@@ -296,7 +304,7 @@
         radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
         radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
       filter: blur(1.8px); mix-blend-mode: screen;
-      animation: auth-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+      animation: auth-light-diffuse .42s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,
     .harmony-light-bloom::after {
@@ -307,8 +315,8 @@
     .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
     @keyframes auth-light-diffuse {
       0% { opacity: .94; transform: translate(-50%, -50%) scale(.16) rotate(-5deg); }
-      48% { opacity: .57; transform: translate(-50%, -50%) scale(1.55) rotate(5deg); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(3.1, 2.75) rotate(9deg); filter: blur(7px); }
+      46% { opacity: .50; transform: translate(-50%, -50%) scale(1.34) rotate(5deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(2.55, 2.25) rotate(9deg); filter: blur(6px); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -512,7 +520,7 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    /* 在实际点击点创建一次不规则白光；动画结束后节点会自动销毁。 */
+    /* 在实际点击点创建一次短促的不规则柔光；动画结束后节点会自动销毁。 */
     function emitHarmonyLightBloom(control, point = null) {
       if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const rect = control.getBoundingClientRect();
@@ -528,7 +536,7 @@
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 900);
+      window.setTimeout(() => bloom.remove(), 560);
     }
 
     /* 所有静态和后续动态生成的按钮统一播放单次回弹与白光扩散。 */
@@ -547,7 +555,7 @@
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 320);
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
@@ -583,7 +591,8 @@
         const destination = new URL(link.href, location.href);
         if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
         event.preventDefault();
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 360);
+        /* 140ms 足够看清按压反馈，同时不会产生“点了却迟迟不跳转”的感觉。 */
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 140);
       });
     }
 

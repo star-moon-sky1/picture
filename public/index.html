@@ -68,6 +68,8 @@
       --font-display: "Yuanti SC", "YouYuan", ui-rounded, "Arial Rounded MT Bold", "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
       --font-reading: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
       --font-code: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      /* 登录、注册和需要明确状态的按钮使用黑体，避免浅色照片上出现细字发虚。 */
+      --font-hei: "Heiti SC", "SimHei", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
 
       /*
          纯玻璃控件的统一参数
@@ -152,23 +154,25 @@
     .brand { display: flex; align-items: center; gap: 13px; margin-bottom: 28px; }
 
     /* =========================================================
-       03. 头像按钮与单次回弹刷新动画
+       03. 头像按钮与完整果冻刷新动画
        ---------------------------------------------------------
        尺寸：修改 .avatar-refresh 的 width/height。
-       动画强度：修改 @keyframes avatar-single-rebound 中的 scale。
+       动画强度：修改 @keyframes avatar-jelly-refresh 中的 scale。
        点击后的刷新逻辑在文件底部搜索“头像点击刷新”。
        ========================================================= */
     .avatar-refresh {
-      width: 66px; height: 66px; flex: 0 0 66px; padding: 4px;
-      border: 3px solid transparent; border-radius: 50%; overflow: visible;
+      width: 66px; height: 66px; flex: 0 0 66px; padding: 5px;
+      border: 0; border-radius: 50%; overflow: visible;
       /*
-         头像只使用一条连续渐变玻璃边：蓝色自然过渡到侧栏的浅青白色。
-         padding-box 是透明玻璃内面，border-box 是唯一的渐变外缘；这里没有
-         额外的 box-shadow 圆环，因此不会再出现“一圈套一圈”。
+         头像边缘按半径由内向外变化：紧贴照片的一侧是淡蓝色，越接近外缘
+         越接近侧边栏的浅青背景。它不是绕圆周变化的 conic-gradient，也没有
+         额外套圈，所以视觉上是一整条连续、向外淡出的渐变玻璃边。
       */
-      background:
-        linear-gradient(145deg, rgba(255,255,255,.08), rgba(255,255,255,.012)) padding-box,
-        conic-gradient(from 215deg, rgba(119,161,205,.96), rgba(49,191,200,.72), rgba(239,249,249,.72), rgba(119,161,205,.96)) border-box;
+      background: radial-gradient(circle,
+        rgba(184,220,237,.98) 0 80%,
+        rgba(196,226,238,.91) 85%,
+        rgba(220,239,241,.66) 93%,
+        rgba(242,248,246,.18) 100%);
       box-shadow:
         0 10px 24px rgba(44,88,104,.16),
         inset 0 1px 0 rgba(255,255,255,.88),
@@ -185,17 +189,23 @@
     }
     .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
     /*
-       头像只回弹一次：先按压，再越过原尺寸一次，最后直接停在原位。
-       0.92 秒保留了柔软感，同时取消之前来回振荡的多次果冻形变。
+       恢复上一版 1.18 秒头像果冻：压扁、拉长并逐级收束。头像是刷新入口，
+       因而保留完整果冻过程；普通按钮仍只进行一次快速回弹，两者互不影响。
     */
-    .avatar-refresh.jelly { animation: avatar-single-rebound .92s cubic-bezier(.16,.82,.24,1) both; }
+    .avatar-refresh.jelly { animation: avatar-jelly-refresh 1.18s cubic-bezier(.22,.72,.22,1) both; }
     .avatar {
       width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none;
       border: 0; border-radius: 50%;
     }
-    @keyframes avatar-single-rebound {
-      0%   { transform: translateY(5px) scale(.88,.82) rotate(-3deg); }
-      58%  { transform: translateY(-5px) scale(1.13,.97) rotate(2deg); }
+    @keyframes avatar-jelly-refresh {
+      0%   { transform: translateY(0) scale(1,1) rotate(0); }
+      11%  { transform: translateY(7px) scale(1.25,.75) rotate(-6deg); }
+      24%  { transform: translateY(-11px) scale(.82,1.25) rotate(7deg); }
+      38%  { transform: translateY(3px) scale(1.17,.86) rotate(-5deg); }
+      52%  { transform: translateY(-5px) scale(.90,1.14) rotate(4deg); }
+      66%  { transform: translateY(2px) scale(1.09,.93) rotate(-2.5deg); }
+      79%  { transform: translateY(-2px) scale(.965,1.06) rotate(1.5deg); }
+      90%  { transform: translateY(1px) scale(1.025,.985) rotate(-.6deg); }
       100% { transform: translateY(0) scale(1,1) rotate(0); }
     }
 
@@ -210,8 +220,8 @@
     .nav { display: grid; gap: 7px; }
     .nav button {
       width: 100%; border: 1px solid rgba(255,255,255,.72); border-radius: 15px;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.15), rgba(255,255,255,.012) 46%, rgba(119,161,205,.045));
+      /* 默认也带一层极淡蓝色，不再使用容易和背景融为一体的白色渐变。 */
+      background: rgba(112,164,188,.12);
       padding: 11px 13px; text-align: left; cursor: pointer; color: var(--ink);
       display: flex; align-items: center; gap: 11px; white-space: nowrap;
       box-shadow: var(--glass-shadow);
@@ -224,7 +234,7 @@
     .nav-label { min-width: 0; }
     .nav button:hover {
       color: var(--ink); border-color: rgba(255,255,255,.88);
-      background: linear-gradient(145deg, rgba(255,255,255,.18), rgba(187,222,226,.07));
+      background: rgba(98,171,190,.23);
       box-shadow: var(--glass-shadow); transform: translateY(-1px);
     }
     .nav button:active { transform: translateY(1px) scale(.975); }
@@ -236,8 +246,8 @@
     }
     .nav button.active {
       color: #17343d; border-color: rgba(255,255,255,.82);
-      background:
-        linear-gradient(135deg, rgba(119,161,205,.20), rgba(255,255,255,.035) 48%, rgba(49,191,200,.13));
+      /* 当前板块保持清晰的蓝青色，导航完成后不会重新变回透明白色。 */
+      background: rgba(75,166,185,.40);
       box-shadow: 0 11px 25px rgba(74,129,146,.17), inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(45,110,126,.17);
     }
     .sidebar-note { margin-top: auto; padding-top: 24px; font-size: .76rem; line-height: 1.65; color: var(--muted); }
@@ -363,17 +373,16 @@
       isolation: isolate;
       overflow: hidden;
       border: 1px solid rgba(255,255,255,.72);
-      color: #fff;
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.19), rgba(42,105,126,.22) 45%, rgba(49,191,200,.18));
+      color: #15343c;
+      background: rgba(54,158,177,.48);
       box-shadow:
         0 9px 23px rgba(43,102,119,.16),
         inset 0 1px 0 rgba(255,255,255,.90),
         inset 1px 0 0 rgba(255,255,255,.25),
         inset 0 -1px 0 rgba(20,74,91,.22);
-      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
-      backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
-      text-shadow: 0 1px 5px rgba(18,71,85,.55);
+      -webkit-backdrop-filter: blur(13px) saturate(1.16);
+      backdrop-filter: blur(13px) saturate(1.16);
+      text-shadow: none;
       transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease,
                   background .18s ease, opacity .18s ease;
     }
@@ -381,17 +390,17 @@
     dialog .btn.ghost {
       color: var(--ink);
       border-color: var(--glass-line);
-      background: linear-gradient(145deg, rgba(255,255,255,.15), rgba(222,239,241,.035));
+      background: rgba(109,158,194,.24);
       box-shadow: var(--glass-shadow);
-      text-shadow: 0 1px 2px rgba(255,255,255,.86);
+      text-shadow: none;
     }
     .app-shell .btn.light,
     dialog .btn.light {
       color: #356f98;
       border-color: rgba(255,255,255,.82);
-      background: linear-gradient(145deg, rgba(255,255,255,.18), rgba(224,241,242,.045));
+      background: rgba(92,174,188,.22);
       box-shadow: var(--glass-shadow);
-      text-shadow: 0 1px 2px rgba(255,255,255,.88);
+      text-shadow: none;
     }
     .app-shell .btn:hover,
     dialog .btn:hover {
@@ -418,16 +427,21 @@
       will-change: transform;
     }
     :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).is-control-pressed {
-      transform: translateY(2px) scale(.93) !important;
-      transition-duration: .08s !important;
+      transform: translateY(1px) scale(.95) !important;
+      transition-duration: .055s !important;
     }
     :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-bounce-release {
-      animation: control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both !important;
+      animation: control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both !important;
     }
     @keyframes control-single-rebound {
-      0%   { transform: translateY(2px) scale(.93); }
-      58%  { transform: translateY(-2px) scale(1.075); }
+      0%   { transform: translateY(1px) scale(.95); }
+      56%  { transform: translateY(-1px) scale(1.055); }
       100% { transform: none; }
+    }
+    /* 普通按钮松手后的短暂蓝青反馈；选中型按钮则由 .active 长久保留颜色。 */
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"]).control-bounce-release:not(.active):not(.danger) {
+      background-color: rgba(54,158,177,.34) !important;
+      border-color: rgba(47,142,162,.56) !important;
     }
 
     /*
@@ -453,7 +467,7 @@
         radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
       filter: blur(1.8px);
       mix-blend-mode: screen;
-      animation: harmony-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+      animation: harmony-light-diffuse .42s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,
     .harmony-light-bloom::after {
@@ -464,8 +478,8 @@
     .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
     @keyframes harmony-light-diffuse {
       0%   { opacity: .94; transform: translate(-50%, -50%) scale(.16) rotate(-5deg); }
-      48%  { opacity: .57; transform: translate(-50%, -50%) scale(1.55) rotate(5deg); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(3.1, 2.75) rotate(9deg); filter: blur(7px); }
+      46%  { opacity: .50; transform: translate(-50%, -50%) scale(1.34) rotate(5deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(2.55, 2.25) rotate(9deg); filter: blur(6px); }
     }
 
     /* =========================================================
@@ -556,8 +570,9 @@
         inset 0 -1px 0 rgba(43,85,101,.22);
       -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
       backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
-      animation: entry-rise .45s ease both;
-      text-shadow: 0 1px 2px rgba(255,255,255,.92), 0 0 9px rgba(255,255,255,.46);
+      animation: entry-rise .38s ease both;
+      /* 浅色照片上不使用白色文字光晕，避免字形边缘发虚。 */
+      text-shadow: none;
     }
     .entry-card::before {
       content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
@@ -577,7 +592,7 @@
       padding: 12px 14px; background: rgba(255,255,255,.075); color: var(--ink); outline: none;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.91), inset 0 -1px 0 rgba(44,85,99,.12), 0 7px 18px rgba(31,62,72,.07);
       -webkit-backdrop-filter: blur(2px) saturate(1.08); backdrop-filter: blur(2px) saturate(1.08);
-      text-shadow: 0 1px 2px rgba(255,255,255,.90);
+      text-shadow: none;
     }
     .entry-field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(49,191,200,.12); }
     .entry-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .82rem; }
@@ -587,20 +602,26 @@
     .entry-link:hover { text-decoration: underline; }
     .entry-primary {
       width: 100%; min-height: 46px; border: 1px solid rgba(255,255,255,.72);
-      background:
-        linear-gradient(135deg, rgba(255,255,255,.19), rgba(39,143,156,.23) 46%, rgba(49,191,200,.18));
+      color: #12343c;
+      background: rgba(49,169,184,.56);
       box-shadow: 0 12px 27px rgba(26,112,127,.22), inset 0 1px 0 rgba(255,255,255,.90), inset 0 -1px 0 rgba(17,91,105,.20);
-      -webkit-backdrop-filter: blur(2px) saturate(1.14) contrast(1.04); backdrop-filter: blur(2px) saturate(1.14) contrast(1.04);
+      -webkit-backdrop-filter: blur(15px) saturate(1.16); backdrop-filter: blur(15px) saturate(1.16);
     }
     .entry-actions .btn.ghost {
-      border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.065);
+      color: #17343d; border-color: rgba(255,255,255,.78); background: rgba(105,158,195,.32);
       box-shadow: 0 9px 22px rgba(31,62,72,.09), inset 0 1px 0 rgba(255,255,255,.90);
-      -webkit-backdrop-filter: blur(2px) saturate(1.1); backdrop-filter: blur(2px) saturate(1.1);
+      -webkit-backdrop-filter: blur(15px) saturate(1.14); backdrop-filter: blur(15px) saturate(1.14);
     }
     .entry-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: .78rem; }
     .entry-divider::before, .entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
     .entry-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .entry-actions .btn { width: 100%; min-height: 44px; }
+    .entry-actions .btn,
+    .entry-primary {
+      width: 100%; min-height: 44px;
+      font-family: var(--font-hei);
+      font-weight: 800;
+      text-shadow: none;
+    }
     .entry-note { margin: 14px 0 0; color: var(--muted); text-align: center; font-size: .78rem; line-height: 1.55; }
 
     /* =========================================================
@@ -666,17 +687,17 @@
     .tab-button {
       position: relative; isolation: isolate; overflow: hidden;
       border: 1px solid var(--glass-line); padding: 9px 15px; border-radius: 999px; cursor: pointer;
-      color: var(--ink); background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(223,239,241,.025));
+      color: var(--ink); background: rgba(107,162,188,.14);
       box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 6px 16px rgba(32,48,55,.06);
       -webkit-backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
       backdrop-filter: blur(2px) saturate(1.1) contrast(1.03);
       transition: background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
     }
-    .tab-button:hover { background: var(--glass-fill-hover); transform: translateY(-1px); box-shadow: var(--glass-shadow); }
+    .tab-button:hover { background: rgba(93,170,189,.24); transform: translateY(-1px); box-shadow: var(--glass-shadow); }
     .tab-button:active { transform: translateY(1px) scale(.97); }
     .tab-button.active {
       color: #17343d; border-color: rgba(255,255,255,.86);
-      background: linear-gradient(135deg, rgba(119,161,205,.21), rgba(255,255,255,.03) 48%, rgba(49,191,200,.14));
+      background: rgba(75,166,185,.40);
       box-shadow: 0 9px 22px rgba(74,129,146,.18), inset 0 1px 0 rgba(255,255,255,.9);
     }
 
@@ -1030,7 +1051,7 @@
       }
       .sidebar-toggle { margin: 0 0 8px; }
       .brand { margin: 0 0 10px; gap: 9px; }
-      .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; border-width: 2px; }
+      .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; padding: 3px; }
       .brand h2 { font-size: 1rem; }
       .brand small, .sidebar-note { display: none; }
       .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
@@ -2267,7 +2288,7 @@
     }
 
     /*
-     * 在控件中心或实际点击点生成一次不规则白光。光团只存在 0.72 秒，
+     * 在控件中心或实际点击点生成一次不规则白光。光团只存在约 0.42 秒，
      * animationend 后立即从 DOM 删除，不会累积节点或影响按钮的点击区域。
      */
     function emitHarmonyLightBloom(control, point = null) {
@@ -2285,7 +2306,7 @@
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 900);
+      window.setTimeout(() => bloom.remove(), 560);
     }
 
     /*
@@ -2308,7 +2329,7 @@
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 320);
       };
 
       document.addEventListener("pointerdown", (event) => {
@@ -2341,8 +2362,8 @@
       });
 
       /*
-       * 站内链接延迟 360ms 再跳转，让离开当前文档前能看见单次回弹和
-       * 白光扩散的主要阶段。
+       * 站内链接只延迟 140ms，让按压反馈刚刚出现就开始跳转，不再让用户
+       * 感到按钮“按住不动”。动画剩余部分可与页面切换自然重叠。
        * 下载链接、外部链接、组合键新开窗口以及已被业务逻辑阻止的点击不延迟。
        */
       document.addEventListener("click", (event) => {
@@ -2352,7 +2373,7 @@
         const destination = new URL(link.href, location.href);
         if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
         event.preventDefault();
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 360);
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 140);
       });
     }
 
@@ -2417,8 +2438,8 @@
 
     /*
      * 头像点击刷新：
-     * 1. 添加 jelly 类播放一次较慢、清晰的回弹，并同时释放白光；
-     * 2. 等 0.92 秒回弹完整播放后，再加时间戳并 replace 强制刷新；
+     * 1. 恢复上一版 1.18 秒完整果冻形变，并同时释放白光；
+     * 2. 等动画完整播放后，再加时间戳并 replace 强制刷新；
      * 3. 新页面启动时会自动移除这个临时参数。
      */
     document.getElementById("avatar-refresh").addEventListener("click", (event) => {
@@ -2441,7 +2462,7 @@
         window.location.replace(refreshUrl.toString());
       };
       avatar.addEventListener("animationend", reloadAfterJelly, { once: true });
-      window.setTimeout(reloadAfterJelly, 1_100);
+      window.setTimeout(reloadAfterJelly, 1_350);
     });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));

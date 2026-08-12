@@ -21,6 +21,7 @@
       --font-display:"Yuanti SC","YouYuan",ui-rounded,"SF Pro Rounded","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
       --font-reading:"HarmonyOS Sans SC","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
       --font-code:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+      --font-hei:"Heiti SC","SimHei","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
     }
     html,body { margin:0; min-height:100%; font-family:var(--font-ui); font-weight:520; color:var(--ink); background:#f4f7f6; }
     button,input,textarea,select { font:inherit; }
@@ -53,11 +54,12 @@
     .login-card input { background:rgba(255,255,255,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 0 rgba(49,90,105,.10); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
     input:focus,textarea:focus,select:focus { border-color:var(--cyan); box-shadow:0 0 0 3px rgba(49,191,200,.12); }
     textarea { min-height:110px; resize:vertical; }
-    .btn { border:1px solid rgba(255,255,255,.66); border-radius:13px; padding:10px 14px; color:white; background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(33,127,186,.25) 46%,rgba(49,191,200,.19)); box-shadow:0 8px 20px rgba(33,127,186,.18),inset 0 1px 0 rgba(255,255,255,.88),inset 0 -1px 0 rgba(12,81,98,.22); backdrop-filter:blur(2px) saturate(114%) contrast(104%); -webkit-backdrop-filter:blur(2px) saturate(114%) contrast(104%); display:inline-flex; align-items:center; justify-content:center; gap:6px; text-shadow:0 1px 5px rgba(10,58,73,.55); }
+    /* 有色半透明毛玻璃按钮：使用单一底色，避免明显白色渐变冲淡层次。 */
+    .btn { border:1px solid rgba(255,255,255,.66); border-radius:13px; padding:10px 14px; color:#15343c; background:rgba(49,159,179,.52); box-shadow:0 8px 20px rgba(33,127,186,.18),inset 0 1px 0 rgba(255,255,255,.88),inset 0 -1px 0 rgba(12,81,98,.22); backdrop-filter:blur(13px) saturate(116%); -webkit-backdrop-filter:blur(13px) saturate(116%); display:inline-flex; align-items:center; justify-content:center; gap:6px; font-family:var(--font-hei); font-weight:800; text-shadow:none; }
     .btn:hover { filter:brightness(.96); }
-    .btn.secondary { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(215,241,243,.04)); text-shadow:0 1px 2px rgba(255,255,255,.9); }
-    .btn.ghost { color:var(--ink); background:linear-gradient(145deg,rgba(255,255,255,.14),rgba(255,255,255,.018)); border:1px solid rgba(255,255,255,.8); text-shadow:0 1px 2px rgba(255,255,255,.9); }
-    .btn.danger { background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(189,79,69,.31) 48%,rgba(221,114,104,.22)); }
+    .btn.secondary { color:var(--ink); background:rgba(105,158,194,.25); text-shadow:none; }
+    .btn.ghost { color:var(--ink); background:rgba(105,158,194,.21); border:1px solid rgba(255,255,255,.8); text-shadow:none; }
+    .btn.danger { color:#57231f; background:rgba(189,79,69,.36); }
     .btn.small { padding:7px 10px; font-size:.8rem; }
     .notice { min-height:20px; color:var(--danger); font-size:.82rem; margin-top:10px; }
 
@@ -71,9 +73,9 @@
     .side h1 { margin:0 10px 5px; font-family:var(--font-display); font-size:1.45rem; font-weight:880; letter-spacing:-.03em; }
     .side small { margin:0 10px 24px; color:#a9c0c6; }
     .side-nav { display:grid; gap:6px; }
-    .side-nav button { border:1px solid rgba(255,255,255,.20); border-radius:12px; padding:10px 12px; text-align:left; color:#d4e1e4; background:linear-gradient(145deg,rgba(255,255,255,.10),rgba(255,255,255,.012)); box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.08); backdrop-filter:blur(2px) saturate(112%); -webkit-backdrop-filter:blur(2px) saturate(112%); }
-    .side-nav button:hover { background:rgba(255,255,255,.08); color:white; }
-    .side-nav button.active { border-color:rgba(255,255,255,.48); background:linear-gradient(135deg,rgba(255,255,255,.15),rgba(33,127,186,.25) 48%,rgba(49,191,200,.18)); color:white; box-shadow:0 8px 20px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.11); }
+    .side-nav button { border:1px solid rgba(255,255,255,.20); border-radius:12px; padding:10px 12px; text-align:left; color:#d4e1e4; background:rgba(104,164,184,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.08); backdrop-filter:blur(11px) saturate(114%); -webkit-backdrop-filter:blur(11px) saturate(114%); }
+    .side-nav button:hover { background:rgba(71,168,186,.22); color:white; }
+    .side-nav button.active { border-color:rgba(255,255,255,.48); background:rgba(49,175,191,.42); color:white; box-shadow:0 8px 20px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.11); }
     .side-footer { margin-top:auto; display:grid; gap:8px; }
     .side-footer a { color:#bcd0d4; text-decoration:none; padding:8px 10px; font-size:.84rem; }
 
@@ -87,7 +89,7 @@
     .topbar h2 { margin:0; font-family:var(--font-display); font-size:clamp(1.8rem,4vw,2.8rem); font-weight:880; letter-spacing:-.045em; }
     .topbar p { margin:5px 0 0; color:var(--muted); }
     .view { display:none; }
-    .view.active { display:block; animation:studio-view-arrive .52s .06s cubic-bezier(.2,.82,.22,1) both; }
+    .view.active { display:block; animation:studio-view-arrive .34s cubic-bezier(.2,.82,.22,1) both; }
     .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:12px; }
     .stat { padding:20px; background:white; border:1px solid var(--line); border-radius:15px; }
     .stat span { color:var(--muted); font-size:.76rem; }
@@ -186,13 +188,15 @@
       transform:translateZ(0) scale(1); transform-origin:center;
       transition:transform .16s cubic-bezier(.2,.75,.25,1),filter .2s ease,box-shadow .2s ease;
     }
-    .is-control-pressed { transform:translateY(1px) scale(.955) !important; filter:brightness(.97); }
-    .control-bounce-release { animation:control-single-rebound .48s cubic-bezier(.16,.82,.24,1) both; }
+    .is-control-pressed { transform:translateY(1px) scale(.96) !important; filter:brightness(.97); transition-duration:.055s !important; }
+    .control-bounce-release { animation:control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both; }
     @keyframes control-single-rebound {
-      0% { transform:translateY(1px) scale(.955,.95); }
-      58% { transform:translateY(-2px) scale(1.075); }
+      0% { transform:translateY(1px) scale(.96,.955); }
+      56% { transform:translateY(-1px) scale(1.055); }
       100% { transform:scale(1); }
     }
+    /* 松手时短暂加深蓝青底；导航与列表的 active 状态则持续保留颜色。 */
+    :is(button,.btn,.side-footer a,.list-item).control-bounce-release:not(.active):not(.danger) { background-color:rgba(49,159,179,.38) !important; border-color:rgba(45,145,164,.52) !important; }
     /* 白光由多个偏心径向渐变构成，因此扩散时不会显示成规则圆环。 */
     .harmony-light-bloom {
       --bloom-size:96px; position:fixed; z-index:2147483646; left:0; top:0;
@@ -201,15 +205,15 @@
       transform:translate(-50%,-50%) scale(.16);
       background:radial-gradient(ellipse at 42% 48%,rgba(255,255,255,.92) 0 7%,rgba(255,255,255,.43) 24%,rgba(255,255,255,.11) 48%,transparent 72%),radial-gradient(ellipse at 66% 35%,rgba(255,255,255,.54),transparent 52%),radial-gradient(ellipse at 29% 70%,rgba(229,251,255,.44),transparent 54%);
       filter:blur(1.8px); mix-blend-mode:screen;
-      animation:studio-light-diffuse .72s cubic-bezier(.12,.68,.18,1) both;
+      animation:studio-light-diffuse .42s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,.harmony-light-bloom::after { content:""; position:absolute; pointer-events:none; border-radius:inherit; background:radial-gradient(ellipse,rgba(255,255,255,.52),transparent 68%); }
     .harmony-light-bloom::before { inset:18% -13% 4% 31%; transform:rotate(23deg); }
     .harmony-light-bloom::after { inset:35% 29% -12% -9%; transform:rotate(-31deg); }
     @keyframes studio-light-diffuse {
       0% { opacity:.94; transform:translate(-50%,-50%) scale(.16) rotate(-5deg); }
-      48% { opacity:.57; transform:translate(-50%,-50%) scale(1.55) rotate(5deg); }
-      100% { opacity:0; transform:translate(-50%,-50%) scale(3.1,2.75) rotate(9deg); filter:blur(7px); }
+      46% { opacity:.50; transform:translate(-50%,-50%) scale(1.34) rotate(5deg); }
+      100% { opacity:0; transform:translate(-50%,-50%) scale(2.55,2.25) rotate(9deg); filter:blur(6px); }
     }
     @keyframes studio-view-arrive {
       from { opacity:0; transform:translateY(13px) scale(.988); filter:blur(5px); }
@@ -481,7 +485,7 @@
     function clear(node){node.replaceChildren()}
     function button(text,className="btn small ghost"){const b=document.createElement("button");b.type="button";b.className=className;b.textContent=text;return b}
 
-    /* 在实际点击点创建不规则白光；0.72 秒后自动删除临时节点。 */
+    /* 在实际点击点创建短促的不规则柔光；约 0.42 秒后自动删除临时节点。 */
     function emitHarmonyLightBloom(control, point = null) {
       if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const rect = control.getBoundingClientRect();
@@ -497,7 +501,7 @@
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 900);
+      window.setTimeout(() => bloom.remove(), 560);
     }
 
     /*
@@ -519,7 +523,7 @@
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 520);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 320);
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
