@@ -379,7 +379,8 @@
             remember: document.getElementById("login-remember").checked,
           }),
         });
-        localStorage.setItem("xyj_entry_mode", "account");
+        // 账号身份由服务器的安全 Cookie 判断，不再依赖浏览器中的永久入口标记。
+        localStorage.removeItem("xyj_entry_mode");
         location.replace(nextPath);
       } catch (error) {
         setNotice(notice, error.message, "error");
@@ -387,7 +388,12 @@
     });
 
     document.getElementById("guest-entry").addEventListener("click", () => {
-      localStorage.setItem("xyj_entry_mode", "guest");
+      /*
+       * 从独立登录页进入游客模式时，只传递一次“已选择游客”的信号。
+       * 根页面读取后立即删除，因此游客刷新网站会重新看到全屏身份入口。
+       */
+      localStorage.removeItem("xyj_entry_mode");
+      sessionStorage.setItem("xyj_guest_handoff", "1");
       location.replace(nextPath);
     });
 
@@ -468,7 +474,7 @@
             inviteCode: document.getElementById("register-invite").value,
           }),
         });
-        localStorage.setItem("xyj_entry_mode", "account");
+        localStorage.removeItem("xyj_entry_mode");
         document.getElementById("panel-register").innerHTML = `
           <header class="card-head"><p class="eyebrow">APPLICATION SENT</p><h2>申请已提交</h2></header>
           <div class="success-box"><strong>账号目前处于待审核状态。</strong><p>QQ机器人已经尝试通知站长。审核期间你仍然可以浏览公开内容；审核通过后即可使用AI助手并查看个人空间完整内容。</p></div>
@@ -555,7 +561,8 @@
     document.getElementById("signed-logout").addEventListener("click", async () => {
       await api("/api/auth/logout", { method: "POST" }).catch(() => null);
       localStorage.removeItem("xyj_entry_mode");
-      location.replace("/login");
+      sessionStorage.removeItem("xyj_guest_handoff");
+      location.replace("/");
     });
 
     updateRegisterStep(1);

@@ -57,6 +57,8 @@
     }
 
     html, body { margin: 0; min-height: 100%; }
+    /* hidden 属性用于在“入口界面”和“网站主体”之间切换，必须高于普通布局样式。 */
+    [hidden] { display: none !important; }
     body {
       font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
       color: var(--ink);
@@ -230,6 +232,77 @@
     .btn.light { background: white; color: var(--blue); }
     .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
     .btn.small { padding: 7px 12px; font-size: .84rem; }
+
+    /* =========================================================
+       05. 网站第一层：全屏登录 / 游客入口
+       ---------------------------------------------------------
+       这是访问根网址后首先显示的界面。账号登录成功或主动选择
+       “游客浏览”以后，JavaScript 才会隐藏本层并显示 .app-shell。
+       ========================================================= */
+    .entry-screen {
+      position: relative;
+      isolation: isolate;
+      height: 100dvh;
+      min-height: 100dvh;
+      padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+      display: grid;
+      place-items: center;
+      overflow: auto;
+      background:
+        radial-gradient(circle at 12% 16%, rgba(49,191,200,.24), transparent 30%),
+        radial-gradient(circle at 88% 84%, rgba(119,161,205,.25), transparent 32%),
+        linear-gradient(145deg, #f7f3eb 0%, #eef7f6 52%, #f5f1e9 100%);
+    }
+    .entry-screen::before,
+    .entry-screen::after {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      border: 1px solid rgba(32,48,55,.08);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .entry-screen::before { width: 360px; height: 360px; left: -150px; top: -150px; box-shadow: 0 0 0 54px rgba(32,48,55,.025), 0 0 0 108px rgba(32,48,55,.018); }
+    .entry-screen::after { width: 260px; height: 260px; right: -95px; bottom: -105px; box-shadow: 0 0 0 44px rgba(49,191,200,.035); }
+    .entry-card {
+      width: min(430px, 100%);
+      padding: clamp(27px, 5vw, 42px);
+      border: 1px solid rgba(32,48,55,.11);
+      border-radius: 26px;
+      background: rgba(255,255,255,.88);
+      box-shadow: 0 28px 75px rgba(28,52,60,.15);
+      backdrop-filter: blur(18px);
+      animation: entry-rise .45s ease both;
+    }
+    @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
+    .entry-brand { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .entry-mark {
+      width: 48px; height: 48px; display: grid; place-items: center;
+      border-radius: 50%; color: white; font: 700 1.25rem/1 Georgia, serif;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      box-shadow: 0 0 0 5px rgba(49,191,200,.11);
+    }
+    .entry-brand strong { font: 700 1.35rem/1.1 Georgia, "Songti SC", serif; letter-spacing: .08em; }
+    .entry-card h1 { margin-top: 28px; text-align: center; font-size: clamp(2rem, 7vw, 3.15rem); }
+    .entry-subtitle { margin: 10px auto 25px; text-align: center; color: var(--muted); line-height: 1.7; }
+    .entry-form { display: grid; gap: 15px; }
+    .entry-field { display: grid; gap: 7px; color: var(--ink); font-size: .88rem; font-weight: 700; }
+    .entry-field input {
+      width: 100%; border: 1px solid var(--line); border-radius: 13px;
+      padding: 12px 14px; background: rgba(255,255,255,.84); color: var(--ink); outline: none;
+    }
+    .entry-field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(49,191,200,.12); }
+    .entry-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .82rem; }
+    .entry-options label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+    .entry-options input { accent-color: var(--cyan); }
+    .entry-link { color: #258e99; text-decoration: none; font-weight: 700; }
+    .entry-link:hover { text-decoration: underline; }
+    .entry-primary { width: 100%; min-height: 46px; background: linear-gradient(135deg, #278f9c, #31bfc8); }
+    .entry-divider { display: flex; align-items: center; gap: 12px; margin: 21px 0; color: var(--muted); font-size: .78rem; }
+    .entry-divider::before, .entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+    .entry-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .entry-actions .btn { width: 100%; min-height: 44px; }
+    .entry-note { margin: 20px 0 0; color: var(--muted); text-align: center; font-size: .78rem; line-height: 1.65; }
 
     /* =========================================================
        05. 首页版本更新记录
@@ -431,6 +504,9 @@
        ========================================================= */
     @media (max-width: 760px) {
       body { overflow: hidden; }
+      .entry-screen { padding-inline: 14px; }
+      .entry-card { border-radius: 22px; }
+      .entry-actions { grid-template-columns: 1fr; }
       .app-shell { flex-direction: column; }
       .sidebar {
         width: 100%; height: auto; flex: 0 0 auto; padding: max(12px, env(safe-area-inset-top)) 13px 10px;
@@ -469,9 +545,45 @@
 </head>
 <body>
   <!-- ========================================================
+       第一层全屏入口
+       --------------------------------------------------------
+       未登录访问根网址时只显示本层。这里可以直接登录，也可以选择
+       游客浏览；注册和找回密码流程继续复用 /login 页面。
+       ======================================================== -->
+  <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title">
+    <div class="entry-card">
+      <div class="entry-brand"><span class="entry-mark" aria-hidden="true">月</span><strong>星月集</strong></div>
+      <h1 id="entry-title">欢迎来到星月集</h1>
+      <p class="entry-subtitle">登录账号以使用完整功能，或者选择游客身份浏览公开内容。</p>
+
+      <form id="entry-login-form" class="entry-form">
+        <label class="entry-field" for="entry-username">登录用户名
+          <input id="entry-username" required autocomplete="username" placeholder="输入登录用户名">
+        </label>
+        <label class="entry-field" for="entry-password">密码
+          <input id="entry-password" type="password" required autocomplete="current-password" placeholder="输入密码">
+        </label>
+        <div class="entry-options">
+          <label><input id="entry-remember" type="checkbox">保持登录30天</label>
+          <a class="entry-link" href="/login?mode=forgot&amp;next=/">忘记密码？</a>
+        </div>
+        <button class="btn entry-primary" type="submit">登录并进入网站</button>
+        <p id="entry-notice" class="notice" aria-live="polite"></p>
+      </form>
+
+      <div class="entry-divider">或者</div>
+      <div class="entry-actions">
+        <button id="entry-guest" class="btn ghost" type="button">以游客身份浏览</button>
+        <a class="btn ghost" href="/login?mode=register&amp;next=/">注册账号</a>
+      </div>
+      <p class="entry-note">游客可以浏览公开页面；AI 助手和个人空间完整内容仅向审核通过的账号开放。</p>
+    </div>
+  </section>
+
+  <!-- ========================================================
        页面外壳：侧边导航 + 右侧主内容
        ======================================================== -->
-  <div class="app-shell">
+  <div class="app-shell" hidden>
     <!-- 左侧栏：头像、站名、页面导航和后台入口。 -->
     <aside class="sidebar">
       <!-- 左上角收起/展开按钮；状态会保存在当前浏览器的 localStorage。 -->
@@ -717,6 +829,7 @@
     const state = {
       data: null,
       auth: { authenticated: false, user: null },
+      siteLoaded: false,
       currentContent: null,
       comments: [],
       activePortfolioSection: null,
@@ -725,6 +838,22 @@
       pdfDownloading: false,
       pdfLibraryPromise: null,
     };
+
+    // 两层界面的根节点：入口层和真正的网站主体永远只显示其中一个。
+    const entryScreen = document.getElementById("entry-screen");
+    const appShell = document.querySelector(".app-shell");
+
+    function showEntryScreen() {
+      entryScreen.hidden = false;
+      appShell.hidden = true;
+      document.body.classList.add("entry-active");
+    }
+
+    function showWebsiteShell() {
+      entryScreen.hidden = true;
+      appShell.hidden = false;
+      document.body.classList.remove("entry-active");
+    }
 
     /* 如果本次访问由头像强制刷新产生，清理地址栏中的临时防缓存参数。 */
     const initialUrl = new URL(window.location.href);
@@ -1288,29 +1417,43 @@
       return answer;
     }
 
-    /* ---------- 12. 页面启动：先确认身份，再读取对应权限的数据。 ---------- */
-    async function boot() {
+    /* ---------- 12. 页面启动：先显示身份入口，通过后才读取并展示网站。 ---------- */
+    async function boot({ enterAsGuest = false } = {}) {
       try {
         const session = await api("/api/auth/session").catch(() => ({ authenticated: false, user: null }));
         state.auth = session;
-        if (session.authenticated) localStorage.setItem("xyj_entry_mode", "account");
-        if (!session.authenticated && !localStorage.getItem("xyj_entry_mode")) {
-          const next = encodeURIComponent(`${location.pathname}${location.hash || ""}`);
-          location.replace(`/login?next=${next}`);
+
+        /*
+         * 旧版曾把游客选择永久写入 localStorage，导致以后访问都会绕过登录首页。
+         * 新版主动清除该标记，并且不持久保存根页面的游客选择：游客刷新后会重新
+         * 回到全屏入口；账号只要服务器会话仍有效，就可以直接进入网站。
+         */
+        localStorage.removeItem("xyj_entry_mode");
+        const guestHandoff = sessionStorage.getItem("xyj_guest_handoff") === "1";
+        if (guestHandoff) sessionStorage.removeItem("xyj_guest_handoff");
+
+        if (!session.authenticated && !enterAsGuest && !guestHandoff) {
+          showEntryScreen();
           return;
         }
+
+        showWebsiteShell();
+        if (state.siteLoaded) { renderAccount(); return; }
         const [bootstrap, feedbackData] = await Promise.all([
           api("/api/bootstrap"),
           api("/api/feedback").catch(() => ({ feedback: [] })),
         ]);
         state.data = bootstrap;
         state.publicFeedback = feedbackData.feedback || [];
+        state.siteLoaded = true;
         applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback(); renderAccount();
 
         // 登录或注册后可通过 /#ai-helper、/#account 回到原本想打开的功能。
         const target = location.hash.slice(1);
         if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target);
       } catch (error) {
+        // 已经选择身份后即使数据读取失败，也显示网站主体中的明确错误提示。
+        showWebsiteShell();
         document.getElementById("timeline").replaceChildren(empty(`网站数据暂时无法读取：${error.message}`));
         document.getElementById("timeline-history").replaceChildren(empty("数据服务尚未完成部署。"));
         document.getElementById("portfolio-panel-host").replaceChildren(empty("数据服务尚未完成部署。"));
@@ -1319,9 +1462,42 @@
     }
 
     /* ---------- 13. 事件绑定：导航、侧栏、头像和弹窗。 ---------- */
+    document.getElementById("entry-login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = event.currentTarget.querySelector("button[type='submit']");
+      const notice = document.getElementById("entry-notice");
+      submit.disabled = true;
+      notice.textContent = "正在登录…";
+      try {
+        await api("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("entry-username").value,
+            password: document.getElementById("entry-password").value,
+            remember: document.getElementById("entry-remember").checked,
+          }),
+        });
+        notice.textContent = "登录成功，正在进入网站…";
+        await boot();
+      } catch (error) {
+        notice.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    document.getElementById("entry-guest").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const notice = document.getElementById("entry-notice");
+      button.disabled = true;
+      notice.textContent = "正在以游客身份进入…";
+      try { await boot({ enterAsGuest: true }); }
+      finally { button.disabled = false; }
+    });
+
     document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.section)));
 
-    const appShell = document.querySelector(".app-shell");
     const sidebarToggle = document.getElementById("sidebar-toggle");
     function setSidebarCollapsed(collapsed) {
       appShell.classList.toggle("sidebar-collapsed", collapsed);
@@ -1405,7 +1581,8 @@
     document.getElementById("account-logout").addEventListener("click", async () => {
       await api("/api/auth/logout", { method: "POST" }).catch(() => null);
       localStorage.removeItem("xyj_entry_mode");
-      location.replace("/login");
+      sessionStorage.removeItem("xyj_guest_handoff");
+      location.replace("/");
     });
 
     document.getElementById("auth-login-link").addEventListener("click", (event) => {
