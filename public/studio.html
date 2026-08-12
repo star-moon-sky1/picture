@@ -197,14 +197,16 @@
         <button data-view="users">用户与审核</button>
         <button data-view="settings">网站设置</button>
       </nav>
-      <div class="side-footer"><a href="/" target="_blank">打开网站 ↗</a><button id="logout" class="btn small danger">退出登录</button></div>
+      <!-- 在当前标签页返回公开网站；不要添加 target="_blank"，否则浏览器会另开标签页或窗口。 -->
+      <div class="side-footer"><a href="/">打开网站</a><button id="logout" class="btn small danger">退出登录</button></div>
     </aside>
 
     <!-- 后台右侧工作区域。 -->
     <main class="workspace">
       <header class="topbar">
         <div><h2 id="view-title">概览</h2><p id="view-desc">查看网站目前的内容状态。</p></div>
-        <a class="btn ghost" href="/" target="_blank">预览网站</a>
+        <!-- 顶部预览入口同样使用当前标签页，保持两个返回入口的行为一致。 -->
+        <a class="btn ghost" href="/">预览网站</a>
       </header>
 
       <!-- ==================== 后台概览 ==================== -->
