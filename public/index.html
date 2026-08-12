@@ -315,7 +315,8 @@
       animation: entry-rise .45s ease both;
     }
     @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
-    .entry-card h1 { margin: 0; text-align: center; font-size: clamp(2rem, 7vw, 3.15rem); }
+    /* 七个汉字在电脑和手机卡片中都保持同一行，避免最后一个“集”单独换行。 */
+    .entry-card h1 { margin: 0; text-align: center; font-size: clamp(1.85rem, 6vw, 2.55rem); white-space: nowrap; }
     .entry-subtitle { margin: 10px auto 25px; text-align: center; color: var(--muted); line-height: 1.7; }
     .entry-form { display: grid; gap: 15px; }
     .entry-field { display: grid; gap: 7px; color: var(--ink); font-size: .88rem; font-weight: 700; }
