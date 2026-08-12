@@ -20,6 +20,8 @@ const PASSWORD_RESET_TTL_SECONDS = 60 * 60 * 24;
 const PASSWORD_HASH_ITERATIONS = 50_000;
 const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+// 预览件由站长后台在浏览器中压缩为 WebP；限制体积可避免伪装文件占用 R2。
+const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
 
 /*
  * QQ 官方机器人通知配置：
@@ -256,6 +258,7 @@ async function initializeSchema(env) {
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY,
       object_key TEXT NOT NULL UNIQUE,
+      preview_object_key TEXT,
       filename TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       size_bytes INTEGER NOT NULL,
@@ -427,6 +430,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "albums", "section_id", "TEXT");
   await ensureColumn(env, "media", "section_id", "TEXT");
   await ensureColumn(env, "media", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "media", "preview_object_key", "TEXT");
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await env.DB.batch([
@@ -589,9 +593,16 @@ function rows(result) {
 }
 
 function mediaDto(row) {
+  // R2 对象键只供 Worker 内部使用，公开接口和后台页面都只拿受控媒体地址。
+  const { object_key: _objectKey, preview_object_key: previewObjectKey, ...safeRow } = row;
+  const previewVersion = encodeURIComponent(String(safeRow.updated_at || safeRow.created_at || "1"));
   return {
-    ...row,
-    url: `/media/${row.id}`,
+    ...safeRow,
+    hasPreview: Boolean(previewObjectKey),
+    // url/previewUrl 均为压缩预览；originalUrl 只用于明确需要原片的后台操作。
+    url: `/media/${row.id}?preview=1&v=${previewVersion}`,
+    previewUrl: `/media/${row.id}?preview=1&v=${previewVersion}`,
+    originalUrl: `/media/${row.id}`,
     downloadUrl: `/media/${row.id}?download=1`,
   };
 }
@@ -627,7 +638,8 @@ async function publicBootstrap(request, env) {
       FROM albums ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, filename, mime_type, size_bytes, section_id, album_id, caption, kind, created_at
+      SELECT id, filename, mime_type, size_bytes, section_id, album_id, caption, kind,
+             visibility, preview_object_key, created_at, updated_at
       FROM media
       WHERE kind = 'photo'
       ORDER BY created_at DESC
@@ -641,7 +653,10 @@ async function publicBootstrap(request, env) {
     visibleSectionIds.has(item.section_id) && (fullAccess || item.visibility !== "member")
   ));
   const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
-  const visibleMedia = rows(media).filter((item) => visibleSectionIds.has(item.section_id));
+  // 照片自身和所属大板块都必须公开；避免登录用户的入口背景误用会员照片。
+  const visibleMedia = rows(media).filter((item) => (
+    visibleSectionIds.has(item.section_id) && (fullAccess || item.visibility !== "member")
+  ));
 
   return {
     settings,
@@ -650,7 +665,7 @@ async function publicBootstrap(request, env) {
     sections: visibleSections,
     content: visibleContent.map((item) => ({
       ...item,
-      coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}` : null,
+      coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}?preview=1` : null,
     })),
     albums: visibleAlbums,
     media: visibleMedia.map(mediaDto),
@@ -671,7 +686,7 @@ async function getPublicContent(request, env, id) {
   }
   return {
     ...item,
-    coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}` : null,
+    coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}?preview=1` : null,
   };
 }
 
@@ -1952,30 +1967,41 @@ async function askAiStream(request, env) {
 async function serveMedia(request, env, id) {
   if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
   const media = await env.DB.prepare(`
-    SELECT m.object_key, m.filename, m.mime_type, m.kind, m.visibility AS media_visibility,
-           s.visibility AS section_visibility
+    SELECT m.object_key, m.preview_object_key, m.filename, m.mime_type, m.kind,
+           m.visibility AS media_visibility, s.visibility AS section_visibility
     FROM media m LEFT JOIN portfolio_sections s ON s.id = m.section_id
     WHERE m.id = ?
   `).bind(id).first();
   if (!media) throw new HttpError(404, "图片不存在");
-  if (media.section_visibility === "member" || media.media_visibility === "member") {
+  const isProtected = media.section_visibility === "member" || media.media_visibility === "member";
+  if (isProtected && !(await isAdmin(request, env))) {
     await requireApprovedUser(request, env);
   }
 
-  const object = await env.BUCKET.get(media.object_key);
+  const params = new URL(request.url).searchParams;
+  const wantsDownload = params.get("download") === "1";
+  // 下载操作永远使用 object_key；只有普通展示请求才允许读取 WebP 预览件。
+  const servesPreview = !wantsDownload && params.get("preview") === "1" && Boolean(media.preview_object_key);
+  const object = await env.BUCKET.get(servesPreview ? media.preview_object_key : media.object_key);
   if (!object) throw new HttpError(404, "图片文件不存在");
   const headers = new Headers(SECURITY_HEADERS);
   object.writeHttpMetadata(headers);
-  headers.set("Content-Type", media.mime_type);
+  headers.set("Content-Type", servesPreview ? "image/webp" : media.mime_type);
   headers.set("ETag", object.httpEtag);
   headers.set(
     "Cache-Control",
-    media.section_visibility === "member" || media.media_visibility === "member"
+    isProtected
       ? "private, no-store"
-      : "public, max-age=31536000, immutable",
+      // 旧照片尚无预览时只短暂缓存原片；补建成功后相同地址会很快切换到 WebP。
+      : (params.get("preview") === "1" && !servesPreview
+        ? "public, max-age=300"
+        : "public, max-age=31536000, immutable"),
   );
-  const disposition = new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline";
-  headers.set("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(media.filename)}`);
+  const previewName = media.filename.replace(/\.[^.]+$/, "") + "-preview.webp";
+  headers.set(
+    "Content-Disposition",
+    `${wantsDownload ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(servesPreview ? previewName : media.filename)}`,
+  );
   return new Response(object.body, { headers });
 }
 
@@ -2088,9 +2114,14 @@ async function adminSections(request, env, id) {
     const sectionContent = rows(await env.DB.prepare("SELECT id FROM content WHERE section_id = ?").bind(id).all());
     for (const item of sectionContent) await deleteContentCascade(env, item.id);
 
-    const sectionMedia = rows(await env.DB.prepare("SELECT id, object_key FROM media WHERE section_id = ?").bind(id).all());
+    const sectionMedia = rows(await env.DB.prepare(
+      "SELECT id, object_key, preview_object_key FROM media WHERE section_id = ?",
+    ).bind(id).all());
     if (env.BUCKET) {
-      for (const item of sectionMedia) await env.BUCKET.delete(item.object_key);
+      for (const item of sectionMedia) {
+        await env.BUCKET.delete(item.object_key);
+        if (item.preview_object_key) await env.BUCKET.delete(item.preview_object_key);
+      }
     }
     const statements = [];
     for (const item of sectionMedia) {
@@ -2274,9 +2305,19 @@ async function uploadMedia(request, env) {
   if (!allowedTypes.has(file.type)) throw new HttpError(400, "仅支持 JPG、PNG、WebP、GIF 或 AVIF 图片");
   if (file.size > MAX_IMAGE_BYTES) throw new HttpError(413, "单张图片不能超过 20MB");
 
+  /*
+   * 预览件由后台页面从同一原图生成。Worker 只接受 WebP，并独立限制体积；
+   * 即使请求被手工篡改，也不能把任意大文件写入 previews/ 目录。
+   */
+  const preview = form.get("preview");
+  const previewFile = preview instanceof File && preview.size ? preview : null;
+  if (previewFile && previewFile.type !== "image/webp") throw new HttpError(400, "压缩预览必须是 WebP 图片");
+  if (previewFile && previewFile.size > MAX_PREVIEW_BYTES) throw new HttpError(413, "压缩预览不能超过 4MB");
+
   const id = crypto.randomUUID();
   const safeName = file.name.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(-120) || `${id}.img`;
   const objectKey = `media/${new Date().toISOString().slice(0, 10)}/${id}-${safeName}`;
+  const previewObjectKey = previewFile ? `previews/${new Date().toISOString().slice(0, 10)}/${id}.webp` : null;
   const albumId = validId(form.get("albumId")) ? String(form.get("albumId")) : null;
   const caption = clampText(form.get("caption"), 500);
   const kind = form.get("kind") === "inline" ? "inline" : "photo";
@@ -2293,19 +2334,74 @@ async function uploadMedia(request, env) {
   }
   const timestamp = nowIso();
 
-  await env.BUCKET.put(objectKey, file.stream(), {
-    httpMetadata: { contentType: file.type },
-    customMetadata: { originalName: file.name, kind },
+  try {
+    // 原片永远单独保存，下载接口不会被预览图替代。
+    await env.BUCKET.put(objectKey, file.stream(), {
+      httpMetadata: { contentType: file.type },
+      customMetadata: { originalName: file.name, kind },
+    });
+    if (previewFile) {
+      await env.BUCKET.put(previewObjectKey, previewFile.stream(), {
+        httpMetadata: { contentType: "image/webp" },
+        customMetadata: { originalMediaId: id, purpose: "preview" },
+      });
+    }
+    await env.DB.prepare(`
+      INSERT INTO media
+        (id, object_key, preview_object_key, filename, mime_type, size_bytes, section_id,
+         album_id, caption, kind, visibility, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, objectKey, previewObjectKey, file.name.slice(0, 240), file.type, file.size,
+      sectionId, albumId, caption, kind, visibility, timestamp, timestamp,
+    ).run();
+  } catch (error) {
+    // 任一步失败都清理已经写入的对象，避免 R2 留下数据库无法管理的孤立文件。
+    await env.BUCKET.delete(objectKey).catch(() => null);
+    if (previewObjectKey) await env.BUCKET.delete(previewObjectKey).catch(() => null);
+    throw error;
+  }
+  return mediaDto({
+    id, preview_object_key: previewObjectKey, filename: file.name, mime_type: file.type,
+    size_bytes: file.size, section_id: sectionId, album_id: albumId, caption, kind,
+    visibility, created_at: timestamp, updated_at: timestamp,
   });
-  await env.DB.prepare(`
-    INSERT INTO media
-      (id, object_key, filename, mime_type, size_bytes, section_id, album_id, caption, kind, visibility, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, objectKey, file.name.slice(0, 240), file.type, file.size, sectionId, albumId, caption, kind, visibility, timestamp, timestamp).run();
-  return mediaDto({ id, filename: file.name, mime_type: file.type, size_bytes: file.size, section_id: sectionId, album_id: albumId, caption, kind, visibility, created_at: timestamp });
 }
 
-async function adminMedia(request, env, id) {
+/* 给升级前已有的 R2 原片补建压缩预览，不会重新写入或覆盖原片。 */
+async function updateMediaPreview(request, env, id) {
+  if (request.method !== "POST") throw new HttpError(405, "不支持的请求方法");
+  if (!validId(id)) throw new HttpError(400, "图片 ID 错误");
+  const media = await env.DB.prepare("SELECT * FROM media WHERE id = ?").bind(id).first();
+  if (!media) throw new HttpError(404, "图片不存在");
+
+  const form = await request.formData();
+  const preview = form.get("preview");
+  if (!(preview instanceof File) || !preview.size) throw new HttpError(400, "缺少压缩预览");
+  if (preview.type !== "image/webp") throw new HttpError(400, "压缩预览必须是 WebP 图片");
+  if (preview.size > MAX_PREVIEW_BYTES) throw new HttpError(413, "压缩预览不能超过 4MB");
+
+  const previewObjectKey = `previews/${new Date().toISOString().slice(0, 10)}/${id}-${crypto.randomUUID()}.webp`;
+  await env.BUCKET.put(previewObjectKey, preview.stream(), {
+    httpMetadata: { contentType: "image/webp" },
+    customMetadata: { originalMediaId: id, purpose: "preview" },
+  });
+  const timestamp = nowIso();
+  try {
+    await env.DB.prepare("UPDATE media SET preview_object_key = ?, updated_at = ? WHERE id = ?")
+      .bind(previewObjectKey, timestamp, id).run();
+  } catch (error) {
+    await env.BUCKET.delete(previewObjectKey).catch(() => null);
+    throw error;
+  }
+  if (media.preview_object_key && media.preview_object_key !== previewObjectKey) {
+    await env.BUCKET.delete(media.preview_object_key).catch(() => null);
+  }
+  return mediaDto({ ...media, preview_object_key: previewObjectKey, updated_at: timestamp });
+}
+
+async function adminMedia(request, env, id, action = "") {
+  if (action === "preview") return updateMediaPreview(request, env, id);
   if (request.method === "GET") {
     return rows(await env.DB.prepare(`
       SELECT m.*, a.name AS album_name
@@ -2335,8 +2431,13 @@ async function adminMedia(request, env, id) {
     return { id };
   }
   if (request.method === "DELETE") {
-    const media = await env.DB.prepare("SELECT object_key FROM media WHERE id = ?").bind(id).first();
-    if (media) await env.BUCKET.delete(media.object_key);
+    const media = await env.DB.prepare(
+      "SELECT object_key, preview_object_key FROM media WHERE id = ?",
+    ).bind(id).first();
+    if (media) {
+      await env.BUCKET.delete(media.object_key);
+      if (media.preview_object_key) await env.BUCKET.delete(media.preview_object_key);
+    }
     await env.DB.batch([
       env.DB.prepare("UPDATE content SET cover_media_id = NULL WHERE cover_media_id = ?").bind(id),
       env.DB.prepare("DELETE FROM media WHERE id = ?").bind(id),
@@ -2592,6 +2693,7 @@ async function handleAdmin(request, env, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   const resource = parts[2] || "";
   const id = parts[3] || "";
+  const action = parts[4] || "";
 
   if (resource === "session" && request.method === "GET") return { authenticated: true };
   if (resource === "logout" && request.method === "POST") {
@@ -2602,7 +2704,7 @@ async function handleAdmin(request, env, url) {
   if (resource === "content") return adminContent(request, env, id);
   if (resource === "changelogs") return adminChangelogs(request, env, id);
   if (resource === "albums") return adminAlbums(request, env, id);
-  if (resource === "media") return adminMedia(request, env, id);
+  if (resource === "media") return adminMedia(request, env, id, action);
   if (resource === "comments") return adminComments(request, env, id);
   if (resource === "feedback") return adminFeedback(request, env, id);
   if (resource === "users") return adminUsers(request, env, id);
