@@ -253,7 +253,7 @@
 
     /*
      * 登录入口的照片背景：图片地址只来自 /api/bootstrap 返回的公开照片。
-     * 两个 img 图层交替淡入淡出；上方浅色遮罩保证表单文字始终清晰。
+     * 背景改为纯底色加均匀浅遮罩，不再叠加圆形或渐变花纹，也不再模糊照片。
      */
     .entry-photo-background {
       position: fixed;
@@ -261,18 +261,14 @@
       z-index: 0;
       overflow: hidden;
       pointer-events: none;
-      background:
-        radial-gradient(circle at 12% 16%, rgba(49,191,200,.24), transparent 30%),
-        radial-gradient(circle at 88% 84%, rgba(119,161,205,.25), transparent 32%),
-        linear-gradient(145deg, #f7f3eb 0%, #eef7f6 52%, #f5f1e9 100%);
+      background: #f3f2ed;
     }
     .entry-photo-background::after {
       content: "";
       position: absolute;
       inset: 0;
       z-index: 2;
-      background: linear-gradient(145deg, rgba(247,243,235,.64), rgba(238,247,246,.58), rgba(245,241,233,.66));
-      backdrop-filter: blur(1.5px);
+      background: rgba(246,244,238,.28);
     }
     .entry-photo-background img {
       position: absolute;
@@ -282,26 +278,22 @@
       height: 106%;
       object-fit: cover;
       opacity: 0;
-      filter: saturate(.82) contrast(.94);
-      transform: scale(1.01);
-      transition: opacity 1.4s ease, transform 8s linear;
+      filter: saturate(.96) contrast(1.02);
+      transform: scale(1.035);
+      transition: opacity 1.3s ease;
     }
-    .entry-photo-background img.active { opacity: .52; transform: scale(1.075); }
+    .entry-photo-background img.active { opacity: .68; animation: entry-bg-zoom 8s ease-out both; }
+    .entry-photo-background img.active.effect-pan-left { animation-name: entry-bg-pan-left; }
+    .entry-photo-background img.active.effect-pan-right { animation-name: entry-bg-pan-right; }
+    .entry-photo-background img.active.effect-rise { animation-name: entry-bg-rise; }
+    @keyframes entry-bg-zoom { from { transform: scale(1.025); } to { transform: scale(1.085); } }
+    @keyframes entry-bg-pan-left { from { transform: scale(1.09) translateX(1.8%); } to { transform: scale(1.09) translateX(-1.8%); } }
+    @keyframes entry-bg-pan-right { from { transform: scale(1.09) translateX(-1.8%); } to { transform: scale(1.09) translateX(1.8%); } }
+    @keyframes entry-bg-rise { from { transform: scale(1.085) translateY(1.5%); } to { transform: scale(1.085) translateY(-1.5%); } }
     @media (prefers-reduced-motion: reduce) {
-      .entry-photo-background img { transition: opacity .25s ease; transform: none; }
+      .entry-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
       .entry-photo-background img.active { transform: none; }
     }
-    .entry-screen::before,
-    .entry-screen::after {
-      content: "";
-      position: fixed;
-      z-index: 1;
-      border: 1px solid rgba(32,48,55,.08);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-    .entry-screen::before { width: 360px; height: 360px; left: -150px; top: -150px; box-shadow: 0 0 0 54px rgba(32,48,55,.025), 0 0 0 108px rgba(32,48,55,.018); }
-    .entry-screen::after { width: 260px; height: 260px; right: -95px; bottom: -105px; box-shadow: 0 0 0 44px rgba(49,191,200,.035); }
     .entry-card {
       position: relative;
       z-index: 3;
@@ -398,7 +390,6 @@
     .photo-card { position: relative; aspect-ratio: 4/3; border-radius: 15px; overflow: hidden; background: var(--sand); cursor: zoom-in; }
     .photo-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
     .photo-card:hover img { transform: scale(1.045); }
-    .photo-card .caption { position: absolute; inset: auto 0 0; padding: 30px 12px 10px; color: white; background: linear-gradient(transparent, rgba(0,0,0,.64)); font-size: .82rem; }
 
     /* 留言与反馈：公开留言卡片和游客提交表单。 */
     .feedback-layout { margin-top: 30px; display: grid; grid-template-columns: minmax(260px,.8fr) minmax(0,1.2fr); gap: 18px; }
@@ -940,12 +931,12 @@
     /* 背景候选必须同时满足：照片公开、所属个人空间大板块也公开。 */
     function publicPhotoUrls(data) {
       const publicSectionIds = new Set(
-        (data?.sections || []).filter((section) => section.visibility !== "member").map((section) => section.id),
+        (data?.sections || []).filter((section) => section.visibility === "public").map((section) => section.id),
       );
       return [...new Set((data?.media || [])
         .filter((photo) => (
           photo.kind === "photo"
-          && photo.visibility !== "member"
+          && photo.visibility === "public"
           && publicSectionIds.has(photo.section_id)
         ))
         .map((photo) => photo.previewUrl || photo.url)
@@ -954,7 +945,8 @@
 
     /*
      * 只创建两个 img 节点并轮换 src，避免一次性下载个人空间的全部照片。
-     * 用户开启“减少动态效果”时只显示第一张，不启动定时轮播。
+     * 每次换图依次使用放大、左右平移和上移四种效果；开启“减少动态效果”
+     * 时只显示第一张，不启动定时轮播。
      */
     function startEntryPhotoBackground(urls) {
       const host = document.getElementById("entry-photo-background");
@@ -965,6 +957,9 @@
       frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
       let activeFrame = 0;
       let photoIndex = 0;
+      const effects = ["effect-zoom", "effect-pan-left", "effect-pan-right", "effect-rise"];
+      let effectIndex = 0;
+      frames[0].classList.add(effects[effectIndex]);
       frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
       frames[0].src = urls[0];
 
@@ -975,6 +970,9 @@
         const incoming = frames[nextFrame];
         const outgoing = frames[activeFrame];
         incoming.onload = () => {
+          effectIndex = (effectIndex + 1) % effects.length;
+          incoming.classList.remove("active", ...effects);
+          incoming.classList.add(effects[effectIndex]);
           incoming.classList.add("active");
           outgoing.classList.remove("active");
           activeFrame = nextFrame;
@@ -1140,9 +1138,10 @@
       if (!photos.length) { gallery.append(empty("这个图片板块还没有上传图片。")); return; }
       photos.forEach((photo) => {
         const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
-        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || photo.filename;
-        const caption = document.createElement("div"); caption.className = "caption"; caption.textContent = photo.caption || photo.filename;
-        card.append(image, caption); card.addEventListener("click", () => openImage(photo));
+        card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
+        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || "照片";
+        // 图片网格只展示照片本身，不显示上传文件名、文件编号或说明文字。
+        card.append(image); card.addEventListener("click", () => openImage(photo));
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo); }); gallery.append(card);
       });
     }
@@ -1178,7 +1177,8 @@
     function openImage(photo) {
       // 弹窗仍展示压缩预览；只有“下载原片”链接会请求 download=1。
       document.getElementById("image-preview").src = photo.previewUrl || photo.url;
-      document.getElementById("image-caption").textContent = photo.caption || photo.filename;
+      // 弹窗可以显示站长填写的说明，但绝不再用内部文件名或文件编号兜底。
+      document.getElementById("image-caption").textContent = photo.caption || "";
       document.getElementById("image-download").href = photo.downloadUrl;
       document.getElementById("image-dialog").showModal();
     }

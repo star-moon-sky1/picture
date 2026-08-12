@@ -54,8 +54,9 @@
     }
 
     /*
-     * 全屏照片背景使用两个图层交叉淡入淡出。浅色遮罩让表单始终可读，
-     * 如果公开照片为空或接口不可用，则只显示原来的米白色底色。
+     * 全屏照片背景使用两个图层交替显示。这里只保留一层均匀浅色遮罩，
+     * 不再叠加渐变花纹或模糊滤镜，让公开照片尽量保持原有颜色和细节。
+     * 如果公开照片为空或接口不可用，则显示纯米白色底色。
      */
     .auth-photo-background {
       position: fixed;
@@ -63,15 +64,14 @@
       z-index: 0;
       overflow: hidden;
       pointer-events: none;
-      background: linear-gradient(145deg, #f7f3eb, #edf7f6 52%, #f5f1e9);
+      background: #f3f2ed;
     }
     .auth-photo-background::after {
       content: "";
       position: absolute;
       inset: 0;
       z-index: 2;
-      background: linear-gradient(145deg, rgba(247,243,235,.64), rgba(238,247,246,.58), rgba(245,241,233,.67));
-      backdrop-filter: blur(1.5px);
+      background: rgba(246,244,238,.28);
     }
     .auth-photo-background img {
       position: absolute;
@@ -81,13 +81,20 @@
       height: 106%;
       object-fit: cover;
       opacity: 0;
-      filter: saturate(.82) contrast(.94);
-      transform: scale(1.01);
-      transition: opacity 1.4s ease, transform 8s linear;
+      filter: saturate(.96) contrast(1.02);
+      transform: scale(1.035);
+      transition: opacity 1.3s ease;
     }
-    .auth-photo-background img.active { opacity: .52; transform: scale(1.075); }
+    .auth-photo-background img.active { opacity: .68; animation: auth-bg-zoom 8s ease-out both; }
+    .auth-photo-background img.active.effect-pan-left { animation-name: auth-bg-pan-left; }
+    .auth-photo-background img.active.effect-pan-right { animation-name: auth-bg-pan-right; }
+    .auth-photo-background img.active.effect-rise { animation-name: auth-bg-rise; }
+    @keyframes auth-bg-zoom { from { transform: scale(1.025); } to { transform: scale(1.085); } }
+    @keyframes auth-bg-pan-left { from { transform: scale(1.09) translateX(1.8%); } to { transform: scale(1.09) translateX(-1.8%); } }
+    @keyframes auth-bg-pan-right { from { transform: scale(1.09) translateX(-1.8%); } to { transform: scale(1.09) translateX(1.8%); } }
+    @keyframes auth-bg-rise { from { transform: scale(1.085) translateY(1.5%); } to { transform: scale(1.085) translateY(-1.5%); } }
     @media (prefers-reduced-motion: reduce) {
-      .auth-photo-background img { transition: opacity .25s ease; transform: none; }
+      .auth-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
       .auth-photo-background img.active { transform: none; }
     }
 
@@ -357,19 +364,22 @@
     /* 背景只采用“公开大板块中的公开照片”，即使当前浏览器已经登录也不例外。 */
     function publicPhotoUrls(data) {
       const publicSectionIds = new Set(
-        (data?.sections || []).filter((section) => section.visibility !== "member").map((section) => section.id),
+        (data?.sections || []).filter((section) => section.visibility === "public").map((section) => section.id),
       );
       return [...new Set((data?.media || [])
         .filter((photo) => (
           photo.kind === "photo"
-          && photo.visibility !== "member"
+          && photo.visibility === "public"
           && publicSectionIds.has(photo.section_id)
         ))
         .map((photo) => photo.previewUrl || photo.url)
         .filter(Boolean))];
     }
 
-    /* 两个 img 节点循环复用，避免一次加载所有公开原片。 */
+    /*
+     * 两个 img 节点循环复用，避免一次加载所有公开照片。
+     * 每次换图依次使用放大、左右平移和上移四种效果，避免轮播过于单一。
+     */
     function startPhotoBackground(urls) {
       const host = document.getElementById("auth-photo-background");
       if (!host || !urls.length) return;
@@ -377,6 +387,9 @@
       frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
       let activeFrame = 0;
       let photoIndex = 0;
+      const effects = ["effect-zoom", "effect-pan-left", "effect-pan-right", "effect-rise"];
+      let effectIndex = 0;
+      frames[0].classList.add(effects[effectIndex]);
       frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
       frames[0].src = urls[0];
 
@@ -387,6 +400,9 @@
         const incoming = frames[nextFrame];
         const outgoing = frames[activeFrame];
         incoming.onload = () => {
+          effectIndex = (effectIndex + 1) % effects.length;
+          incoming.classList.remove("active", ...effects);
+          incoming.classList.add(effects[effectIndex]);
           incoming.classList.add("active");
           outgoing.classList.remove("active");
           activeFrame = nextFrame;
