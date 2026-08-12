@@ -43,59 +43,59 @@
     /* ========================================================
        02. 页面双栏结构
        --------------------------------------------------------
-       桌面端左边展示网站简介，右边显示登录卡片；手机端自动
-       变成单栏，登录卡片始终完整可滚动，不会出现内容被截断。
+       桌面端左边只保留站点标识和返回首页入口，避免注册时出现
+       大段英文和介绍文字；右边专门承载登录、注册及找回密码。
+       手机端会把左栏压缩成一条简洁的顶部品牌栏。
        ======================================================== */
     .auth-page {
       min-height: 100dvh;
       display: grid;
-      grid-template-columns: minmax(290px, .85fr) minmax(480px, 1.15fr);
+      grid-template-columns: minmax(220px, 300px) minmax(480px, 1fr);
       align-items: stretch;
     }
     .brand-panel {
       position: relative;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: center;
+      align-items: center;
+      gap: 24px;
       overflow: hidden;
-      padding: clamp(32px, 5vw, 74px);
+      padding: 38px 26px;
       background: linear-gradient(145deg, #273337 0%, #1c2528 100%);
       color: #fff;
+      text-align: center;
     }
-    .brand-panel::before,
-    .brand-panel::after {
+    /* 仅保留一个很淡的装饰圆，不再让左栏承担复杂的视觉信息。 */
+    .brand-panel::before {
       content: "";
       position: absolute;
       border-radius: 50%;
       pointer-events: none;
+      width: 310px; height: 310px; left: -185px; top: -185px;
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 0 0 62px rgba(255,255,255,.022);
     }
-    .brand-panel::before {
-      width: 430px; height: 430px; left: -240px; top: -180px;
-      border: 1px solid rgba(255,255,255,.18);
-      box-shadow: 0 0 0 70px rgba(255,255,255,.035), 0 0 0 140px rgba(255,255,255,.025);
-    }
-    .brand-panel::after {
-      width: 320px; height: 320px; right: -180px; bottom: -170px;
-      background: rgba(40,184,204,.17);
-      filter: blur(4px);
-    }
-    .brand, .brand-copy, .brand-foot { position: relative; z-index: 1; }
-    .brand { display: flex; align-items: center; gap: 13px; font-weight: 800; letter-spacing: .08em; }
+    .brand, .brand-back { position: relative; z-index: 1; }
+    .brand { display: grid; justify-items: center; gap: 13px; }
     .brand-mark {
-      width: 44px; height: 44px; display: grid; place-items: center;
+      width: 58px; height: 58px; display: grid; place-items: center;
       border: 1px solid rgba(255,255,255,.34); border-radius: 50%;
-      color: #8ee8f1; font-family: Georgia, serif; font-size: 1.5rem;
+      color: #8ee8f1; font-family: Georgia, serif; font-size: 1.75rem;
     }
-    .brand-copy h1 {
-      margin: 0 0 17px;
-      max-width: 520px;
-      font-family: Georgia, "Songti SC", serif;
-      font-size: clamp(2.7rem, 6vw, 5.8rem);
-      line-height: .98;
-      font-weight: 500;
+    .brand-name {
+      display: grid;
+      gap: 6px;
+      font-weight: 800;
+      font-size: 1.38rem;
+      letter-spacing: .12em;
     }
-    .brand-copy p { max-width: 510px; margin: 0; color: rgba(255,255,255,.72); line-height: 1.9; }
-    .brand-foot { color: rgba(255,255,255,.48); font-size: .82rem; }
+    .brand-name small { color: rgba(255,255,255,.58); font-size: .78rem; font-weight: 500; letter-spacing: .08em; }
+    .brand-back {
+      color: rgba(255,255,255,.72); font-size: .84rem; font-weight: 700;
+      text-decoration: none; transition: color .18s, transform .18s;
+    }
+    .brand-back:hover { color: #fff; transform: translateX(-2px); }
 
     .card-side {
       min-width: 0;
@@ -197,11 +197,15 @@
 
     @media (max-width: 850px) {
       .auth-page { grid-template-columns: 1fr; }
-      .brand-panel { min-height: 240px; padding: 26px 22px; }
-      .brand-copy h1 { margin-top: 40px; font-size: 3.2rem; }
-      .brand-foot { display: none; }
+      .brand-panel {
+        min-height: auto; padding: 17px 20px; flex-direction: row;
+        justify-content: space-between; gap: 16px; text-align: left;
+      }
+      .brand { display: flex; justify-items: initial; gap: 10px; }
+      .brand-mark { width: 40px; height: 40px; font-size: 1.3rem; }
+      .brand-name { gap: 2px; font-size: 1.05rem; }
       .card-side { align-items: flex-start; padding: 18px 13px 44px; overflow: visible; }
-      .auth-card { margin-top: -32px; position: relative; z-index: 2; border-radius: 19px; }
+      .auth-card { position: relative; z-index: 2; border-radius: 19px; }
     }
     @media (max-width: 540px) {
       .auth-card { padding: 25px 18px; }
@@ -215,14 +219,13 @@
 </head>
 <body>
   <main class="auth-page">
-    <!-- 左侧品牌区域：只放网站介绍，不参与任何登录逻辑。 -->
+    <!-- 左侧品牌区域：只保留站点名称和返回入口，不参与任何登录逻辑。 -->
     <aside class="brand-panel">
-      <div class="brand"><span class="brand-mark">月</span><span>星月集</span></div>
-      <div class="brand-copy">
-        <h1>Welcome<br>back.</h1>
-        <p>选择游客身份即可浏览公开页面；审核通过的账号可以使用 AI 助手并查看个人空间的完整内容。</p>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">月</span>
+        <span class="brand-name">星月集<small>账号中心</small></span>
       </div>
-      <div class="brand-foot">XINGYUEJI · PERSONAL SPACE</div>
+      <a class="brand-back" href="/">← 返回网站首页</a>
     </aside>
 
     <section class="card-side">
