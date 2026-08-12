@@ -56,6 +56,20 @@
       --radius: 18px;
 
       /*
+         全站只使用三套正文风格和一套代码字体：
+         1. --font-ui：普通正文与表单，圆润、稍粗；
+         2. --font-display：标题与重点信息，更粗、更有层级；
+         3. --font-reading：文章和长段落，保持舒适行距；
+         4. --font-code：只供代码与链接编号使用。
+         ui-rounded / SF Pro Rounded 在苹果设备优先生效，Windows 会回退到
+         微软雅黑 UI，鸿蒙设备会优先使用 HarmonyOS Sans SC。
+      */
+      --font-ui: ui-rounded, "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --font-display: "Yuanti SC", "YouYuan", ui-rounded, "Arial Rounded MT Bold", "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --font-reading: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --font-code: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+      /*
          毛玻璃控件的统一参数
          ------------------------------------------------------
          --glass-fill：普通玻璃按钮的透明白色；数值越小越透明。
@@ -77,7 +91,8 @@
     /* hidden 属性用于在“入口界面”和“网站主体”之间切换，必须高于普通布局样式。 */
     [hidden] { display: none !important; }
     body {
-      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      font-family: var(--font-ui);
+      font-weight: 520;
       color: var(--ink);
       background:
         radial-gradient(circle at 80% 5%, rgba(49,191,200,.12), transparent 32%),
@@ -85,6 +100,7 @@
       overflow: hidden;
     }
     button, input, textarea, select { font: inherit; }
+    button, .btn, .tab-button { font-weight: 760; }
     button { color: inherit; }
     a { color: var(--blue); }
 
@@ -100,12 +116,17 @@
       flex: 0 0 250px;
       height: 100dvh;
       padding: 34px 22px 24px;
-      border-right: 1px solid rgba(255, 255, 255, .68);
-      /* 侧边栏本身作为第一层玻璃，按钮是浮在上面的第二层玻璃。 */
-      background: linear-gradient(155deg, rgba(255,255,255,.76), rgba(236,244,244,.54));
-      box-shadow: inset -1px 0 0 rgba(109, 139, 150, .08);
-      -webkit-backdrop-filter: blur(22px) saturate(1.18);
-      backdrop-filter: blur(22px) saturate(1.18);
+      border-right: 1px solid rgba(255, 255, 255, .76);
+      /*
+         侧边栏是半透明的毛玻璃底板：透明底色保留页面环境光，较大的 blur
+         负责柔化背后内容，细白边和内高光模拟 iOS 液态玻璃的折射边缘。
+      */
+      background:
+        radial-gradient(circle at 4% 0%, rgba(255,255,255,.78), transparent 38%),
+        linear-gradient(155deg, rgba(245,251,251,.48), rgba(224,239,241,.30));
+      box-shadow: inset -1px 0 0 rgba(255,255,255,.62), 10px 0 34px rgba(49,86,98,.07);
+      -webkit-backdrop-filter: blur(30px) saturate(1.32);
+      backdrop-filter: blur(30px) saturate(1.32);
       display: flex;
       flex-direction: column;
       overflow-y: auto;
@@ -137,25 +158,43 @@
        点击后的刷新逻辑在文件底部搜索“头像点击刷新”。
        ========================================================= */
     .avatar-refresh {
-      width: 62px; height: 62px; flex: 0 0 62px; padding: 0;
-      border: 3px solid var(--paper); border-radius: 50%; overflow: hidden;
-      background: linear-gradient(135deg, var(--blue), var(--cyan));
-      box-shadow: 0 0 0 2px var(--cyan); cursor: pointer;
+      width: 66px; height: 66px; flex: 0 0 66px; padding: 4px;
+      border: 1px solid rgba(255,255,255,.82); border-radius: 50%; overflow: visible;
+      /* 外圈与侧边栏同色，图片自身的 border 构成内侧蓝色圈。 */
+      background: linear-gradient(145deg, rgba(245,251,251,.55), rgba(222,239,241,.28));
+      box-shadow:
+        0 0 0 3px rgba(236,246,246,.56),
+        0 10px 24px rgba(44,88,104,.16),
+        inset 0 1px 0 rgba(255,255,255,.92);
+      -webkit-backdrop-filter: blur(18px) saturate(1.28);
+      backdrop-filter: blur(18px) saturate(1.28);
+      cursor: pointer;
       transition: transform .1s cubic-bezier(.175,.885,.32,1.275), box-shadow .1s ease;
       user-select: none; -webkit-tap-highlight-color: transparent;
     }
-    .avatar-refresh:hover { transform: scale(1.09) rotate(-4deg); box-shadow: 0 0 0 4px rgba(49,191,200,.28); }
+    .avatar-refresh:hover {
+      transform: scale(1.09) rotate(-4deg);
+      box-shadow: 0 0 0 4px rgba(236,246,246,.72), 0 14px 30px rgba(44,88,104,.22), inset 0 1px 0 #fff;
+    }
     .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
-    .avatar-refresh.jelly { animation: avatar-jelly-refresh .5s cubic-bezier(.36,.07,.19,.97); }
-    .avatar { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
+    /*
+       头像使用 1.18 秒的慢速果冻回弹。时间太短时，压扁与拉长会连成一次
+       普通缩放；现在每次形变都保留更长时间，触感会明显得多。
+    */
+    .avatar-refresh.jelly { animation: avatar-jelly-refresh 1.18s cubic-bezier(.22,.72,.22,1) both; }
+    .avatar {
+      width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none;
+      border: 3px solid var(--blue); border-radius: 50%;
+    }
     @keyframes avatar-jelly-refresh {
       0%   { transform: translateY(0) scale(1,1) rotate(0); }
-      15%  { transform: translateY(5px) scale(1.32,.70) rotate(-9deg); }
-      30%  { transform: translateY(-13px) scale(.78,1.28) rotate(8deg); }
-      45%  { transform: translateY(3px) scale(1.21,.82) rotate(-6deg); }
-      60%  { transform: translateY(-6px) scale(.88,1.16) rotate(4deg); }
-      75%  { transform: translateY(1px) scale(1.12,.90) rotate(-2deg); }
-      88%  { transform: translateY(-2px) scale(.96,1.06) rotate(1deg); }
+      11%  { transform: translateY(7px) scale(1.25,.75) rotate(-6deg); }
+      24%  { transform: translateY(-11px) scale(.82,1.25) rotate(7deg); }
+      38%  { transform: translateY(3px) scale(1.17,.86) rotate(-5deg); }
+      52%  { transform: translateY(-5px) scale(.90,1.14) rotate(4deg); }
+      66%  { transform: translateY(2px) scale(1.09,.93) rotate(-2.5deg); }
+      79%  { transform: translateY(-2px) scale(.965,1.06) rotate(1.5deg); }
+      90%  { transform: translateY(1px) scale(1.025,.985) rotate(-.6deg); }
       100% { transform: translateY(0) scale(1,1) rotate(0); }
     }
 
@@ -165,17 +204,19 @@
        导航采用“双层玻璃”：默认状态低透明，悬停时变亮；当前页面使用带
        蓝青色环境光的玻璃，而不是一块完全不透明的纯色矩形。
     */
-    .brand h2 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: 1.28rem; }
+    .brand h2 { margin: 0; font-family: var(--font-display); font-size: 1.28rem; font-weight: 820; }
     .brand small { color: var(--muted); letter-spacing: .12em; }
     .nav { display: grid; gap: 7px; }
     .nav button {
-      width: 100%; border: 1px solid rgba(255,255,255,.46); border-radius: 15px;
-      background: linear-gradient(145deg, var(--glass-fill), rgba(224,239,241,.16));
+      width: 100%; border: 1px solid rgba(255,255,255,.72); border-radius: 15px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(255,255,255,.62), transparent 42%),
+        linear-gradient(145deg, rgba(255,255,255,.25), rgba(219,238,240,.12));
       padding: 11px 13px; text-align: left; cursor: pointer; color: var(--ink);
       display: flex; align-items: center; gap: 11px; white-space: nowrap;
       box-shadow: inset 0 1px 0 rgba(255,255,255,.66), inset 0 -1px 0 rgba(77,105,116,.06);
-      -webkit-backdrop-filter: blur(14px) saturate(1.18);
-      backdrop-filter: blur(14px) saturate(1.18);
+      -webkit-backdrop-filter: blur(18px) saturate(1.28);
+      backdrop-filter: blur(18px) saturate(1.28);
       transition: color .18s ease, background .18s ease, border-color .18s ease,
                   transform .18s ease, box-shadow .18s ease;
     }
@@ -237,8 +278,13 @@
       padding: clamp(34px, 6vw, 78px) clamp(24px, 7vw, 94px) 80px;
       scrollbar-gutter: stable;
     }
-    .content-section.active { display: block; animation: rise .35s ease; }
-    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    /* 板块内容用稍慢的模糊渐入，避免按钮刚弹起时页面已经瞬间切完。 */
+    .content-section.active { display: block; animation: section-arrive .56s .07s cubic-bezier(.2,.72,.2,1) both; }
+    @keyframes section-arrive {
+      0% { opacity: 0; transform: translateY(13px) scale(.992); filter: blur(7px); }
+      58% { opacity: .88; filter: blur(1.5px); }
+      100% { opacity: 1; transform: none; filter: none; }
+    }
     .section-inner { width: min(980px, 100%); margin: 0 auto; }
 
     /* 阅读弹窗仍会使用 .eyebrow 显示内容类型，因此保留这组通用小标题样式。 */
@@ -250,24 +296,30 @@
       letter-spacing: .14em;
       text-transform: uppercase;
     }
-    h1 { margin: 0; font-family: KaiTi, "Songti SC", serif; font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.06; font-weight: 700; }
+    h1 { margin: 0; font-family: var(--font-display); font-size: clamp(1.6rem, 6vw, 3.8rem); line-height: 1.08; font-weight: 860; letter-spacing: -.025em; }
     .lead { max-width: 720px; margin: 20px 0 0; color: var(--muted); line-height: 1.9; font-size: 1rem; }
-    /* 首页“本站使用说明”：框、标题和正文均可在这一组样式中集中修改。 */
+    /* 首页“本站使用说明”：正文由 Studio 的网站设置读取，此处只负责毛玻璃外观。 */
     .usage-guide {
       max-width: 760px; margin: 26px 0 0; padding: 25px 28px;
-      border: 2px solid var(--ink); border-radius: var(--radius); background: rgba(255,255,255,.72);
+      border: 1px solid rgba(255,255,255,.80); border-radius: 24px;
+      background:
+        radial-gradient(circle at 8% 0%, rgba(255,255,255,.82), transparent 40%),
+        linear-gradient(145deg, rgba(255,255,255,.42), rgba(220,239,241,.22));
+      box-shadow: 0 18px 48px rgba(39,74,86,.11), inset 0 1px 0 rgba(255,255,255,.94);
+      -webkit-backdrop-filter: blur(24px) saturate(1.25);
+      backdrop-filter: blur(24px) saturate(1.25);
     }
     .usage-guide h2 {
-      margin: 0 0 18px; text-align: center; font-family: SimHei, "Microsoft YaHei", sans-serif;
-      font-size: 1.28rem; font-weight: 800; color: #111;
+      margin: 0 0 18px; text-align: center; font-family: var(--font-display);
+      font-size: 1.34rem; font-weight: 860; color: var(--ink);
     }
     .usage-guide p {
-      margin: 0 0 12px; text-indent: 2em; color: #111; line-height: 1.9;
-      font-family: SimHei, "Microsoft YaHei", sans-serif; font-weight: 700;
+      margin: 0 0 12px; text-indent: 2em; color: #253b43; line-height: 1.95;
+      font-family: var(--font-reading); font-weight: 650; white-space: pre-wrap;
     }
     .usage-guide p:last-child { margin-bottom: 0; }
     .divider { height: 1px; background: var(--line); margin: 30px 0; }
-    .section-title { font: 400 clamp(1.5rem, 3vw, 2.2rem)/1.2 Georgia, "Songti SC", serif; margin: 0 0 8px; }
+    .section-title { margin: 0 0 8px; font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 820; line-height: 1.2; }
     .section-desc { margin: 0; color: var(--muted); line-height: 1.7; }
 
     /* =========================================================
@@ -351,6 +403,32 @@
     .app-shell .btn:disabled,
     dialog .btn:disabled { transform: none; box-shadow: none; }
 
+    /*
+       全站按钮的“按下 → 弹起放大 → 果冻回弹”动效。
+       is-control-pressed 由 pointerdown 添加；control-jelly-release 在松手时播放。
+       JavaScript 使用事件委托，因此后台数据动态生成的按钮也能自动获得动效。
+    */
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card) {
+      -webkit-tap-highlight-color: transparent;
+      transform-origin: center;
+      will-change: transform;
+    }
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).is-control-pressed {
+      transform: translateY(2px) scale(.93) !important;
+      transition-duration: .08s !important;
+    }
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-jelly-release {
+      animation: control-jelly-release .52s cubic-bezier(.22,.82,.22,1) both !important;
+    }
+    @keyframes control-jelly-release {
+      0%   { transform: translateY(2px) scale(.93, .93); }
+      34%  { transform: translateY(-3px) scale(1.095, .94); }
+      52%  { transform: translateY(1px) scale(.965, 1.055); }
+      69%  { transform: translateY(-1px) scale(1.035, .982); }
+      84%  { transform: scale(.992, 1.018); }
+      100% { transform: none; }
+    }
+
     /* =========================================================
        05. 网站第一层：全屏登录 / 游客入口
        ---------------------------------------------------------
@@ -423,15 +501,23 @@
       */
       width: min(520px, 100%);
       padding: 28px clamp(30px, 5vw, 50px);
-      border: 1px solid rgba(32,48,55,.11);
-      border-radius: 26px;
-      /* 白色降到 70% 不透明度，让背景照片能从卡片中透出，同时保证文字清晰。 */
-      background: rgba(255,255,255,.70);
-      box-shadow: 0 28px 75px rgba(28,52,60,.15);
-      -webkit-backdrop-filter: blur(10px) saturate(1.05);
-      backdrop-filter: blur(10px) saturate(1.05);
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.78);
+      border-radius: 30px;
+      /* 低不透明底色 + 强模糊 + 内高光，形成接近 iOS 液态玻璃的纯玻璃卡片。 */
+      background:
+        radial-gradient(circle at 12% 0%, rgba(255,255,255,.72), transparent 38%),
+        linear-gradient(145deg, rgba(255,255,255,.30), rgba(220,239,241,.16));
+      box-shadow: 0 30px 84px rgba(17,38,45,.24), inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(66,104,116,.10);
+      -webkit-backdrop-filter: blur(30px) saturate(1.35);
+      backdrop-filter: blur(30px) saturate(1.35);
       animation: entry-rise .45s ease both;
     }
+    .entry-card::before {
+      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background: linear-gradient(120deg, rgba(255,255,255,.28), transparent 28% 70%, rgba(255,255,255,.14));
+    }
+    .entry-card > * { position: relative; z-index: 1; }
     @keyframes entry-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
     /* 七个汉字在电脑和手机卡片中都保持同一行，避免最后一个“集”单独换行。 */
     .entry-card h1 { margin: 0; text-align: center; font-size: clamp(1.85rem, 6vw, 2.45rem); white-space: nowrap; }
@@ -439,8 +525,10 @@
     .entry-form { display: grid; gap: 12px; }
     .entry-field { display: grid; gap: 7px; color: var(--ink); font-size: .88rem; font-weight: 700; }
     .entry-field input {
-      width: 100%; border: 1px solid var(--line); border-radius: 13px;
-      padding: 12px 14px; background: rgba(255,255,255,.84); color: var(--ink); outline: none;
+      width: 100%; border: 1px solid rgba(255,255,255,.78); border-radius: 15px;
+      padding: 12px 14px; background: rgba(255,255,255,.34); color: var(--ink); outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.88), 0 7px 18px rgba(31,62,72,.06);
+      -webkit-backdrop-filter: blur(17px); backdrop-filter: blur(17px);
     }
     .entry-field input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(49,191,200,.12); }
     .entry-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .82rem; }
@@ -448,7 +536,19 @@
     .entry-options input { accent-color: var(--cyan); }
     .entry-link { color: #258e99; text-decoration: none; font-weight: 700; }
     .entry-link:hover { text-decoration: underline; }
-    .entry-primary { width: 100%; min-height: 46px; background: linear-gradient(135deg, #278f9c, #31bfc8); }
+    .entry-primary {
+      width: 100%; min-height: 46px; border: 1px solid rgba(255,255,255,.72);
+      background:
+        radial-gradient(circle at 18% 0%, rgba(255,255,255,.42), transparent 38%),
+        linear-gradient(135deg, rgba(39,143,156,.78), rgba(49,191,200,.62));
+      box-shadow: 0 12px 27px rgba(26,112,127,.23), inset 0 1px 0 rgba(255,255,255,.72);
+      -webkit-backdrop-filter: blur(17px) saturate(1.3); backdrop-filter: blur(17px) saturate(1.3);
+    }
+    .entry-actions .btn.ghost {
+      border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.28);
+      box-shadow: 0 9px 22px rgba(31,62,72,.09), inset 0 1px 0 rgba(255,255,255,.90);
+      -webkit-backdrop-filter: blur(17px) saturate(1.25); backdrop-filter: blur(17px) saturate(1.25);
+    }
     .entry-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--muted); font-size: .78rem; }
     .entry-divider::before, .entry-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
     .entry-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -542,7 +642,7 @@
       .nav button.active, .tab-button.active { background: #b3d3db; }
     }
     .portfolio-panel { display: none; }
-    .portfolio-panel.active { display: block; }
+    .portfolio-panel.active { display: block; animation: section-arrive .46s .05s cubic-bezier(.2,.72,.2,1) both; }
     .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
     .content-card {
       min-height: 210px; padding: 24px; border-radius: var(--radius); border: 1px solid var(--line);
@@ -551,7 +651,7 @@
     }
     .content-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
     .content-card .kind { color: var(--blue); font-size: .75rem; font-weight: 700; letter-spacing: .12em; }
-    .content-card h3 { margin: 15px 0 10px; font-family: Georgia, "Songti SC", serif; font-size: 1.35rem; }
+    .content-card h3 { margin: 15px 0 10px; font-family: var(--font-display); font-size: 1.35rem; font-weight: 800; }
     .content-card p { margin: 0; color: var(--muted); line-height: 1.7; }
     .card-meta { margin-top: auto; padding-top: 19px; display: flex; justify-content: space-between; color: var(--muted); font-size: .76rem; }
     .empty { padding: 38px; border: 1px dashed #b9c7ca; border-radius: var(--radius); color: var(--muted); text-align: center; line-height: 1.8; }
@@ -581,11 +681,31 @@
        ---------------------------------------------------------
        .bubble.ai 是 AI 气泡；.bubble.user 是访客气泡。
        ========================================================= */
-    .chat-shell { margin-top: 30px; border: 1px solid var(--line); border-radius: 22px; background: var(--paper); box-shadow: var(--shadow); overflow: hidden; }
-    .chat-messages { height: min(52vh, 470px); overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 12px; background: #f4f7f6; }
+    .chat-shell {
+      margin-top: 30px; overflow: hidden; border: 1px solid rgba(255,255,255,.82); border-radius: 26px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,255,255,.78), transparent 38%),
+        linear-gradient(145deg, rgba(255,255,255,.40), rgba(217,237,240,.22));
+      box-shadow: 0 22px 58px rgba(37,75,88,.13), inset 0 1px 0 rgba(255,255,255,.96);
+      -webkit-backdrop-filter: blur(26px) saturate(1.28);
+      backdrop-filter: blur(26px) saturate(1.28);
+    }
+    .chat-messages {
+      height: min(52vh, 470px); overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 12px;
+      background: linear-gradient(155deg, rgba(244,250,250,.34), rgba(255,255,255,.12));
+    }
     .bubble { max-width: min(82%, 670px); padding: 11px 14px; border-radius: 16px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .bubble.ai { align-self: flex-start; background: white; border-bottom-left-radius: 4px; }
-    .bubble.user { align-self: flex-end; background: linear-gradient(135deg,var(--blue),var(--cyan)); color: white; border-bottom-right-radius: 4px; }
+    .bubble.ai {
+      align-self: flex-start; border: 1px solid rgba(255,255,255,.82); border-bottom-left-radius: 4px;
+      background: rgba(255,255,255,.48); box-shadow: 0 8px 22px rgba(32,70,82,.08), inset 0 1px 0 #fff;
+      -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+    }
+    .bubble.user {
+      align-self: flex-end; border: 1px solid rgba(255,255,255,.66); border-bottom-right-radius: 4px;
+      background: linear-gradient(135deg,rgba(86,143,198,.76),rgba(49,191,200,.64)); color: white;
+      box-shadow: 0 9px 24px rgba(42,113,133,.17), inset 0 1px 0 rgba(255,255,255,.64);
+      -webkit-backdrop-filter: blur(17px) saturate(1.26); backdrop-filter: blur(17px) saturate(1.26);
+    }
     /* streaming 类只在 AI 正在生成时存在；小光标让访客能看出回答仍在继续。 */
     .bubble.ai.streaming::after {
       content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 4px;
@@ -594,7 +714,12 @@
     }
     @keyframes stream-cursor { 50% { opacity: 0; } }
     .chat-form { display: flex; gap: 10px; padding: 15px; }
-    .chat-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 13px; padding: 12px 14px; outline: none; }
+    .chat-form input {
+      flex: 1; min-width: 0; border: 1px solid rgba(255,255,255,.84); border-radius: 15px; padding: 12px 14px;
+      color: var(--ink); background: rgba(255,255,255,.43); outline: none;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.92);
+      -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    }
     .chat-form input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(49,191,200,.13); }
     .chat-status { padding: 0 18px 12px; min-height: 22px; color: var(--muted); font-size: .78rem; }
 
@@ -610,7 +735,7 @@
     }
     .account-grid { margin-top: 30px; display: grid; grid-template-columns: minmax(240px,.8fr) minmax(0,1.2fr); gap: 18px; }
     .account-card { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
-    .account-card h2 { margin: 0 0 18px; font: 500 1.45rem/1.2 Georgia,"Songti SC",serif; }
+    .account-card h2 { margin: 0 0 18px; font-family: var(--font-display); font-size: 1.45rem; font-weight: 820; line-height: 1.2; }
     .account-meta { display: grid; gap: 12px; margin: 18px 0 0; }
     .account-meta div { display: grid; gap: 4px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
     .account-meta span { color: var(--muted); font-size: .76rem; }
@@ -623,10 +748,17 @@
     .account-status { display: inline-flex; padding: 6px 11px; border-radius: 999px; color: #765814; background: #fff0c8; font-size: .78rem; font-weight: 800; }
     .account-status.approved { color: #2d7159; background: #e2f5ec; }
     .account-status.rejected, .account-status.disabled { color: #954542; background: #fde9e8; }
-    .auth-lock-dialog { width: min(460px, calc(100vw - 28px)); }
-    .auth-lock-card { padding: 30px; text-align: center; background: var(--paper); }
+    .auth-lock-dialog { width: min(460px, calc(100vw - 28px)); background: transparent; }
+    .auth-lock-card {
+      padding: 30px; text-align: center; border: 1px solid rgba(255,255,255,.80); border-radius: 22px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(255,255,255,.84), transparent 40%),
+        linear-gradient(145deg, rgba(255,255,255,.52), rgba(218,238,240,.30));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.96);
+      -webkit-backdrop-filter: blur(25px) saturate(1.28); backdrop-filter: blur(25px) saturate(1.28);
+    }
     .auth-lock-symbol { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 17px; border-radius: 50%; color: #fff; background: linear-gradient(135deg,var(--blue),var(--cyan)); font-size: 1.5rem; }
-    .auth-lock-card h2 { margin: 0 0 10px; font-family: Georgia,"Songti SC",serif; font-size: 1.75rem; }
+    .auth-lock-card h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: 1.75rem; font-weight: 830; }
     .auth-lock-card p { margin: 0 0 22px; color: var(--muted); line-height: 1.75; }
     .auth-lock-actions { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
 
@@ -635,6 +767,15 @@
        ========================================================= */
     dialog { border: 0; padding: 0; border-radius: 22px; box-shadow: 0 30px 100px rgba(0,0,0,.28); }
     dialog::backdrop { background: rgba(18,30,34,.68); backdrop-filter: blur(4px); }
+    /* 弹窗主体延迟半拍完成展开，让按钮回弹与内容出现形成连续动作。 */
+    dialog[open] :is(.auth-lock-card, .reader-wrap, .image-view) {
+      animation: dialog-glass-arrive .50s .08s cubic-bezier(.18,.78,.2,1) both;
+    }
+    @keyframes dialog-glass-arrive {
+      0% { opacity: 0; transform: translateY(16px) scale(.955); filter: blur(8px); }
+      62% { opacity: .94; transform: translateY(-2px) scale(1.012); filter: blur(1px); }
+      100% { opacity: 1; transform: none; filter: none; }
+    }
     .reader-dialog { width: min(900px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
     .reader-wrap { max-height: calc(100dvh - 24px); overflow-y: auto; padding: clamp(22px,5vw,55px); background: var(--paper); }
     .dialog-top { display: flex; justify-content: flex-end; gap: 8px; position: sticky; top: 0; z-index: 3; }
@@ -653,9 +794,9 @@
     .icon-button:active { transform: translateY(1px) scale(.94); }
     .icon-button:focus-visible { outline: 3px solid rgba(49,191,200,.30); outline-offset: 2px; }
     .reader-header { margin: 20px 0 28px; }
-    .reader-header h2 { font: 500 clamp(2rem,6vw,3.5rem)/1.15 Georgia,"Songti SC",serif; margin: 8px 0 12px; }
+    .reader-header h2 { margin: 8px 0 12px; font-family: var(--font-display); font-size: clamp(2rem,6vw,3.5rem); font-weight: 840; line-height: 1.15; }
     .reader-meta { color: var(--muted); font-size: .85rem; }
-    .reader-body { font-family: Georgia, "Songti SC", serif; font-size: 1.06rem; line-height: 2; }
+    .reader-body { font-family: var(--font-reading); font-size: 1.06rem; font-weight: 520; line-height: 2; }
     .reader-body img { display: block; max-width: 100%; height: auto; margin: 24px auto; border-radius: 12px; }
     /*
       正文图片会在 JavaScript 中变成可操作的预览入口：鼠标、键盘都能打开大图。
@@ -684,7 +825,7 @@
     */
     .pdf-export {
       display: block; width: 760px; padding: 48px 54px; color: #17262c; background: #fff;
-      font-family: Georgia, "Songti SC", "Microsoft YaHei", serif;
+      font-family: var(--font-reading);
     }
     .pdf-export h1 { margin: 10px 0 12px; font-size: 32px; line-height: 1.35; }
     .pdf-export .pdf-kind { margin: 0; color: #557985; font-size: 13px; font-weight: 700; letter-spacing: .12em; }
@@ -783,6 +924,10 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+      .content-section.active,
+      dialog[open] :is(.auth-lock-card, .reader-wrap, .image-view),
+      :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-jelly-release,
+      .bubble.ai.streaming::after { animation: none !important; }
       .app-shell .btn,
       dialog .btn,
       .icon-button,
@@ -864,7 +1009,8 @@
        未登录访问根网址时只显示本层。这里可以直接登录，也可以选择
        游客浏览；注册和找回密码流程继续复用 /login 页面。
        ======================================================== -->
-  <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title">
+  <!-- 默认 hidden 可避免已登录用户刷新时短暂闪过登录框；boot() 完成会话检查后再决定显示哪一层。 -->
+  <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title" hidden>
     <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留渐变底色。 -->
     <div id="entry-photo-background" class="entry-photo-background" aria-hidden="true"></div>
     <div class="entry-card">
@@ -935,12 +1081,10 @@
           <h1 id="home-title">星月集的个人网站</h1>
           <!-- 默认不显示副标题；只有站长以后在后台填写主页介绍时才会出现。 -->
           <p class="lead" id="home-intro" hidden></p>
-          <div class="usage-guide">
+          <div id="usage-guide" class="usage-guide" hidden>
             <h2>本站使用说明</h2>
-            <p>欢迎来到星月集的网站！</p>
-            <p>本站为星月集的个人空间，可视作朋友圈/QQ空间的平替。不论是生活中的感悟，还是学术上的探索，抑或是一些文章随笔，日后都将在该网站上进行发表，朋友圈/QQ空间除特殊事件以外，将逐步停更。</p>
-            <p>同时，该网站目前仍处于建设状态，网站功能将持续丰富。受限于掌握知识有限，目前该网站仍由 ChatGPT 参与建设。随着前端学习的深入，GPT 将逐渐退出建设者的角色。</p>
-            <p>本站托管在海外平台，故建议浏览者使用非公用网络进行登录，以防被拦截从而导致浏览失败。若有更多关于网站建设的想法，也欢迎与星月集进行联系沟通！</p>
+            <!-- 正文由 Studio → 网站设置 → 本站使用说明读取，HTML 不再保存具体内容。 -->
+            <div id="usage-guide-content"></div>
           </div>
           <div id="updates-preview" class="updates" role="button" tabindex="0" aria-label="查看往期版本更新说明">
             <div class="updates-heading"><h2 class="section-title">版本更新说明</h2><span class="updates-more">查看往期 →</span></div>
@@ -1166,6 +1310,7 @@
       pdfLibraryPromise: null,
       bootstrapPromise: null,
       entryBackgroundStarted: false,
+      activeSection: "home",
     };
 
     // 两层界面的根节点：入口层和真正的网站主体永远只显示其中一个。
@@ -1372,17 +1517,31 @@
       return box;
     }
 
-    /* ---------- 03. 主导航：显示指定 section，并滚回该板块顶部。 ---------- */
+    /* ---------- 03. 主导航：显示指定 section，并把站内切换写入浏览器历史。 ---------- */
     function showSection(id) {
+      const target = document.getElementById(id);
+      if (!target?.classList.contains("content-section")) return false;
       document.querySelectorAll(".content-section").forEach((section) => section.classList.toggle("active", section.id === id));
       document.querySelectorAll(".nav button[data-section]").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
-      document.getElementById(id)?.scrollTo({ top: 0, behavior: "smooth" });
+      target.scrollTo({ top: 0, behavior: "smooth" });
+      state.activeSection = id;
+      return true;
     }
 
-    function navigateSection(id) {
+    function updateSectionHistory(id, mode = "push") {
+      if (mode === "none") return;
+      const url = new URL(location.href);
+      url.hash = id;
+      const value = { ...(history.state || {}), xingyuejiSection: id };
+      const address = `${url.pathname}${url.search}${url.hash}`;
+      if (mode === "replace") history.replaceState(value, "", address);
+      else if (history.state?.xingyuejiSection !== id || location.hash !== `#${id}`) history.pushState(value, "", address);
+    }
+
+    function navigateSection(id, { historyMode = "push" } = {}) {
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
-      showSection(id);
+      if (showSection(id)) updateSectionHistory(id, historyMode);
     }
 
     /* ---------- 04. 首页最新日志 + 下一级完整历史。 ---------- */
@@ -1618,6 +1777,25 @@
       document.getElementById("image-dialog").showModal();
     }
 
+    /*
+     * 使用说明以纯文本存进 D1：空行分段，普通换行会保留在同一段内。
+     * 全程只使用 textContent 生成节点，后台内容不会被当作 HTML 执行。
+     */
+    function renderUsageGuide(value) {
+      const guide = document.getElementById("usage-guide");
+      const content = document.getElementById("usage-guide-content");
+      const text = String(value || "").trim();
+      content.replaceChildren();
+      if (!text) { guide.hidden = true; return; }
+
+      text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean).forEach((paragraph) => {
+        const node = document.createElement("p");
+        node.textContent = paragraph;
+        content.append(node);
+      });
+      guide.hidden = !content.childElementCount;
+    }
+
     function applySettings() {
       const settings = state.data?.settings || {};
       const title = settings.site_title || "星月集";
@@ -1633,6 +1811,7 @@
       const introNode = document.getElementById("home-intro");
       introNode.textContent = intro;
       introNode.hidden = !intro;
+      renderUsageGuide(settings.usage_guide);
       document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.9.0.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
@@ -1996,9 +2175,16 @@
         state.siteLoaded = true;
         applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback(); renderAccount();
 
-        // 登录或注册后可通过 /#ai-helper、/#account 回到原本想打开的功能。
-        const target = location.hash.slice(1);
-        if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target);
+        /*
+         * 登录或注册后可通过 hash 回到原本想打开的功能。第一次进入用 replace，
+         * 之后每次点击导航才 push；这样手机侧滑返回会依次回到上一个站内板块，
+         * 到达最初板块后才按浏览器的正常规则离开网站。
+         */
+        const requestedSection = location.hash.slice(1);
+        const target = document.getElementById(requestedSection)?.classList.contains("content-section")
+          ? requestedSection
+          : "home";
+        navigateSection(target, { historyMode: "replace" });
       } catch (error) {
         // 已经选择身份后即使数据读取失败，也显示网站主体中的明确错误提示。
         showWebsiteShell();
@@ -2009,7 +2195,66 @@
       }
     }
 
+    /*
+     * 全站液态玻璃按钮动效：按下时压缩，松手后播放一次果冻回弹。
+     * 事件委托同时覆盖以后由 JavaScript 新建的专栏、相册、评论和图片卡片。
+     */
+    function installLiquidGlassControlMotion() {
+      const selector = "button, a.btn, .tab-button, .studio-link, [role='button'], .content-card, .photo-card";
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      let pressedControl = null;
+
+      const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
+      const canAnimate = (control) => control && !control.matches(":disabled") && control.id !== "avatar-refresh";
+      const release = (control) => {
+        if (!control) return;
+        control.classList.remove("is-control-pressed");
+        if (reducedMotion.matches || !canAnimate(control)) return;
+        control.classList.remove("control-jelly-release");
+        void control.offsetWidth;
+        control.classList.add("control-jelly-release");
+        window.setTimeout(() => control.classList.remove("control-jelly-release"), 560);
+      };
+
+      document.addEventListener("pointerdown", (event) => {
+        const control = findControl(event.target);
+        if (!canAnimate(control)) return;
+        pressedControl = control;
+        control.classList.remove("control-jelly-release");
+        control.classList.add("is-control-pressed");
+      });
+      window.addEventListener("pointerup", () => { release(pressedControl); pressedControl = null; });
+      window.addEventListener("pointercancel", () => {
+        pressedControl?.classList.remove("is-control-pressed");
+        pressedControl = null;
+      });
+      document.addEventListener("keydown", (event) => {
+        if (!['Enter', ' '].includes(event.key) || event.repeat) return;
+        const control = findControl(event.target);
+        if (canAnimate(control)) control.classList.add("is-control-pressed");
+      });
+      document.addEventListener("keyup", (event) => {
+        if (!['Enter', ' '].includes(event.key)) return;
+        release(findControl(event.target));
+      });
+
+      /*
+       * 站内链接延迟 340ms 再跳转，让离开当前文档前也能看完主要回弹阶段。
+       * 下载链接、外部链接、组合键新开窗口以及已被业务逻辑阻止的点击不延迟。
+       */
+      document.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const link = findControl(event.target)?.closest("a[href]");
+        if (!link || link.hasAttribute("download") || link.target === "_blank") return;
+        const destination = new URL(link.href, location.href);
+        if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
+        event.preventDefault();
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 340);
+      });
+    }
+
     /* ---------- 13. 事件绑定：导航、侧栏、头像和弹窗。 ---------- */
+    installLiquidGlassControlMotion();
     document.getElementById("entry-login-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const submit = event.currentTarget.querySelector("button[type='submit']");
@@ -2062,15 +2307,15 @@
     sidebarToggle.addEventListener("click", () => setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed")));
 
     const updatesPreview = document.getElementById("updates-preview");
-    updatesPreview.addEventListener("click", () => showSection("updates-history"));
+    updatesPreview.addEventListener("click", () => navigateSection("updates-history"));
     updatesPreview.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); showSection("updates-history"); }
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigateSection("updates-history"); }
     });
 
     /*
      * 头像点击刷新：
      * 1. 添加 jelly 类播放明显的果冻动画；
-     * 2. 约 0.5 秒后在网址后加时间戳并 replace，强制绕过页面缓存；
+     * 2. 等 1.18 秒果冻动画完整播放后，再加时间戳并 replace 强制刷新；
      * 3. 新页面启动时会自动移除这个临时参数。
      */
     document.getElementById("avatar-refresh").addEventListener("click", (event) => {
@@ -2080,13 +2325,21 @@
       avatar.classList.remove("jelly");
       void avatar.offsetWidth;
       avatar.classList.add("jelly");
-      window.setTimeout(() => {
+
+      // animationend 能确保修改 CSS 时仍会等动画播完；定时器只用于极少数
+      // 浏览器没有派发动画事件时兜底。once + reloaded 防止刷新被执行两次。
+      let reloaded = false;
+      const reloadAfterJelly = () => {
+        if (reloaded) return;
+        reloaded = true;
         const refreshUrl = new URL(window.location.href);
         refreshUrl.searchParams.set("_xyj_refresh", String(Date.now()));
         window.location.replace(refreshUrl.toString());
-      }, 520);
+      };
+      avatar.addEventListener("animationend", reloadAfterJelly, { once: true });
+      window.setTimeout(reloadAfterJelly, 1_350);
     });
-    document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => showSection(button.dataset.jump)));
+    document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
     const imageDialog = document.getElementById("image-dialog");
     document.getElementById("image-previous").addEventListener("click", () => stepImage(-1));
@@ -2156,12 +2409,17 @@
 
     document.getElementById("auth-login-link").addEventListener("click", (event) => {
       if (!state.auth.authenticated) return;
-      event.preventDefault(); document.getElementById("auth-lock-dialog").close(); showSection("account");
+      event.preventDefault(); document.getElementById("auth-lock-dialog").close(); navigateSection("account");
     });
 
+    /* hashchange 兼容手工修改地址；popstate 专门处理桌面返回键和手机侧滑返回。 */
     window.addEventListener("hashchange", () => {
       const target = location.hash.slice(1);
-      if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target);
+      if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target, { historyMode: "none" });
+    });
+    window.addEventListener("popstate", (event) => {
+      const target = event.state?.xingyuejiSection || location.hash.slice(1);
+      if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target, { historyMode: "none" });
     });
 
     async function refreshAuthPresence() {

@@ -25,6 +25,8 @@
       --danger: #b94a48;
       --success: #357b61;
       --shadow: 0 26px 80px rgba(49, 45, 39, .13);
+      --font-ui: ui-rounded, "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+      --font-display: "Yuanti SC", "YouYuan", ui-rounded, "Arial Rounded MT Bold", "SF Pro Rounded", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
     html, body { min-height: 100%; }
@@ -32,7 +34,8 @@
       margin: 0;
       color: var(--ink);
       background: var(--paper);
-      font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      font-family: var(--font-ui);
+      font-weight: 520;
     }
     button, input, select, textarea { font: inherit; }
     button, a { -webkit-tap-highlight-color: transparent; }
@@ -106,14 +109,16 @@
       left: max(18px, env(safe-area-inset-left));
       bottom: max(18px, env(safe-area-inset-bottom));
       padding: 9px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.76);
+      border-radius: 14px;
       color: var(--muted);
-      background: rgba(250,248,244,.92);
+      background: rgba(255,255,255,.27);
       font-size: .84rem;
       font-weight: 700;
       text-decoration: none;
-      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 28px rgba(20,43,50,.17), inset 0 1px 0 rgba(255,255,255,.90);
+      -webkit-backdrop-filter: blur(20px) saturate(1.25);
+      backdrop-filter: blur(20px) saturate(1.25);
       transition: color .18s, border-color .18s, transform .18s;
     }
     .home-link:hover { color: var(--ink); border-color: #bcb4a9; transform: translateX(-2px); }
@@ -132,34 +137,49 @@
       */
       width: min(100%, 720px);
       padding: 30px clamp(34px, 5vw, 52px);
-      border: 1px solid rgba(204, 195, 184, .62);
-      border-radius: 24px;
-      /* 白色降到 70% 不透明度，让背景照片透过登录、注册和找回密码卡片。 */
-      background: rgba(255,255,255,.70);
-      box-shadow: var(--shadow);
-      -webkit-backdrop-filter: blur(10px) saturate(1.05);
-      backdrop-filter: blur(10px) saturate(1.05);
+      position: relative; isolation: isolate; overflow: hidden;
+      border: 1px solid rgba(255,255,255,.80);
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(255,255,255,.72), transparent 38%),
+        linear-gradient(145deg, rgba(255,255,255,.29), rgba(216,237,240,.16));
+      box-shadow: 0 32px 90px rgba(14,35,42,.27), inset 0 1px 0 rgba(255,255,255,.96), inset 0 -1px 0 rgba(64,103,116,.10);
+      -webkit-backdrop-filter: blur(31px) saturate(1.36);
+      backdrop-filter: blur(31px) saturate(1.36);
     }
+    .auth-card::before {
+      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background: linear-gradient(120deg, rgba(255,255,255,.30), transparent 28% 72%, rgba(255,255,255,.13));
+    }
+    .auth-card > * { position: relative; z-index: 1; }
     .card-head { margin-bottom: 20px; text-align: center; }
     /* 中文标题已经足够明确，不再额外显示 ACCOUNT LOGIN 等英文装饰行。 */
     .eyebrow { display: none; }
-    .card-head h2 { margin: 0 0 7px; font-family: Georgia, "Songti SC", serif; font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 500; }
+    .card-head h2 { margin: 0 0 7px; font-family: var(--font-display); font-size: clamp(2rem, 5vw, 2.8rem); font-weight: 860; letter-spacing: -.025em; }
     .card-head p { margin: 0; color: var(--muted); line-height: 1.55; }
 
     /* ========================================================
        03. 表单、按钮与状态提示
        ======================================================== */
     .panel[hidden] { display: none !important; }
+    .panel:not([hidden]) { animation: auth-panel-arrive .52s .06s cubic-bezier(.18,.78,.2,1) both; }
+    @keyframes auth-panel-arrive {
+      0% { opacity: 0; transform: translateY(13px) scale(.985); filter: blur(7px); }
+      62% { opacity: .94; transform: translateY(-1px) scale(1.006); filter: blur(1px); }
+      100% { opacity: 1; transform: none; filter: none; }
+    }
     .field { display: grid; gap: 6px; margin-bottom: 13px; }
     .field label { font-size: .84rem; font-weight: 800; }
     .field small { color: var(--muted); line-height: 1.55; }
     .field input, .field select, .field textarea {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.78);
+      border-radius: 14px;
       padding: 11px 14px;
       color: var(--ink);
-      background: #fff;
+      background: rgba(255,255,255,.34);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.90), 0 7px 18px rgba(31,62,72,.06);
+      -webkit-backdrop-filter: blur(17px); backdrop-filter: blur(17px);
       outline: none;
       transition: border-color .18s, box-shadow .18s;
     }
@@ -180,15 +200,23 @@
     .btn {
       min-height: 46px;
       display: inline-flex; align-items: center; justify-content: center;
-      gap: 8px; border: 1px solid var(--cyan-deep); border-radius: 12px;
+      gap: 8px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px;
       padding: 11px 17px; cursor: pointer; color: #fff;
-      background: var(--cyan-deep); font-weight: 800; text-decoration: none;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(255,255,255,.42), transparent 40%),
+        linear-gradient(135deg, rgba(22,141,161,.80), rgba(40,184,204,.64));
+      box-shadow: 0 12px 28px rgba(16,105,122,.24), inset 0 1px 0 rgba(255,255,255,.74);
+      -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+      font-weight: 820; text-decoration: none;
       transition: transform .15s, background .15s, box-shadow .15s;
     }
-    .btn:hover { transform: translateY(-1px); background: #117d8e; box-shadow: 0 7px 18px rgba(22,141,161,.18); }
+    .btn:hover { transform: translateY(-2px); filter: brightness(1.04); box-shadow: 0 16px 34px rgba(16,105,122,.29), inset 0 1px 0 #fff; }
     .btn:disabled { opacity: .55; cursor: wait; transform: none; }
-    .btn.ghost { color: var(--ink); border-color: var(--line); background: #fff; box-shadow: none; }
-    .btn.ghost:hover { border-color: #bcb4a9; background: #faf8f4; }
+    .btn.ghost {
+      color: var(--ink); border-color: rgba(255,255,255,.78); background: rgba(255,255,255,.26);
+      box-shadow: 0 9px 22px rgba(31,62,72,.10), inset 0 1px 0 rgba(255,255,255,.92);
+    }
+    .btn.ghost:hover { border-color: rgba(255,255,255,.96); background: rgba(255,255,255,.40); }
     .btn.block { width: 100%; }
     .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .button-row .btn { flex: 1 1 130px; }
@@ -199,20 +227,27 @@
     .notice.success { color: var(--success); }
     .privacy-note {
       margin: 3px 0 20px; padding: 13px 15px; border-left: 3px solid var(--cyan);
-      border-radius: 4px 10px 10px 4px; background: var(--cyan-soft);
+      border-radius: 4px 12px 12px 4px; background: rgba(230,248,250,.46);
       color: #4b6468; line-height: 1.7; font-size: .86rem;
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     }
 
     /* 注册进度条只表示页面位置，不代表账户已经审核通过。 */
     .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 20px; }
     .step { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 8px; color: #aaa39b; font-size: .76rem; }
     .step::after { content: ""; grid-column: 1 / -1; height: 3px; border-radius: 9px; background: var(--line); }
-    .step-number { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--paper-deep); font-weight: 900; }
+    .step-number {
+      width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.72); background: rgba(255,255,255,.27); font-weight: 900;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.90); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    }
     .step.active { color: var(--cyan-deep); }
     .step.active::after, .step.done::after { background: var(--cyan); }
-    .step.active .step-number, .step.done .step-number { color: #fff; background: var(--cyan-deep); }
+    .step.active .step-number, .step.done .step-number {
+      color: #fff; background: linear-gradient(135deg, rgba(22,141,161,.80), rgba(40,184,204,.66));
+    }
     .register-step[hidden] { display: none; }
-    .summary-list { margin: 0 0 22px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    .summary-list { margin: 0 0 22px; border: 1px solid rgba(255,255,255,.72); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,.20); }
     .summary-row { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
     .summary-row:last-child { border-bottom: 0; }
     .summary-row dt { color: var(--muted); }
@@ -220,7 +255,24 @@
     .status-badge { display: inline-flex; padding: 5px 10px; border-radius: 99px; background: #fff1ce; color: #7b5c18; font-size: .78rem; font-weight: 900; }
     .status-badge.approved { background: #e4f5ed; color: #2e7158; }
     .status-badge.rejected, .status-badge.disabled { background: #fde9e8; color: #984341; }
-    .success-box { padding: 22px; border: 1px solid #bcdccd; border-radius: 14px; background: #f0faf5; line-height: 1.8; }
+    .success-box { padding: 22px; border: 1px solid rgba(215,255,237,.72); border-radius: 16px; background: rgba(240,250,245,.38); line-height: 1.8; backdrop-filter: blur(15px); }
+
+    /* 登录与注册页使用和主站一致的按压、放大、果冻回弹。 */
+    :is(button, a.btn, .home-link) { transform-origin: center; will-change: transform; }
+    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(2px) scale(.93) !important; transition-duration: .08s !important; }
+    :is(button, a.btn, .home-link).control-jelly-release { animation: auth-control-jelly .52s cubic-bezier(.22,.82,.22,1) both !important; }
+    @keyframes auth-control-jelly {
+      0% { transform: translateY(2px) scale(.93); }
+      34% { transform: translateY(-3px) scale(1.095,.94); }
+      52% { transform: translateY(1px) scale(.965,1.055); }
+      69% { transform: translateY(-1px) scale(1.035,.982); }
+      84% { transform: scale(.992,1.018); }
+      100% { transform: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .panel:not([hidden]), :is(button, a.btn, .home-link).control-jelly-release { animation: none !important; }
+    }
 
     @media (max-width: 850px) {
       .auth-page { align-items: flex-start; padding-top: 18px; }
@@ -417,6 +469,52 @@
       document.querySelectorAll(".panel").forEach((panel) => { panel.hidden = panel.id !== `panel-${name}`; });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+
+    /* 所有静态和后续动态生成的按钮统一播放液态玻璃回弹动效。 */
+    function installLiquidGlassControlMotion() {
+      const selector = "button, a.btn, .home-link";
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      let pressedControl = null;
+      const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
+      const canAnimate = (control) => control && !control.matches(":disabled");
+      const release = (control) => {
+        if (!control) return;
+        control.classList.remove("is-control-pressed");
+        if (reducedMotion.matches || !canAnimate(control)) return;
+        control.classList.remove("control-jelly-release");
+        void control.offsetWidth;
+        control.classList.add("control-jelly-release");
+        window.setTimeout(() => control.classList.remove("control-jelly-release"), 560);
+      };
+      document.addEventListener("pointerdown", (event) => {
+        const control = findControl(event.target);
+        if (!canAnimate(control)) return;
+        pressedControl = control;
+        control.classList.remove("control-jelly-release");
+        control.classList.add("is-control-pressed");
+      });
+      window.addEventListener("pointerup", () => { release(pressedControl); pressedControl = null; });
+      window.addEventListener("pointercancel", () => { pressedControl?.classList.remove("is-control-pressed"); pressedControl = null; });
+      document.addEventListener("keydown", (event) => {
+        if (!['Enter', ' '].includes(event.key) || event.repeat) return;
+        const control = findControl(event.target);
+        if (canAnimate(control)) control.classList.add("is-control-pressed");
+      });
+      document.addEventListener("keyup", (event) => {
+        if (['Enter', ' '].includes(event.key)) release(findControl(event.target));
+      });
+      document.addEventListener("click", (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const link = findControl(event.target)?.closest("a[href]");
+        if (!link || link.hasAttribute("download") || link.target === "_blank") return;
+        const destination = new URL(link.href, location.href);
+        if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
+        event.preventDefault();
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 340);
+      });
+    }
+
+    installLiquidGlassControlMotion();
 
     /* “返回登录”统一回到根页面，并保留用户最初想访问的板块 hash。 */
     document.querySelectorAll("[data-canonical-login]").forEach((link) => {
