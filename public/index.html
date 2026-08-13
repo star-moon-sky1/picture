@@ -429,11 +429,11 @@
       transform-origin: center;
       will-change: transform;
     }
-    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).is-control-pressed {
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card):not(.image-nav).is-control-pressed {
       transform: translateY(1px) scale(.95) !important;
       transition-duration: .055s !important;
     }
-    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-bounce-release {
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card):not(.image-nav).control-bounce-release {
       animation: control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both !important;
     }
     @keyframes control-single-rebound {
@@ -442,7 +442,7 @@
       100% { transform: none; }
     }
     /* 普通按钮松手后的短暂蓝青反馈；选中型按钮则由 .active 长久保留颜色。 */
-    :is(button, a.btn, .tab-button, .studio-link, [role="button"]).control-bounce-release:not(.active):not(.danger) {
+    :is(button, a.btn, .tab-button, .studio-link, [role="button"]):not(.image-nav).control-bounce-release:not(.active):not(.danger) {
       background-color: rgba(54,158,177,.34) !important;
       border-color: rgba(47,142,162,.56) !important;
     }
@@ -956,16 +956,24 @@
     .image-view { padding: 18px; text-align: center; }
     .image-stage { position: relative; min-height: 180px; display: grid; place-items: center; }
     .image-view img { max-width: 100%; max-height: calc(100dvh - 130px); object-fit: contain; }
-    /* 放大预览左右切换按钮覆盖在图片两侧，不会挤压图片可用宽度。 */
+    /*
+       放大预览左右切换按钮
+       --------------------------------------------------------
+       这两个按钮必须始终保持在图片垂直中心，因此不参与全站的缩放回弹和
+       白光扩散。旧版按下时会覆盖 translateY(-50%)，按钮瞬间移位，导致
+       指针松开后 click 偶发丢失。现在只改变底色，不再移动或遮出大片白光。
+    */
     .image-nav {
       position: absolute; z-index: 2; top: 50%; transform: translateY(-50%);
-      width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%;
-      display: grid; place-items: center; color: white; background: rgba(0,0,0,.48);
-      box-shadow: 0 8px 24px rgba(0,0,0,.28); font-size: 2rem; line-height: 1; cursor: pointer;
-      backdrop-filter: blur(6px); transition: background .18s, transform .18s;
+      width: 48px; height: 48px; border: 1px solid rgba(255,255,255,.42); border-radius: 50%;
+      display: grid; place-items: center; color: white; background: rgba(13,31,38,.54);
+      box-shadow: 0 7px 20px rgba(0,0,0,.25); font-size: 2rem; line-height: 1; cursor: pointer;
+      opacity: .82; user-select: none; touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: background-color .11s ease, border-color .11s ease, opacity .11s ease;
     }
-    .image-nav:hover { background: rgba(0,0,0,.72); transform: translateY(-50%) scale(1.06); }
-    .image-nav:active { transform: translateY(-50%) scale(.94); }
+    .image-nav:hover { background: rgba(13,31,38,.80); border-color: rgba(255,255,255,.68); opacity: 1; }
+    .image-nav:active { background: rgba(35,151,172,.82); border-color: rgba(255,255,255,.82); opacity: 1; }
     .image-nav:focus-visible { outline: 3px solid rgba(255,255,255,.62); outline-offset: 3px; }
     .image-nav[hidden] { display: none; }
     .image-nav.previous { left: 12px; }
@@ -982,8 +990,7 @@
     dialog .btn::after,
     .icon-button::after,
     .text-button::after,
-    .tab-button::after,
-    .image-nav::after {
+    .tab-button::after {
       content: "";
       position: absolute;
       z-index: 2;
@@ -1000,8 +1007,7 @@
     dialog .btn:hover::after,
     .icon-button:hover::after,
     .text-button:hover::after,
-    .tab-button:hover::after,
-    .image-nav:hover::after { animation: glass-control-sheen .68s cubic-bezier(.2,.7,.2,1); }
+    .tab-button:hover::after { animation: glass-control-sheen .68s cubic-bezier(.2,.7,.2,1); }
     @keyframes glass-control-sheen {
       from { transform: translateX(-180%) rotate(16deg); }
       to { transform: translateX(620%) rotate(16deg); }
@@ -1023,8 +1029,7 @@
       dialog .btn::after,
       .icon-button::after,
       .text-button::after,
-      .tab-button::after,
-      .image-nav::after { display: none; }
+      .tab-button::after { display: none; }
     }
 
     /* 不支持背景模糊的旧浏览器使用高不透明底色，保证按钮文字对比度。 */
@@ -1362,7 +1367,7 @@
     <div class="image-view">
       <div class="image-stage">
         <button id="image-previous" class="image-nav previous" type="button" aria-label="上一张照片" title="上一张照片">‹</button>
-        <img id="image-preview" alt="图片预览">
+        <img id="image-preview" alt="图片预览" decoding="async">
         <button id="image-next" class="image-nav next" type="button" aria-label="下一张照片" title="下一张照片">›</button>
       </div>
       <div class="image-toolbar">
@@ -1391,6 +1396,8 @@
       activeAlbums: {},
       imageSequence: [],
       currentImageIndex: -1,
+      // 记录已经预加载过的预览地址，避免每次来回切换都重复创建请求。
+      preloadedImageUrls: new Set(),
       publicFeedback: [],
       pdfDownloading: false,
       pdfLibraryPromise: null,
@@ -1862,6 +1869,23 @@
      * 更新放大预览中的当前照片。索引会首尾循环，因此第一张向左切换会到
      * 最后一张，最后一张向右切换会回到第一张。
      */
+    function preloadAdjacentImages() {
+      const photos = state.imageSequence;
+      if (photos.length < 2) return;
+
+      [-1, 1].forEach((offset) => {
+        const adjacentIndex = (state.currentImageIndex + offset + photos.length) % photos.length;
+        const adjacentPhoto = photos[adjacentIndex];
+        const source = String(adjacentPhoto?.previewUrl || adjacentPhoto?.url || "");
+        if (!source || state.preloadedImageUrls.has(source)) return;
+
+        state.preloadedImageUrls.add(source);
+        const preload = new Image();
+        preload.decoding = "async";
+        preload.src = source;
+      });
+    }
+
     function showImageAt(index) {
       const photos = state.imageSequence;
       if (!photos.length) return;
@@ -1876,6 +1900,8 @@
       document.getElementById("image-previous").hidden = !hasMultiple;
       document.getElementById("image-next").hidden = !hasMultiple;
       syncProtectedDownloadControls();
+      // 当前图显示后立即准备前后两张，切换时通常可以直接从浏览器缓存读取。
+      preloadAdjacentImages();
     }
 
     function stepImage(offset) {
@@ -2358,7 +2384,13 @@
       let pressedPoint = null;
 
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
-      const canAnimate = (control) => control && !control.matches(":disabled") && control.id !== "avatar-refresh";
+      /*
+       * 图片左右切换按钮依靠 translateY(-50%) 固定在垂直中心，必须排除在
+       * 全站缩放、回弹和白光扩散之外，否则按下时按钮会移位并丢失 click。
+       */
+      const canAnimate = (control) => control
+        && !control.matches(":disabled, .image-nav")
+        && control.id !== "avatar-refresh";
       const release = (control, point = null) => {
         if (!control) return;
         control.classList.remove("is-control-pressed");
