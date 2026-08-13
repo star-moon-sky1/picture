@@ -6,6 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="xingyueji-version" content="1.9.0.0">
   <title>星月集 · Studio</title>
+  <!-- Studio 与公开网站共用同一份透明毛玻璃头像和标签页图标。 -->
+  <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
   <style>
     /* =========================================================
        01. 后台全局颜色和基础控件
@@ -44,6 +47,10 @@
       backdrop-filter:blur(2px) saturate(114%) contrast(104%); -webkit-backdrop-filter:blur(2px) saturate(114%) contrast(104%);
     }
     .login-card::before { content:""; position:absolute; z-index:-1; inset:0; pointer-events:none; background:linear-gradient(118deg,rgba(255,255,255,.31),transparent 9% 75%,rgba(255,255,255,.10)); }
+    /* Studio 登录页头像：直接使用本地透明 PNG，不再用 CSS 伪元素临时画图标。 */
+    .login-brand { display:flex; align-items:center; gap:16px; margin-bottom:13px; }
+    .login-brand .studio-avatar { width:76px; height:76px; flex:0 0 76px; }
+    .login-brand-copy { min-width:0; }
     .login-card h1 { margin:0 0 8px; font-family:var(--font-display); font-size:2.25rem; font-weight:880; letter-spacing:-.04em; }
     .login-card p { color:var(--muted); line-height:1.7; }
     .field { display:grid; gap:7px; margin-bottom:15px; }
@@ -70,8 +77,16 @@
        ========================================================= */
     .studio { min-height:100dvh; display:grid; grid-template-columns:220px 1fr; }
     .side { position:sticky; top:0; height:100dvh; padding:25px 16px; background:#172d35; color:white; display:flex; flex-direction:column; overflow-y:auto; }
-    .side h1 { margin:0 10px 5px; font-family:var(--font-display); font-size:1.45rem; font-weight:880; letter-spacing:-.03em; }
-    .side small { margin:0 10px 24px; color:#a9c0c6; }
+    /* 登录后的 Studio 左栏也显示同一头像，文字与头像组成一个完整品牌区。 */
+    .side-brand { display:flex; align-items:center; gap:10px; margin:0 6px 23px; }
+    .studio-avatar {
+      display:block; object-fit:contain; border-radius:50%;
+      filter:drop-shadow(0 9px 16px rgba(0,0,0,.20));
+    }
+    .side-brand .studio-avatar { width:58px; height:58px; flex:0 0 58px; }
+    .side-brand-copy { min-width:0; }
+    .side-brand h1 { margin:0; font-family:var(--font-display); font-size:1.08rem; font-weight:880; line-height:1.18; letter-spacing:-.03em; }
+    .side-brand small { display:block; margin:4px 0 0; color:#a9c0c6; font-size:.72rem; line-height:1.35; }
     .side-nav { display:grid; gap:6px; }
     .side-nav button { border:1px solid rgba(255,255,255,.20); border-radius:12px; padding:10px 12px; text-align:left; color:#d4e1e4; background:rgba(104,164,184,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.08); backdrop-filter:blur(11px) saturate(114%); -webkit-backdrop-filter:blur(11px) saturate(114%); }
     .side-nav button:hover { background:rgba(71,168,186,.22); color:white; }
@@ -229,7 +244,10 @@
     @media(max-width:720px) {
       .studio { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:100dvh; }
       .side { position:static; height:auto; padding:12px; overflow:visible; }
-      .side h1,.side small,.side-footer { display:none; }
+      /* 手机端保留头像作为 Studio 标识，只隐藏占宽的品牌文字。 */
+      .side-brand { margin:0 4px 9px; }
+      .side-brand .studio-avatar { width:43px; height:43px; flex-basis:43px; }
+      .side-brand-copy,.side-footer { display:none; }
       .side-nav { display:flex; overflow-x:auto; gap:5px; }
       .side-nav button { flex:0 0 auto; padding:8px 10px; }
       .workspace { height:auto; min-height:0; padding:22px 14px 55px; }
@@ -250,7 +268,10 @@
   <!-- ==================== 后台登录界面 ==================== -->
   <section id="login-shell" class="login-shell">
     <form id="login-form" class="login-card">
-      <h1>星月集 Studio</h1>
+      <div class="login-brand">
+        <img class="studio-avatar" src="/assets/avatar-glass.png?v=312c1e75" alt="星月集渐变毛玻璃头像">
+        <div class="login-brand-copy"><h1>星月集 Studio</h1><p>内容发布与管理</p></div>
+      </div>
       <p>像公众号一样撰写文章、发布旅行指南、管理图片与评论。</p>
       <div class="field"><label for="password">后台密码</label><input id="password" type="password" required autocomplete="current-password" placeholder="输入 ADMIN_PASSWORD"></div>
       <button class="btn" type="submit" style="width:100%">登录后台</button>
@@ -262,7 +283,10 @@
   <div id="studio" class="studio hidden">
     <!-- 后台左侧/手机顶部导航。data-view 对应右侧 view-xxx。 -->
     <aside class="side">
-      <h1>星月集 Studio</h1><small>内容发布与管理</small>
+      <div class="side-brand">
+        <img class="studio-avatar" src="/assets/avatar-glass.png?v=312c1e75" alt="星月集渐变毛玻璃头像">
+        <div class="side-brand-copy"><h1>星月集 Studio</h1><small>内容发布与管理</small></div>
+      </div>
       <nav class="side-nav">
         <button class="active" data-view="dashboard">概览</button>
         <button data-view="sections">个人空间板块</button>
