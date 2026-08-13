@@ -7,7 +7,8 @@
   <meta name="description" content="星月集个人网站">
   <meta name="xingyueji-version" content="1.9.0.0">
   <title>星月集 - 个人主页</title>
-  <link rel="icon" href="https://picui.ogmua.cn/s1/2026/03/19/69bbdd4a6e92e.webp" type="image/webp">
+  <!-- 网站头像和浏览器图标统一使用本地处理后的渐变毛玻璃头像。 -->
+  <link rel="icon" href="/assets/avatar-glass.png" type="image/png">
   <!--
     MathJax 4：AI 完成回答后，把 \(...\) 与 \[...\] 内的 LaTeX 转成公式。
     ui/safe 会过滤公式里不安全的链接和样式；脚本加载失败时仍会保留原始文字。
@@ -161,31 +162,23 @@
        点击后的刷新逻辑在文件底部搜索“头像点击刷新”。
        ========================================================= */
     .avatar-refresh {
-      width: 66px; height: 66px; flex: 0 0 66px; padding: 5px;
+      width: 66px; height: 66px; flex: 0 0 66px; padding: 0;
       border: 0; border-radius: 50%; overflow: visible;
       /*
-         头像边缘按半径由内向外变化：紧贴照片的一侧是淡蓝色，越接近外缘
-         越接近侧边栏的浅青背景。它不是绕圆周变化的 conic-gradient，也没有
-         额外套圈，所以视觉上是一整条连续、向外淡出的渐变玻璃边。
+         渐变毛玻璃环已经写入 /assets/avatar-glass.png，并且图片外侧是真实
+         透明区域。因此按钮本身不再叠加第二层 CSS 圆环，只保留轻微悬浮阴影。
       */
-      background: radial-gradient(circle,
-        rgba(184,220,237,.98) 0 80%,
-        rgba(196,226,238,.91) 85%,
-        rgba(220,239,241,.66) 93%,
-        rgba(242,248,246,.18) 100%);
+      background: transparent;
       box-shadow:
         0 10px 24px rgba(44,88,104,.16),
-        inset 0 1px 0 rgba(255,255,255,.88),
-        inset 0 -1px 0 rgba(59,103,120,.18);
-      -webkit-backdrop-filter: blur(2px) saturate(1.16) contrast(1.04);
-      backdrop-filter: blur(2px) saturate(1.16) contrast(1.04);
+        0 2px 7px rgba(119,161,205,.10);
       cursor: pointer;
       transition: transform .1s cubic-bezier(.175,.885,.32,1.275), box-shadow .1s ease;
       user-select: none; -webkit-tap-highlight-color: transparent;
     }
     .avatar-refresh:hover {
       transform: scale(1.09) rotate(-4deg);
-      box-shadow: 0 14px 30px rgba(44,88,104,.22), inset 0 1px 0 #fff, inset 0 -1px 0 rgba(59,103,120,.18);
+      box-shadow: 0 14px 30px rgba(44,88,104,.22), 0 3px 9px rgba(119,161,205,.14);
     }
     .avatar-refresh:focus-visible { outline: 3px solid rgba(33,127,186,.28); outline-offset: 4px; }
     /*
@@ -282,17 +275,26 @@
       display: none;
       height: 100%;
       overflow: auto;
+      /* 隔离各板块的布局与绘制，切换时不让浏览器重新计算整个网站外壳。 */
+      contain: layout paint;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
       padding: clamp(34px, 6vw, 78px) clamp(24px, 7vw, 94px) 80px;
       scrollbar-gutter: stable;
     }
-    /* 板块内容用稍慢的模糊渐入，避免按钮刚弹起时页面已经瞬间切完。 */
-    .content-section.active { display: block; animation: section-arrive .56s .07s cubic-bezier(.2,.72,.2,1) both; }
+    /*
+       板块切换不再对整页文字执行 blur。模糊会迫使浏览器逐帧重绘大量字形，
+       首页文字较多时尤其容易显得卡顿；现在只保留 0.18 秒淡入和 4px 位移。
+       section-entering 只在用户主动切换时临时添加；页面刷新恢复板块时不添加，
+       因而目标内容会在首帧直接就位。
+    */
+    .content-section.active { display: block; }
+    .content-section.active.section-entering {
+      animation: section-arrive .18s cubic-bezier(.2,.72,.2,1) both;
+    }
     @keyframes section-arrive {
-      0% { opacity: 0; transform: translateY(13px) scale(.992); filter: blur(7px); }
-      58% { opacity: .88; filter: blur(1.5px); }
-      100% { opacity: 1; transform: none; filter: none; }
+      from { opacity: .62; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
     }
     .section-inner { width: min(980px, 100%); margin: 0 auto; }
 
@@ -711,7 +713,7 @@
       .nav button.active, .tab-button.active { background: #b3d3db; }
     }
     .portfolio-panel { display: none; }
-    .portfolio-panel.active { display: block; animation: section-arrive .46s .05s cubic-bezier(.2,.72,.2,1) both; }
+    .portfolio-panel.active { display: block; animation: section-arrive .16s cubic-bezier(.2,.72,.2,1) both; }
     .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
     .content-card {
       min-height: 210px; padding: 24px; border-radius: var(--radius); border: 1px solid var(--line);
@@ -1005,7 +1007,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .content-section.active,
+      .content-section.section-entering,
       dialog[open] :is(.auth-lock-card, .reader-wrap, .image-view),
       :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card).control-bounce-release,
       .bubble.ai.streaming::after { animation: none !important; }
@@ -1051,7 +1053,7 @@
       }
       .sidebar-toggle { margin: 0 0 8px; }
       .brand { margin: 0 0 10px; gap: 9px; }
-      .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; padding: 3px; }
+      .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; padding: 0; }
       .brand h2 { font-size: 1rem; }
       .brand small, .sidebar-note { display: none; }
       .nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
@@ -1133,13 +1135,13 @@
       <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">☰</button>
       <div class="brand">
         <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
-          <img class="avatar" src="https://xingyueji-1-1413014837.cos.ap-beijing.myqcloud.com/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260311220605_94_88.jpg" alt="星月集头像">
+          <img class="avatar" src="/assets/avatar-glass.png" alt="星月集渐变毛玻璃头像">
         </button>
         <div><h2 id="brand-title">星月集</h2><small>xingyueji</small></div>
       </div>
       <!-- data-section 的值必须与右侧 section 的 id 一致。 -->
       <nav class="nav" aria-label="主要导航">
-        <button class="active" data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
+        <button data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
         <button data-section="portfolio" title="个人空间"><span class="nav-icon">▦</span><span class="nav-label">个人空间</span></button>
         <button data-section="about" title="关于我"><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
@@ -1158,7 +1160,7 @@
     <!-- 主内容区：一次只显示带有 active 类名的 section。 -->
     <main class="main">
       <!-- ==================== 主页 ==================== -->
-      <section id="home" class="content-section active">
+      <section id="home" class="content-section">
         <div class="section-inner">
           <h1 id="home-title">星月集的个人网站</h1>
           <!-- 默认不显示副标题；只有站长以后在后台填写主页介绍时才会出现。 -->
@@ -1601,14 +1603,41 @@
     }
 
     /* ---------- 03. 主导航：显示指定 section，并把站内切换写入浏览器历史。 ---------- */
-    function showSection(id) {
+    function showSection(id, { animate = true } = {}) {
       const target = document.getElementById(id);
       if (!target?.classList.contains("content-section")) return false;
-      document.querySelectorAll(".content-section").forEach((section) => section.classList.toggle("active", section.id === id));
+      const sectionChanged = state.activeSection !== id || !target.classList.contains("active");
+      document.querySelectorAll(".content-section").forEach((section) => {
+        section.classList.toggle("active", section.id === id);
+        section.classList.remove("section-entering");
+      });
       document.querySelectorAll(".nav button[data-section]").forEach((button) => button.classList.toggle("active", button.dataset.section === id));
-      target.scrollTo({ top: 0, behavior: "smooth" });
+      /* 切换板块时直接回到顶部，避免 smooth 滚动与入场动画叠加造成拖沓感。 */
+      target.scrollTop = 0;
+      if (animate && sectionChanged && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        /*
+         * active 与 section-entering 在同一轮样式计算前写入即可启动动画；不再
+         * 读取 offsetWidth 强制同步排版，文字很多的主页也不会因此卡住主线程。
+         */
+        target.classList.add("section-entering");
+        window.clearTimeout(target._sectionEnteringTimer);
+        target._sectionEnteringTimer = window.setTimeout(() => target.classList.remove("section-entering"), 220);
+      }
       state.activeSection = id;
       return true;
+    }
+
+    function requestedSectionFromLocation() {
+      const requested = location.hash.slice(1);
+      return document.getElementById(requested)?.classList.contains("content-section") ? requested : "home";
+    }
+
+    /* 根据已读取的会话决定刷新首帧能否直接恢复目标板块。 */
+    function initialSectionState() {
+      const requested = requestedSectionFromLocation();
+      const blocked = (requested === "ai-helper" && !hasFullAccess())
+        || (requested === "account" && !state.auth.authenticated);
+      return { requested, target: blocked ? "home" : requested, blocked };
     }
 
     function updateSectionHistory(id, mode = "push") {
@@ -1621,10 +1650,10 @@
       else if (history.state?.xingyuejiSection !== id || location.hash !== `#${id}`) history.pushState(value, "", address);
     }
 
-    function navigateSection(id, { historyMode = "push" } = {}) {
+    function navigateSection(id, { historyMode = "push", animate = true } = {}) {
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
-      if (showSection(id)) updateSectionHistory(id, historyMode);
+      if (showSection(id, { animate })) updateSectionHistory(id, historyMode);
     }
 
     /* ---------- 04. 首页最新日志 + 下一级完整历史。 ---------- */
@@ -2256,8 +2285,19 @@
           return;
         }
 
+        /*
+         * 先在仍隐藏的主体中选中网址 hash 对应板块，再显示页面。这样浏览器
+         * 第一次绘制网站主体时就是目标板块，不会先画主页、再跳到所选板块。
+         */
+        const initialSection = initialSectionState();
+        showSection(initialSection.target, { animate: false });
         showWebsiteShell();
-        if (state.siteLoaded) { renderAccount(); return; }
+        updateSectionHistory(initialSection.target, "replace");
+        if (state.siteLoaded) {
+          renderAccount();
+          if (initialSection.blocked) showAuthLock(initialSection.requested === "ai-helper" ? "ai" : "account");
+          return;
+        }
         const [bootstrap, feedbackData] = await Promise.all([
           loadBootstrap(),
           api("/api/feedback").catch(() => ({ feedback: [] })),
@@ -2268,15 +2308,12 @@
         applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback(); renderAccount();
 
         /*
-         * 登录或注册后可通过 hash 回到原本想打开的功能。第一次进入用 replace，
-         * 之后每次点击导航才 push；这样手机侧滑返回会依次回到上一个站内板块，
-         * 到达最初板块后才按浏览器的正常规则离开网站。
+         * 上面的 initialSection 已在网站主体显示前完成恢复。此处仅处理权限
+         * 提示，不再二次切换板块，避免数据加载完成后又产生一次视觉跳转。
          */
-        const requestedSection = location.hash.slice(1);
-        const target = document.getElementById(requestedSection)?.classList.contains("content-section")
-          ? requestedSection
-          : "home";
-        navigateSection(target, { historyMode: "replace" });
+        if (initialSection.blocked) {
+          showAuthLock(initialSection.requested === "ai-helper" ? "ai" : "account");
+        }
       } catch (error) {
         // 已经选择身份后即使数据读取失败，也显示网站主体中的明确错误提示。
         showWebsiteShell();
