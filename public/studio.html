@@ -4,11 +4,12 @@
   <!-- 后台页面基础信息。版本号用于确认 Cloudflare 是否部署了最新文件。 -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="xingyueji-version" content="1.9.0.0">
+  <meta name="xingyueji-version" content="2.1.0.0">
   <title>星月集 · Studio</title>
   <!-- Studio 与公开网站共用同一份透明毛玻璃头像和标签页图标。 -->
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
+  <script src="/theme.js"></script>
   <style>
     /* =========================================================
        01. 后台全局颜色和基础控件
@@ -168,6 +169,33 @@
     .comment-row small { color:var(--muted); }
 
     /* =========================================================
+       06A. 大文件、文件夹与视频版本管理
+       ---------------------------------------------------------
+       原件保存在 R2，下面的进度条显示浏览器分片上传进度。文件卡片只
+       保存展示名称和权限等元数据，不会把大文件内容写入 HTML 或 D1。
+       ========================================================= */
+    .asset-toolbar { display:grid; grid-template-columns:minmax(180px,1fr) repeat(2,minmax(150px,.55fr)); gap:12px; align-items:end; }
+    .asset-browser { display:grid; gap:9px; margin-top:16px; }
+    .asset-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:13px; background:var(--paper); }
+    .asset-row.folder { border-color:#cce3e7; background:#f5fbfb; }
+    .asset-row-title { display:flex; align-items:center; gap:9px; min-width:0; }
+    .asset-row-title strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .asset-row-meta { margin-top:6px; color:var(--muted); font-size:.76rem; line-height:1.55; overflow-wrap:anywhere; }
+    .asset-row-controls { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; }
+    .asset-row-controls select { width:auto; min-width:118px; padding:7px 9px; font-size:.76rem; }
+    .upload-queue { display:grid; gap:8px; margin-top:14px; }
+    .upload-job { padding:11px 13px; border:1px solid #cfe4e7; border-radius:11px; background:#f7fbfb; }
+    .upload-job-head { display:flex; justify-content:space-between; gap:10px; font-size:.78rem; }
+    .upload-progress { height:7px; margin-top:8px; border-radius:999px; overflow:hidden; background:#dce8e9; }
+    .upload-progress > span { display:block; width:0; height:100%; background:var(--cyan); transition:width .18s ease; }
+    .resource-picker { width:min(720px,calc(100% - 28px)); max-height:min(720px,86dvh); border:1px solid rgba(255,255,255,.72); border-radius:22px; padding:0; color:var(--ink); background:rgba(248,252,252,.94); box-shadow:0 28px 80px rgba(17,45,55,.25); }
+    .resource-picker::backdrop { background:rgba(12,29,35,.38); backdrop-filter:blur(5px); }
+    .resource-picker-inner { padding:22px; }
+    .resource-picker-list { display:grid; gap:8px; max-height:55dvh; overflow:auto; margin:14px 0; }
+    .resource-picker-item { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--paper); }
+    .editor .resource-embed { margin:14px 0; padding:14px; border:1px dashed var(--cyan); border-radius:12px; background:#eefafa; color:#286a74; font-weight:800; }
+
+    /* =========================================================
        07. 用户审核、在线状态与密码重置
        ---------------------------------------------------------
        绿色圆点表示两分钟内有页面心跳；“最近在线”只是近实时状态。
@@ -255,6 +283,9 @@
       .cards,.form-grid { grid-template-columns:1fr; }
       .form-grid .wide { grid-column:auto; }
       .media-grid { grid-template-columns:repeat(2,1fr); }
+      .asset-toolbar { grid-template-columns:1fr; }
+      .asset-row { grid-template-columns:1fr; }
+      .asset-row-controls { justify-content:flex-start; }
       .user-grid { grid-template-columns:1fr; }
     }
     @media(prefers-reduced-motion:reduce) {
@@ -263,6 +294,7 @@
       button,.btn,.side-footer a,.list-item { transition:none !important; }
     }
   </style>
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
   <!-- ==================== 后台登录界面 ==================== -->
@@ -293,6 +325,7 @@
         <button data-view="content">文章内容</button>
         <button data-view="changelogs">更新日志</button>
         <button data-view="media">图片与相册</button>
+        <button data-view="assets">文件与视频</button>
         <button data-view="comments">评论管理</button>
         <button data-view="feedback">留言与反馈</button>
         <button data-view="users">用户与审核</button>
@@ -368,7 +401,7 @@
                 <div class="toolbar">
                   <button type="button" data-command="bold"><b>B</b></button><button type="button" data-command="italic"><i>I</i></button>
                   <button type="button" data-block="h2">H2</button><button type="button" data-block="h3">H3</button>
-                  <button type="button" data-command="insertUnorderedList">列表</button><button type="button" id="insert-link">链接</button><button type="button" id="insert-image">插图</button>
+                  <button type="button" data-command="insertUnorderedList">列表</button><button type="button" id="insert-link">链接</button><button type="button" id="insert-image">插图</button><button type="button" id="insert-resource">插入文件/视频</button>
                 </div>
                 <div id="content-editor" class="editor" contenteditable="true"></div>
                 <input id="inline-image-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
@@ -425,6 +458,31 @@
         <div id="media-grid" class="media-grid"></div>
       </section>
 
+      <!-- ==================== R2 大文件、文件夹与视频 ==================== -->
+      <section id="view-assets" class="view">
+        <div class="panel" style="margin-top:0">
+          <h3>文件与视频存储</h3>
+          <p class="status">文件由浏览器分成 32MiB 小片写入 R2；支持大文件夹、PDF/Word、压缩包和视频。浏览器关闭前请等待当前文件显示“上传完成”。</p>
+          <div class="asset-toolbar">
+            <div class="field" style="margin:0"><label>当前文件夹</label><select id="asset-current-folder"><option value="">根目录</option></select></div>
+            <div class="field" style="margin:0"><label>默认可见范围</label><select id="asset-upload-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="private">私密（仅 Studio）</option></select></div>
+            <div class="field" style="margin:0"><label>默认下载权限</label><select id="asset-download-policy"><option value="member">仅审核用户可下载</option><option value="public">游客也可下载</option></select></div>
+          </div>
+          <div class="actions">
+            <button id="asset-new-folder" class="btn small" type="button">新建子文件夹</button>
+            <button id="asset-upload-file" class="btn small" type="button">上传文件/视频</button>
+            <button id="asset-upload-folder" class="btn small ghost" type="button">上传整个文件夹</button>
+            <button id="asset-refresh" class="btn small ghost" type="button">刷新</button>
+            <span id="asset-notice" class="status"></span>
+          </div>
+          <input id="asset-file-input" class="hidden" type="file" multiple>
+          <input id="asset-folder-input" class="hidden" type="file" webkitdirectory directory multiple>
+          <input id="asset-variant-input" class="hidden" type="file">
+          <div id="asset-upload-queue" class="upload-queue"></div>
+          <div id="asset-browser" class="asset-browser"></div>
+        </div>
+      </section>
+
       <!-- ==================== 游客评论管理 ==================== -->
       <section id="view-comments" class="view"><div class="panel" style="margin-top:0"><div class="actions" style="margin:0 0 10px"><button id="refresh-comments" class="btn small ghost">刷新评论</button></div><div id="comment-admin-list"></div></div></section>
 
@@ -479,16 +537,28 @@
     </main>
   </div>
 
+  <!-- 正文资源选择器：只插入资源 ID，占位符由公开网站转换成播放器或文件卡片。 -->
+  <dialog id="resource-picker" class="resource-picker">
+    <div class="resource-picker-inner">
+      <h3 style="margin:0">插入文件、视频或文件夹</h3>
+      <p class="status">先在“文件与视频”中上传资源。插入后，正文中只保存受控资源 ID。</p>
+      <div id="resource-picker-list" class="resource-picker-list"></div>
+      <div class="actions"><button id="resource-picker-close" class="btn ghost" type="button">取消</button></div>
+    </div>
+  </dialog>
+
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script>
     const app = {
-      sections: [], content: [], changelogs: [], albums: [], media: [], comments: [], feedback: [],
+      sections: [], content: [], changelogs: [], albums: [], media: [], assetFolders: [], assets: [], comments: [], feedback: [],
       users: [], passwordResets: [], userEvents: [], generatedResetLinks: new Map(), settings: {},
+      currentAssetFolder: "", editorRange: null, variantTarget: null,
     };
     const viewInfo = {
       dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","增加、改名、排序或删除文章类与图片类大板块。"],
       content:["文章内容","在任意文章类大板块中撰写、保存草稿并发布内容。"],
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
+      assets:["文件与视频","分片上传大文件或文件夹，管理文档预览、视频清晰度和下载权限。"],
       comments:["评论管理","查看、隐藏或永久删除文章评论及其全部回复。"], feedback:["留言与反馈","处理、删除游客留言；公开留言只有站长能够回复。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页公开资料、本站使用说明和左下角版本号。"],
@@ -653,8 +723,8 @@
       document.getElementById("view-title").textContent=viewInfo[name][0];document.getElementById("view-desc").textContent=viewInfo[name][1];
     }
 
-    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadComments(),loadFeedback(),loadUsers(),loadSettings()])}
-    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadAssets(),loadComments(),loadFeedback(),loadUsers(),loadSettings()])}
+    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["文件与视频",data.assets],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
 
     async function loadSections(){app.sections=await api("/api/admin/sections");renderSectionList();refreshSectionOptions()}
     function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
@@ -724,6 +794,140 @@
         });
     }
     function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});select.value=current}
+
+    /* =========================================================
+       R2 大文件分片上传与文件夹管理
+       ---------------------------------------------------------
+       每个文件按服务器返回的 partSize 切片上传。某一片网络失败会自动重试
+       两次；只有所有片的 ETag 都返回后才请求 R2 合并，避免出现半个文件。
+       ========================================================= */
+    function formatBytes(value){
+      const bytes=Number(value)||0;if(bytes<1024)return `${bytes} B`;
+      const units=["KiB","MiB","GiB","TiB"];let size=bytes;let unit=-1;
+      do{size/=1024;unit+=1}while(size>=1024&&unit<units.length-1);
+      return `${size>=10?size.toFixed(1):size.toFixed(2)} ${units[unit]}`;
+    }
+    function assetFolderPath(id){
+      if(!id)return "根目录";const map=new Map(app.assetFolders.map(item=>[item.id,item]));const names=[];const seen=new Set();let cursor=map.get(id);
+      while(cursor&&!seen.has(cursor.id)){seen.add(cursor.id);names.unshift(cursor.name);cursor=cursor.parent_id?map.get(cursor.parent_id):null}
+      return names.join(" / ")||"未知目录";
+    }
+    async function loadAssets(){
+      [app.assetFolders,app.assets]=await Promise.all([api("/api/admin/asset-folders"),api("/api/admin/assets")]);
+      if(app.currentAssetFolder&&!app.assetFolders.some(item=>item.id===app.currentAssetFolder))app.currentAssetFolder="";
+      renderAssetFolderOptions();renderAssetBrowser();renderResourcePicker();
+    }
+    function renderAssetFolderOptions(){
+      const select=document.getElementById("asset-current-folder");const current=app.currentAssetFolder;clear(select);
+      const root=document.createElement("option");root.value="";root.textContent="根目录";select.append(root);
+      [...app.assetFolders].sort((a,b)=>assetFolderPath(a.id).localeCompare(assetFolderPath(b.id),"zh-CN")).forEach(item=>{
+        const option=document.createElement("option");option.value=item.id;option.textContent=assetFolderPath(item.id);select.append(option);
+      });select.value=current;
+    }
+    function renderAssetBrowser(){
+      const browser=document.getElementById("asset-browser");clear(browser);const current=app.currentAssetFolder||null;
+      const folders=app.assetFolders.filter(item=>(item.parent_id||null)===current);
+      const assets=app.assets.filter(item=>(item.folder_id||null)===current);
+      if(current){
+        const folder=app.assetFolders.find(item=>item.id===current);const up=document.createElement("div");up.className="asset-row folder";
+        const copy=document.createElement("div");copy.className="asset-row-title";const strong=document.createElement("strong");strong.textContent=`↩ 返回 ${folder?.parent_id?assetFolderPath(folder.parent_id):"根目录"}`;copy.append(strong);up.append(copy);
+        up.addEventListener("click",()=>{app.currentAssetFolder=folder?.parent_id||"";renderAssetFolderOptions();renderAssetBrowser()});browser.append(up);
+      }
+      folders.forEach(folder=>{
+        const row=document.createElement("article");row.className="asset-row folder";
+        const info=document.createElement("div");const title=document.createElement("div");title.className="asset-row-title";const name=document.createElement("strong");name.textContent=`📁 ${folder.name}`;title.append(name);
+        const meta=document.createElement("div");meta.className="asset-row-meta";meta.textContent=`${visibilityLabels[folder.visibility]||"公开"} · 子文件夹 ${folder.folder_count||0} · 文件 ${folder.asset_count||0}${folder.description?` · ${folder.description}`:""}`;info.append(title,meta);
+        const controls=document.createElement("div");controls.className="asset-row-controls";
+        const open=button("打开");open.addEventListener("click",()=>{app.currentAssetFolder=folder.id;renderAssetFolderOptions();renderAssetBrowser()});
+        const edit=button("编辑");edit.addEventListener("click",()=>editAssetFolder(folder));
+        const archive=button(folder.archive_asset_id?"更换整包":"设置整包下载");archive.addEventListener("click",()=>attachFolderArchive(folder));
+        const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAssetFolder(folder));controls.append(open,edit,archive,del);row.append(info,controls);browser.append(row);
+      });
+      assets.forEach(item=>browser.append(createAssetRow(item)));
+      if(!folders.length&&!assets.length){const empty=document.createElement("p");empty.className="status";empty.textContent="这个文件夹还是空的。";browser.append(empty)}
+    }
+    function createAssetRow(item){
+      const row=document.createElement("article");row.className="asset-row";
+      const info=document.createElement("div");const title=document.createElement("div");title.className="asset-row-title";const name=document.createElement("strong");name.textContent=`${item.kind==="video"?"🎬":item.kind==="archive"?"🗜️":item.kind==="pdf"||item.kind==="word"?"📄":"📦"} ${item.display_name}`;title.append(name);
+      const labels=(item.variants||[]).filter(v=>v.status==="ready").map(v=>v.label).join("、");const meta=document.createElement("div");meta.className="asset-row-meta";meta.textContent=`${item.kind.toUpperCase()} · ${formatBytes(item.size_bytes)} · ${visibilityLabels[item.visibility]||item.visibility} · ${item.download_policy==="public"?"游客可下载":"仅审核用户可下载"}${labels?` · 版本：${labels}`:""}`;info.append(title,meta);
+      const controls=document.createElement("div");controls.className="asset-row-controls";
+      const visibility=document.createElement("select");[["public","公开"],["member","仅审核用户"],["private","私密"]].forEach(([value,text])=>{const o=document.createElement("option");o.value=value;o.textContent=text;visibility.append(o)});visibility.value=item.visibility;
+      const download=document.createElement("select");[["member","登录后下载"],["public","游客可下载"]].forEach(([value,text])=>{const o=document.createElement("option");o.value=value;o.textContent=text;download.append(o)});download.value=item.download_policy;
+      const save=button("保存权限");save.addEventListener("click",()=>saveAssetMetadata(item,{visibility:visibility.value,downloadPolicy:download.value}));
+      const open=button(item.kind==="archive"?"下载测试":"预览");open.addEventListener("click",()=>window.open(item.kind==="archive"?item.downloadUrl:item.url,"_blank","noopener"));
+      controls.append(visibility,download,save,open);
+      if(item.kind==="video"){
+        const variant=button("上传清晰度");variant.addEventListener("click",()=>chooseAssetVariant(item));controls.append(variant);
+        const stream=button(item.stream_hls_url?"修改自动流":"接入自动画质");stream.addEventListener("click",()=>configureVideoStream(item));controls.append(stream);
+      }
+      if(item.kind==="word"){const preview=button("上传 PDF 预览");preview.addEventListener("click",()=>chooseAssetVariant(item,"preview"));controls.append(preview)}
+      const rename=button("改名");rename.addEventListener("click",()=>renameAsset(item));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAsset(item));controls.append(rename,del);row.append(info,controls);return row;
+    }
+    async function editAssetFolder(folder){
+      const name=prompt("文件夹名称",folder.name);if(name===null||!name.trim())return;const description=prompt("文件夹说明（选填）",folder.description||"");if(description===null)return;
+      const visibility=prompt("可见范围：public / member / private",folder.visibility||"public");if(visibility===null)return;
+      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:folder.parent_id,visibility,sortOrder:folder.sort_order,archiveAssetId:folder.archive_asset_id})});await loadAssets();
+    }
+    async function attachFolderArchive(folder){
+      const archives=app.assets.filter(item=>item.kind==="archive"&&item.status==="ready");
+      if(!archives.length){alert("请先上传一个 ZIP、7z 或 RAR 压缩包，再把它设为该文件夹的整包下载。");return}
+      const choices=archives.map((item,index)=>`${index+1}. ${item.display_name}`).join("\n");
+      const answer=prompt(`输入压缩包前面的序号；输入 0 可取消整包关联：\n\n${choices}`,folder.archive_asset_id?String(Math.max(0,archives.findIndex(item=>item.id===folder.archive_asset_id)+1)):"1");
+      if(answer===null)return;const number=Number(answer);if(!Number.isInteger(number)||number<0||number>archives.length){alert("序号无效");return}
+      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:folder.name,description:folder.description,parentId:folder.parent_id,visibility:folder.visibility,sortOrder:folder.sort_order,archiveAssetId:number?archives[number-1].id:null})});await loadAssets();
+    }
+    async function deleteAssetFolder(folder){if(!confirm(`确定删除空文件夹“${folder.name}”吗？`))return;try{await api(`/api/admin/asset-folders/${folder.id}`,{method:"DELETE"});await loadAssets()}catch(error){alert(error.message)}}
+    async function saveAssetMetadata(item,changes){await api(`/api/admin/assets/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});document.getElementById("asset-notice").textContent="文件设置已保存。";await loadAssets()}
+    async function renameAsset(item){const displayName=prompt("网站中显示的名称",item.display_name);if(displayName===null||!displayName.trim())return;await saveAssetMetadata(item,{displayName})}
+    async function configureVideoStream(item){
+      const streamHlsUrl=prompt("粘贴 Cloudflare Stream 的 HLS (.m3u8) 地址；留空可取消自动画质",item.stream_hls_url||"");if(streamHlsUrl===null)return;
+      await saveAssetMetadata(item,{streamHlsUrl:streamHlsUrl.trim()});
+    }
+    async function deleteAsset(item){if(!confirm(`确定永久删除“${item.display_name}”及其全部清晰度/预览版本吗？`))return;await api(`/api/admin/assets/${item.id}`,{method:"DELETE"});await Promise.all([loadAssets(),loadDashboard()])}
+
+    function createUploadJob(file){
+      const queue=document.getElementById("asset-upload-queue");const job=document.createElement("div");job.className="upload-job";const head=document.createElement("div");head.className="upload-job-head";const name=document.createElement("strong");name.textContent=file.name;const state=document.createElement("span");state.textContent="等待上传";head.append(name,state);const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
+      return {update(percent,text){bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;state.textContent=text},fail(text){job.style.borderColor="#e4aaa5";state.textContent=text}};
+    }
+    async function uploadPartWithRetry(url,blob){
+      let lastError;for(let attempt=1;attempt<=3;attempt+=1){try{const response=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:blob});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||`分片上传失败（${response.status}）`);return data}catch(error){lastError=error;if(attempt<3)await new Promise(resolve=>setTimeout(resolve,450*attempt))}}
+      throw lastError;
+    }
+    async function uploadAssetFile(file,{folderId="",relativePath="",assetId="",variantLabel=""}={}){
+      const job=createUploadJob(file);let session=null;
+      try{
+        job.update(0,"正在建立上传会话…");session=await api("/api/admin/asset-uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({assetId,variantLabel,folderId,filename:file.name,displayName:file.name,mimeType:file.type||"application/octet-stream",sizeBytes:file.size,relativePath,visibility:document.getElementById("asset-upload-visibility").value,downloadPolicy:document.getElementById("asset-download-policy").value})});
+        const parts=[];const count=Math.ceil(file.size/session.partSize);if(count>session.maxParts)throw new Error("文件分片数超过 R2 上限");
+        for(let index=0;index<count;index+=1){const start=index*session.partSize;const end=Math.min(file.size,start+session.partSize);job.update(start/file.size*100,`上传第 ${index+1}/${count} 片…`);const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${index+1}`,file.slice(start,end));parts.push(result);job.update(end/file.size*100,`已上传 ${formatBytes(end)} / ${formatBytes(file.size)}`)}
+        job.update(100,"正在合并并校验…");await api(`/api/admin/asset-uploads/${session.sessionId}/complete`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({parts})});job.update(100,"上传完成");return session.assetId;
+      }catch(error){job.fail(`失败：${error.message}`);if(session?.sessionId)await api(`/api/admin/asset-uploads/${session.sessionId}`,{method:"DELETE"}).catch(()=>null);throw error}
+    }
+    async function ensureFolderPath(parts,parentId){
+      let current=parentId||null;for(const rawName of parts){const name=rawName.trim();if(!name)continue;let folder=app.assetFolders.find(item=>(item.parent_id||null)===current&&item.name===name);if(!folder){const result=await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,parentId:current,visibility:document.getElementById("asset-upload-visibility").value})});folder={id:result.id,parent_id:current,name,description:"",visibility:document.getElementById("asset-upload-visibility").value,sort_order:0,folder_count:0,asset_count:0};app.assetFolders.push(folder)}current=folder.id}return current;
+    }
+    async function runAssetUpload(files,{folderMode=false}={}){
+      if(!files.length)return;const notice=document.getElementById("asset-notice");notice.textContent=`准备上传 ${files.length} 个文件…`;
+      let completed=0;for(const file of files){try{let folderId=app.currentAssetFolder;const relativePath=file.webkitRelativePath||file.name;if(folderMode){const parts=relativePath.split("/").slice(0,-1);folderId=await ensureFolderPath(parts,app.currentAssetFolder)}await uploadAssetFile(file,{folderId,relativePath});completed+=1;notice.textContent=`已完成 ${completed}/${files.length}`;}catch(error){notice.textContent=`${file.name} 上传失败：${error.message}`;break}}
+      await Promise.all([loadAssets(),loadDashboard()]);
+    }
+    function chooseAssetVariant(item,fixedLabel=""){
+      let label=fixedLabel;if(!label){label=prompt("输入视频版本：360p / 480p / 720p / 1080p","720p")||"";if(!["360p","480p","720p","1080p"].includes(label)){if(label)alert("清晰度只能是 360p、480p、720p 或 1080p");return}}
+      app.variantTarget={item,label};const input=document.getElementById("asset-variant-input");input.accept=label==="preview"?"application/pdf":"video/mp4,video/webm";input.click();
+    }
+
+    function renderResourcePicker(){
+      const list=document.getElementById("resource-picker-list");if(!list)return;clear(list);
+      const add=(type,id,label,meta)=>{const row=document.createElement("div");row.className="resource-picker-item";const copy=document.createElement("div");const title=document.createElement("strong");title.textContent=label;const small=document.createElement("div");small.className="list-meta";small.textContent=meta;copy.append(title,small);const insert=button("插入正文","btn small");insert.addEventListener("click",()=>insertResourceEmbed(type,id,label));row.append(copy,insert);list.append(row)};
+      app.assetFolders.forEach(item=>add("folder",item.id,`📁 ${assetFolderPath(item.id)}`,visibilityLabels[item.visibility]||item.visibility));
+      app.assets.filter(item=>item.status==="ready").forEach(item=>add("asset",item.id,`${item.kind==="video"?"🎬":"📄"} ${item.display_name}`,`${item.kind.toUpperCase()} · ${formatBytes(item.size_bytes)}`));
+      if(!list.children.length){const p=document.createElement("p");p.className="status";p.textContent="还没有可插入的文件。";list.append(p)}
+    }
+    function insertResourceEmbed(type,id,label){
+      const editor=document.getElementById("content-editor");editor.focus();const selection=getSelection();if(app.editorRange){selection.removeAllRanges();selection.addRange(app.editorRange)}
+      const embed=document.createElement("div");embed.className="resource-embed";embed.dataset.resourceType=type;embed.dataset.resourceId=id;embed.textContent=`已插入：${label}`;
+      if(selection.rangeCount){const range=selection.getRangeAt(0);range.deleteContents();range.insertNode(embed);range.setStartAfter(embed);range.collapse(true);selection.removeAllRanges();selection.addRange(range)}else editor.append(embed);
+      document.getElementById("resource-picker").close();document.getElementById("content-notice").textContent="资源已插入正文，保存文章后生效。";
+    }
 
     async function loadComments(){app.comments=await api("/api/admin/comments");renderAdminComments()}
     function renderAdminComments(){const list=document.getElementById("comment-admin-list");clear(list);if(!app.comments.length){const p=document.createElement("p");p.className="status";p.textContent="暂无评论。";list.append(p);return}app.comments.forEach(item=>{const row=document.createElement("article");row.className="comment-row";const head=document.createElement("strong");head.textContent=`${item.guest_name} · ${item.content_title||"内容已删除"}`;const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)} · ${item.status==="hidden"?"已隐藏":"公开"}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const toggle=button(item.status==="hidden"?"恢复显示":"隐藏");toggle.addEventListener("click",()=>toggleComment(item));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteComment(item));actions.append(toggle,del);row.append(head,document.createElement("br"),meta,body,actions);list.append(row)})}
@@ -965,6 +1169,8 @@
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
     document.querySelectorAll("[data-command]").forEach(b=>b.addEventListener("click",()=>document.execCommand(b.dataset.command,false,null)));document.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>document.execCommand("formatBlock",false,b.dataset.block)));
     document.getElementById("insert-link").addEventListener("click",()=>{const url=prompt("链接地址（需要以 https:// 开头）");if(url)document.execCommand("createLink",false,url)});document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
+    document.getElementById("insert-resource").addEventListener("click",()=>{const selection=getSelection();app.editorRange=selection.rangeCount&&document.getElementById("content-editor").contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;renderResourcePicker();document.getElementById("resource-picker").showModal()});
+    document.getElementById("resource-picker-close").addEventListener("click",()=>document.getElementById("resource-picker").close());
     document.getElementById("inline-image-input").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;const notice=document.getElementById("content-notice");notice.textContent="正在上传插图…";try{const item=await uploadInline(file);document.getElementById("content-editor").focus();document.execCommand("insertImage",false,item.url);notice.textContent="插图已插入正文。"}catch(error){notice.textContent=error.message}event.target.value=""});
 
     document.getElementById("changelog-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("changelog-id").value;const notice=document.getElementById("changelog-notice");const date=document.getElementById("changelog-date").value;try{await api(id?`/api/admin/changelogs/${id}`:"/api/admin/changelogs",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:document.getElementById("changelog-version").value,title:document.getElementById("changelog-title").value,body:document.getElementById("changelog-body").value,publishedAt:date?`${date}T12:00:00.000Z`:new Date().toISOString()})});notice.textContent="更新记录已保存，网页版本号已同步。";resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()}catch(error){notice.textContent=error.message}});
@@ -1002,6 +1208,14 @@
         submit.disabled = false;
       }
     });
+    document.getElementById("asset-current-folder").addEventListener("change",event=>{app.currentAssetFolder=event.target.value;renderAssetBrowser()});
+    document.getElementById("asset-refresh").addEventListener("click",loadAssets);
+    document.getElementById("asset-new-folder").addEventListener("click",async()=>{const name=prompt("新文件夹名称");if(!name||!name.trim())return;const description=prompt("文件夹说明（选填）")||"";await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:app.currentAssetFolder||null,visibility:document.getElementById("asset-upload-visibility").value})});await loadAssets()});
+    document.getElementById("asset-upload-file").addEventListener("click",()=>document.getElementById("asset-file-input").click());
+    document.getElementById("asset-upload-folder").addEventListener("click",()=>document.getElementById("asset-folder-input").click());
+    document.getElementById("asset-file-input").addEventListener("change",async event=>{const files=[...event.target.files];event.target.value="";await runAssetUpload(files)});
+    document.getElementById("asset-folder-input").addEventListener("change",async event=>{const files=[...event.target.files];event.target.value="";await runAssetUpload(files,{folderMode:true})});
+    document.getElementById("asset-variant-input").addEventListener("change",async event=>{const file=event.target.files[0];event.target.value="";const target=app.variantTarget;app.variantTarget=null;if(!file||!target)return;try{await uploadAssetFile(file,{assetId:target.item.id,variantLabel:target.label});await loadAssets()}catch(error){document.getElementById("asset-notice").textContent=`版本上传失败：${error.message}`}});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
     document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
     document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});

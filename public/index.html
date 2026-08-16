@@ -5,11 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="星月集个人网站">
-  <meta name="xingyueji-version" content="1.9.0.0">
+  <meta name="xingyueji-version" content="2.1.0.0">
   <title>星月集 - 个人主页</title>
   <!-- 网站头像和浏览器图标统一使用本地处理后的渐变毛玻璃头像。 -->
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
+  <!-- 主题脚本必须在样式前同步执行，才能避免夜览模式刷新时出现白屏闪烁。 -->
+  <script src="/theme.js"></script>
   <!--
     MathJax 4：AI 完成回答后，把 \(...\) 与 \[...\] 内的 LaTeX 转成公式。
     ui/safe 会过滤公式里不安全的链接和样式；脚本加载失败时仍会保留原始文字。
@@ -733,6 +735,39 @@
     .photo-card img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
     .photo-card:hover img { transform: scale(1.045); }
 
+    /* =========================================================
+       06A. 文件资源库、文档预览与视频清晰度
+       ---------------------------------------------------------
+       卡片只展示 D1 元数据；文件正文始终从受权限保护的 /files/:id 读取。
+       清晰度按钮只显示后台确实上传完成的版本，不会伪造不存在的画质。
+       ========================================================= */
+    .resource-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:24px 0; }
+    .resource-path { color:var(--muted); font-size:.84rem; overflow-wrap:anywhere; }
+    .resource-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
+    .resource-card {
+      min-height:155px; padding:19px; border:1px solid var(--line); border-radius:17px;
+      background:var(--paper); box-shadow:inset 0 1px 0 rgba(255,255,255,.72);
+      display:flex; flex-direction:column; cursor:pointer; transition:transform .18s ease,box-shadow .18s ease;
+    }
+    .resource-card:hover { transform:translateY(-2px); box-shadow:var(--shadow); }
+    .resource-card-icon { font-size:1.85rem; line-height:1; }
+    .resource-card h3 { margin:14px 0 7px; font-family:var(--font-display); font-size:1.05rem; overflow-wrap:anywhere; }
+    .resource-card p { margin:0; color:var(--muted); font-size:.78rem; line-height:1.65; }
+    .resource-card .resource-badges { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; padding-top:14px; }
+    .resource-badge { padding:4px 8px; border-radius:999px; background:rgba(90,163,184,.15); color:#336e78; font-size:.7rem; font-weight:800; }
+    .reader-body .resource-embed { margin:20px 0; }
+    .reader-body .resource-card { min-height:0; padding:17px; }
+    .resource-dialog { width:min(1080px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); border:0; padding:0; border-radius:23px; background:transparent; }
+    .resource-view { max-height:calc(100dvh - 24px); overflow:auto; padding:clamp(18px,4vw,34px); border:1px solid rgba(255,255,255,.78); border-radius:23px; background:var(--paper); box-shadow:0 28px 80px rgba(12,36,44,.28); }
+    .resource-view-header { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:18px; }
+    .resource-view-header h2 { margin:0; font-family:var(--font-display); overflow-wrap:anywhere; }
+    .resource-viewer { min-height:180px; display:grid; place-items:center; border:1px solid var(--line); border-radius:15px; overflow:hidden; background:#101719; }
+    .resource-viewer video { display:block; width:100%; max-height:70dvh; background:#000; }
+    .resource-viewer iframe { width:100%; height:min(72dvh,760px); border:0; background:white; }
+    .resource-viewer-message { padding:34px; color:var(--muted); text-align:center; line-height:1.8; background:var(--paper); width:100%; }
+    .resource-options { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .resource-options .active { background:rgba(75,166,185,.44); }
+
     /* 留言与反馈：公开留言卡片和游客提交表单。 */
     .feedback-layout { margin-top: 30px; display: grid; grid-template-columns: minmax(260px,.8fr) minmax(0,1.2fr); gap: 18px; }
     .feedback-form, .feedback-board { padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
@@ -1075,6 +1110,7 @@
       .content-section { height: 100%; padding: 28px 17px max(55px, env(safe-area-inset-bottom)); }
       .profile-grid, .content-grid { grid-template-columns: 1fr; }
       .gallery { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .resource-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .timeline-item { grid-template-columns: 1fr; gap: 10px; }
       .updates { width: 100%; }
       .feedback-layout { grid-template-columns: 1fr; }
@@ -1090,7 +1126,13 @@
       .image-nav.next { right: 5px; }
     }
 
+    @media (max-width: 480px) {
+      .resource-grid { grid-template-columns:1fr; }
+    }
+
   </style>
+  <!-- 三个页面共用的白天/夜览覆盖样式放在原页面样式之后。 -->
+  <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
   <!-- ========================================================
@@ -1149,6 +1191,7 @@
       <nav class="nav" aria-label="主要导航">
         <button data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
         <button data-section="portfolio" title="个人空间"><span class="nav-icon">▦</span><span class="nav-label">个人空间</span></button>
+        <button data-section="resources" title="文件资源"><span class="nav-icon">▤</span><span class="nav-label">文件资源</span></button>
         <button data-section="about" title="关于我"><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
@@ -1159,7 +1202,7 @@
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
         <!-- #site-version 会读取后台设置；新增/修改最新更新日志时会自动同步。 -->
-        <br><small id="site-version">网站版本 v1.9.0.0</small>
+        <br><small id="site-version">网站版本 v2.1.0.0</small>
       </div>
     </aside>
 
@@ -1168,7 +1211,24 @@
       <!-- ==================== 主页 ==================== -->
       <section id="home" class="content-section">
         <div class="section-inner">
-          <h1 id="home-title">星月集的个人网站</h1>
+          <div class="home-heading-row">
+            <h1 id="home-title">星月集的个人网站</h1>
+            <!--
+              小按钮只放在主页，但选择会作用于整个网站、登录页和 Studio。
+              data-theme-* 由 /theme.js 统一处理，system 会实时监听系统深浅色变化。
+            -->
+            <div class="theme-picker" data-theme-picker>
+              <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
+                <span data-theme-icon aria-hidden="true">◐</span>
+                <span data-theme-label>跟随系统</span>
+              </button>
+              <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="网页主题" hidden>
+                <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
+                <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
+                <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+              </div>
+            </div>
+          </div>
           <!-- 默认不显示副标题；只有站长以后在后台填写主页介绍时才会出现。 -->
           <p class="lead" id="home-intro" hidden></p>
           <div id="usage-guide" class="usage-guide" hidden>
@@ -1192,6 +1252,22 @@
           <!-- 这两个容器完全根据 D1 数据生成，不再把“随笔/图片/指南”写死在 HTML。 -->
           <div id="portfolio-tabs" class="portfolio-tabs" role="tablist"></div>
           <div id="portfolio-panel-host"></div>
+        </div>
+      </section>
+
+      <!-- ==================== 文件、文件夹、文档与视频 ==================== -->
+      <section id="resources" class="content-section">
+        <div class="section-inner">
+          <h1>文件资源</h1>
+          <p class="section-desc">在线浏览文件夹、PDF/Word 文档和视频；下载按钮会根据游客或登录权限自动显示。</p>
+          <div class="resource-toolbar">
+            <div id="resource-path" class="resource-path">根目录</div>
+            <div class="resource-options" style="margin:0">
+              <button id="resource-folder-download" class="btn small ghost" type="button" hidden>下载文件夹整包</button>
+              <button id="resource-up" class="btn small ghost" type="button" hidden>返回上一级</button>
+            </div>
+          </div>
+          <div id="resource-grid" class="resource-grid"><p class="loading">正在读取文件目录…</p></div>
         </div>
       </section>
 
@@ -1323,6 +1399,19 @@
     </div>
   </dialog>
 
+  <!-- 文件/视频通用查看器：视频、PDF、Word 和下载选项共用一个弹窗。 -->
+  <dialog id="resource-dialog" class="resource-dialog">
+    <div class="resource-view">
+      <div class="resource-view-header">
+        <div><h2 id="resource-title">文件预览</h2><p id="resource-meta" class="section-desc"></p></div>
+        <button class="icon-button" type="button" data-close-dialog="resource-dialog" title="关闭">✕</button>
+      </div>
+      <div id="resource-viewer" class="resource-viewer"></div>
+      <div id="resource-quality-options" class="resource-options"></div>
+      <div id="resource-download-options" class="resource-options"></div>
+    </div>
+  </dialog>
+
   <!--
     文章阅读弹窗：正文、点赞/点踩和评论对当前可见文章开放；
     两个 PDF 按钮默认 hidden，只有审核通过的登录账号才由 JavaScript 显示。
@@ -1404,6 +1493,10 @@
       bootstrapPromise: null,
       entryBackgroundStarted: false,
       activeSection: "home",
+      currentResourceFolder: "",
+      activeResourceAsset: null,
+      hlsPlayer: null,
+      hlsLibraryPromise: null,
     };
 
     // 两层界面的根节点：入口层和真正的网站主体永远只显示其中一个。
@@ -1792,6 +1885,187 @@
       renderPortfolioPanel();
     }
 
+    /* ---------- 06. 文件目录、文档阅读和视频清晰度。 ---------- */
+    function formatBytes(value) {
+      const bytes = Number(value) || 0;
+      if (bytes < 1024) return `${bytes} B`;
+      const units = ["KiB", "MiB", "GiB", "TiB"];
+      let size = bytes; let unit = -1;
+      do { size /= 1024; unit += 1; } while (size >= 1024 && unit < units.length - 1);
+      return `${size >= 10 ? size.toFixed(1) : size.toFixed(2)} ${units[unit]}`;
+    }
+
+    function resourceFolderPath(id) {
+      if (!id) return "根目录";
+      const folders = new Map((state.data?.assetFolders || []).map((item) => [item.id, item]));
+      const names = []; const visited = new Set(); let cursor = folders.get(id);
+      while (cursor && !visited.has(cursor.id)) {
+        visited.add(cursor.id); names.unshift(cursor.name);
+        cursor = cursor.parent_id ? folders.get(cursor.parent_id) : null;
+      }
+      return names.join(" / ") || "根目录";
+    }
+
+    function resourceIcon(kind) {
+      return ({ video: "🎬", audio: "🎵", pdf: "📕", word: "📘", archive: "🗜️", file: "📦" })[kind] || "📦";
+    }
+
+    function resourceCardForFolder(folder) {
+      const card = document.createElement("article"); card.className = "resource-card"; card.tabIndex = 0; card.setAttribute("role", "button");
+      const icon = document.createElement("div"); icon.className = "resource-card-icon"; icon.textContent = "📁";
+      const title = document.createElement("h3"); title.textContent = folder.name;
+      const description = document.createElement("p"); description.textContent = folder.description || "打开文件夹查看内容";
+      const badges = document.createElement("div"); badges.className = "resource-badges";
+      const type = document.createElement("span"); type.className = "resource-badge"; type.textContent = "文件夹"; badges.append(type);
+      if (folder.archive_asset_id && (state.data?.assets || []).some((asset) => asset.id === folder.archive_asset_id)) { const zip = document.createElement("span"); zip.className = "resource-badge"; zip.textContent = "支持整包下载"; badges.append(zip); }
+      card.append(icon, title, description, badges);
+      const open = () => {
+        state.currentResourceFolder = folder.id; renderResources();
+        const reader = document.getElementById("reader-dialog"); if (reader.open) reader.close();
+        if (state.activeSection !== "resources") navigateSection("resources");
+      };
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+      return card;
+    }
+
+    function resourceCardForAsset(asset) {
+      const card = document.createElement("article"); card.className = "resource-card"; card.tabIndex = 0; card.setAttribute("role", "button");
+      const icon = document.createElement("div"); icon.className = "resource-card-icon"; icon.textContent = resourceIcon(asset.kind);
+      const title = document.createElement("h3"); title.textContent = asset.display_name;
+      const description = document.createElement("p"); description.textContent = `${asset.kind.toUpperCase()} · ${formatBytes(asset.size_bytes)}`;
+      const badges = document.createElement("div"); badges.className = "resource-badges";
+      const view = document.createElement("span"); view.className = "resource-badge"; view.textContent = asset.kind === "archive" ? "直接下载" : "在线预览"; badges.append(view);
+      if ((asset.variants || []).length) { const versions = document.createElement("span"); versions.className = "resource-badge"; versions.textContent = `${asset.variants.length} 个版本`; badges.append(versions); }
+      if (!asset.canDownload) { const lock = document.createElement("span"); lock.className = "resource-badge"; lock.textContent = "登录后下载"; badges.append(lock); }
+      card.append(icon, title, description, badges);
+      const open = () => {
+        if (asset.kind === "archive") {
+          if (!asset.downloadUrl) { showAuthLock("download"); return; }
+          location.href = asset.downloadUrl; return;
+        }
+        openResourceAsset(asset);
+      };
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
+      return card;
+    }
+
+    function renderResources() {
+      const folders = state.data?.assetFolders || [];
+      const assets = state.data?.assets || [];
+      if (state.currentResourceFolder && !folders.some((item) => item.id === state.currentResourceFolder)) state.currentResourceFolder = "";
+      const current = state.currentResourceFolder || null;
+      document.getElementById("resource-path").textContent = resourceFolderPath(current);
+      const up = document.getElementById("resource-up"); up.hidden = !current;
+      const currentFolder = folders.find((item) => item.id === current);
+      const folderArchive = currentFolder?.archive_asset_id
+        ? assets.find((item) => item.id === currentFolder.archive_asset_id && item.kind === "archive")
+        : null;
+      const folderDownload = document.getElementById("resource-folder-download");
+      folderDownload.hidden = !folderArchive;
+      folderDownload.dataset.assetId = folderArchive?.id || "";
+      const grid = document.getElementById("resource-grid"); grid.replaceChildren();
+      folders.filter((item) => (item.parent_id || null) === current).forEach((folder) => grid.append(resourceCardForFolder(folder)));
+      assets.filter((item) => item.status === "ready" && (item.folder_id || null) === current).forEach((asset) => grid.append(resourceCardForAsset(asset)));
+      if (!grid.childElementCount) grid.append(empty("这个文件夹暂时没有可见资源。"));
+    }
+
+    function resourceDownloadButton(label, url) {
+      if (!url) {
+        const button = document.createElement("button"); button.type = "button"; button.className = "btn small ghost"; button.textContent = `${label}（登录后可用）`;
+        button.addEventListener("click", () => showAuthLock("download")); return button;
+      }
+      const link = document.createElement("a"); link.className = "btn small ghost"; link.href = url; link.textContent = label; link.setAttribute("download", ""); return link;
+    }
+
+    function loadHlsLibrary() {
+      if (window.Hls) return Promise.resolve(window.Hls);
+      if (!state.hlsLibraryPromise) {
+        state.hlsLibraryPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js";
+          script.referrerPolicy = "no-referrer";
+          script.onload = () => window.Hls ? resolve(window.Hls) : reject(new Error("HLS 组件加载失败"));
+          script.onerror = () => reject(new Error("HLS 组件加载失败"));
+          document.head.append(script);
+        }).catch((error) => { state.hlsLibraryPromise = null; throw error; });
+      }
+      return state.hlsLibraryPromise;
+    }
+
+    async function setResourceVideoSource(video, source, { hls = false } = {}) {
+      state.hlsPlayer?.destroy?.(); state.hlsPlayer = null;
+      if (!hls || video.canPlayType("application/vnd.apple.mpegurl")) { video.src = source; video.load(); return; }
+      const Hls = await loadHlsLibrary();
+      if (!Hls.isSupported()) throw new Error("当前浏览器不支持 HLS 自动画质");
+      const player = new Hls({ enableWorker: true, startLevel: -1 }); state.hlsPlayer = player;
+      player.loadSource(source); player.attachMedia(video);
+    }
+
+    function videoSourceButton(video, source, label, host, options = {}) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "btn small ghost"; button.textContent = label;
+      button.addEventListener("click", async () => {
+        host.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
+        const position = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        const wasPlaying = !video.paused;
+        try {
+          await setResourceVideoSource(video, source, options);
+          video.addEventListener("loadedmetadata", () => { if (!options.hls && position < video.duration) video.currentTime = position; if (wasPlaying) video.play().catch(() => null); }, { once: true });
+        } catch (error) { alert(error.message); }
+      });
+      return button;
+    }
+
+    function openResourceAsset(asset) {
+      state.activeResourceAsset = asset;
+      const dialog = document.getElementById("resource-dialog");
+      const viewer = document.getElementById("resource-viewer");
+      const quality = document.getElementById("resource-quality-options");
+      const downloads = document.getElementById("resource-download-options");
+      viewer.replaceChildren(); quality.replaceChildren(); downloads.replaceChildren();
+      document.getElementById("resource-title").textContent = asset.display_name;
+      document.getElementById("resource-meta").textContent = `${asset.kind.toUpperCase()} · ${formatBytes(asset.size_bytes)} · ${resourceFolderPath(asset.folder_id)}`;
+
+      const variants = (asset.variants || []).filter((item) => item.status === "ready");
+      if (asset.kind === "video") {
+        const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "metadata";
+        if (asset.poster_url) video.poster = asset.poster_url;
+        const qualityOrder = { "360p": 360, "480p": 480, "720p": 720, "1080p": 1080 };
+        const videoVariants = variants.filter((item) => qualityOrder[item.label]).sort((a, b) => qualityOrder[a.label] - qualityOrder[b.label]);
+        const defaultSource = asset.stream_hls_url || videoVariants.at(-1)?.url || asset.url; viewer.append(video);
+        setResourceVideoSource(video, defaultSource, { hls: Boolean(asset.stream_hls_url) }).catch(() => setResourceVideoSource(video, videoVariants.at(-1)?.url || asset.url));
+        if (asset.stream_hls_url) {
+          const automatic = videoSourceButton(video, asset.stream_hls_url, "自动画质", quality, { hls: true }); automatic.classList.add("active"); quality.append(automatic);
+        }
+        const originalButton = videoSourceButton(video, asset.url, "原始文件", quality); quality.append(originalButton);
+        videoVariants.forEach((variant) => {
+          const control = videoSourceButton(video, variant.url, variant.label, quality);
+          if (variant.url === defaultSource) control.classList.add("active"); quality.append(control);
+        });
+        if (!videoVariants.length && !asset.stream_hls_url) originalButton.classList.add("active");
+        downloads.append(resourceDownloadButton("下载原始视频", asset.downloadUrl));
+        videoVariants.forEach((variant) => downloads.append(resourceDownloadButton(`下载 ${variant.label}`, variant.downloadUrl)));
+      } else if (asset.kind === "audio") {
+        const audio = document.createElement("audio"); audio.controls = true; audio.preload = "metadata"; audio.src = asset.url; audio.style.width = "min(680px,90%)"; viewer.append(audio);
+        downloads.append(resourceDownloadButton("下载音频", asset.downloadUrl));
+      } else if (asset.kind === "pdf") {
+        const frame = document.createElement("iframe"); frame.src = asset.url; frame.title = asset.display_name; viewer.append(frame);
+        downloads.append(resourceDownloadButton("下载 PDF 原件", asset.downloadUrl));
+      } else if (asset.kind === "word") {
+        const preview = variants.find((item) => item.label === "preview");
+        const frame = document.createElement("iframe"); frame.title = asset.display_name;
+        frame.src = preview?.url || `/document-viewer.html?asset=${encodeURIComponent(asset.id)}`; viewer.append(frame);
+        downloads.append(resourceDownloadButton("下载 Word 原件", asset.downloadUrl));
+        if (preview) downloads.append(resourceDownloadButton("下载 PDF 预览", preview.downloadUrl));
+      } else {
+        const message = document.createElement("div"); message.className = "resource-viewer-message";
+        message.textContent = "浏览器不能直接预览这种文件格式，你可以使用下方下载按钮保存原件。"; viewer.append(message);
+        downloads.append(resourceDownloadButton("下载原文件", asset.downloadUrl));
+      }
+      if (!dialog.open) dialog.showModal();
+    }
+
     /*
      * 从正文图片地址中识别本站 R2 媒体编号。只有本站 /media/:id 图片才有
      * 可验证的“原片”概念；外部图片可以放大预览，但不会伪造下载地址。
@@ -1826,6 +2100,22 @@
         previewUrl.searchParams.delete("download");
         previewUrl.searchParams.set("preview", "1");
         image.setAttribute("src", `${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`);
+      });
+
+      /*
+       * Studio 插入正文的资源只有 type + id。公开页面从当前身份的 bootstrap
+       * 中查找元数据并替换为真实卡片；无权访问或已删除的资源不会泄露名称。
+       */
+      template.content.querySelectorAll(".resource-embed[data-resource-type][data-resource-id]").forEach((placeholder) => {
+        const type = placeholder.dataset.resourceType;
+        const id = placeholder.dataset.resourceId;
+        const item = type === "folder"
+          ? (state.data?.assetFolders || []).find((folder) => folder.id === id)
+          : (state.data?.assets || []).find((asset) => asset.id === id && asset.status === "ready");
+        const replacement = item
+          ? (type === "folder" ? resourceCardForFolder(item) : resourceCardForAsset(item))
+          : empty("该资源不存在，或当前账号没有访问权限。");
+        placeholder.replaceWith(replacement);
       });
 
       root.replaceChildren(template.content);
@@ -1951,7 +2241,7 @@
       introNode.textContent = intro;
       introNode.hidden = !intro;
       renderUsageGuide(settings.usage_guide);
-      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "1.9.0.0"}`;
+      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "2.1.0.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
       const school = settings.school || "北京理工大学 计算机学院";
@@ -2332,7 +2622,7 @@
         state.data = bootstrap;
         state.publicFeedback = feedbackData.feedback || [];
         state.siteLoaded = true;
-        applySettings(); renderChangelogs(); renderPortfolio(); renderFeedback(); renderAccount();
+        applySettings(); renderChangelogs(); renderPortfolio(); renderResources(); renderFeedback(); renderAccount();
 
         /*
          * 上面的 initialSection 已在网站主体显示前完成恢复。此处仅处理权限
@@ -2347,6 +2637,7 @@
         document.getElementById("timeline").replaceChildren(empty(`网站数据暂时无法读取：${error.message}`));
         document.getElementById("timeline-history").replaceChildren(empty("数据服务尚未完成部署。"));
         document.getElementById("portfolio-panel-host").replaceChildren(empty("数据服务尚未完成部署。"));
+        document.getElementById("resource-grid").replaceChildren(empty("文件服务暂时不可用。"));
         document.getElementById("feedback-list").replaceChildren(empty("留言服务暂时不可用。"));
       }
     }
@@ -2487,6 +2778,15 @@
     });
 
     document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.section)));
+    document.getElementById("resource-up").addEventListener("click", () => {
+      const current = (state.data?.assetFolders || []).find((item) => item.id === state.currentResourceFolder);
+      state.currentResourceFolder = current?.parent_id || ""; renderResources();
+    });
+    document.getElementById("resource-folder-download").addEventListener("click", (event) => {
+      const asset = (state.data?.assets || []).find((item) => item.id === event.currentTarget.dataset.assetId);
+      if (!asset?.downloadUrl) { showAuthLock("download"); return; }
+      location.href = asset.downloadUrl;
+    });
 
     const sidebarToggle = document.getElementById("sidebar-toggle");
     function setSidebarCollapsed(collapsed) {
@@ -2537,6 +2837,13 @@
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
     const imageDialog = document.getElementById("image-dialog");
+    const resourceDialog = document.getElementById("resource-dialog");
+    resourceDialog.addEventListener("close", () => {
+      state.hlsPlayer?.destroy?.(); state.hlsPlayer = null;
+      document.getElementById("resource-viewer").querySelectorAll("video,audio,iframe").forEach((node) => {
+        if ("src" in node) node.src = "";
+      });
+    });
     document.getElementById("image-previous").addEventListener("click", () => stepImage(-1));
     document.getElementById("image-next").addEventListener("click", () => stepImage(1));
     document.getElementById("image-download").addEventListener("click", (event) => {
@@ -2626,7 +2933,7 @@
         renderAccount();
         if (before !== after) {
           state.data = await loadBootstrap({ fresh: true });
-          renderPortfolio();
+          renderPortfolio(); renderResources();
         }
       } catch { /* 心跳失败不打断访客当前正在阅读的页面。 */ }
     }
@@ -2724,7 +3031,7 @@
       }
     });
 
-    [document.getElementById("reader-dialog"), imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
+    [document.getElementById("reader-dialog"), resourceDialog, imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     }));
 
