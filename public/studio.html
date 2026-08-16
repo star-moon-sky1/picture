@@ -231,32 +231,32 @@
       transform:translateZ(0) scale(1); transform-origin:center;
       transition:transform .16s cubic-bezier(.2,.75,.25,1),filter .2s ease,box-shadow .2s ease;
     }
-    .is-control-pressed { transform:translateY(1px) scale(.96) !important; filter:brightness(.97); transition-duration:.055s !important; }
-    .control-bounce-release { animation:control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both; }
+    .is-control-pressed { transform:translateY(1px) scale(.965) !important; filter:brightness(.97); transition-duration:.038s !important; }
+    .control-bounce-release { animation:control-single-rebound .38s cubic-bezier(.16,.78,.22,1) both; }
     @keyframes control-single-rebound {
-      0% { transform:translateY(1px) scale(.96,.955); }
-      56% { transform:translateY(-1px) scale(1.055); }
+      0% { transform:translateY(1px) scale(.965); }
+      58% { transform:translateY(-1px) scale(1.04); }
       100% { transform:scale(1); }
     }
     /* 松手时短暂加深蓝青底；导航与列表的 active 状态则持续保留颜色。 */
     :is(button,.btn,.side-footer a,.list-item).control-bounce-release:not(.active):not(.danger) { background-color:rgba(49,159,179,.38) !important; border-color:rgba(45,145,164,.52) !important; }
     /* 白光由多个偏心径向渐变构成，因此扩散时不会显示成规则圆环。 */
     .harmony-light-bloom {
-      --bloom-size:96px; position:fixed; z-index:2147483646; left:0; top:0;
+      --bloom-size:72px; position:fixed; z-index:2147483646; left:0; top:0;
       width:var(--bloom-size); height:var(--bloom-size); pointer-events:none; opacity:0;
       border-radius:46% 54% 58% 42% / 52% 42% 58% 48%;
       transform:translate(-50%,-50%) scale(.16);
       background:radial-gradient(ellipse at 42% 48%,rgba(255,255,255,.92) 0 7%,rgba(255,255,255,.43) 24%,rgba(255,255,255,.11) 48%,transparent 72%),radial-gradient(ellipse at 66% 35%,rgba(255,255,255,.54),transparent 52%),radial-gradient(ellipse at 29% 70%,rgba(229,251,255,.44),transparent 54%);
       filter:blur(1.8px); mix-blend-mode:screen;
-      animation:studio-light-diffuse .42s cubic-bezier(.12,.68,.18,1) both;
+      animation:studio-light-diffuse .36s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,.harmony-light-bloom::after { content:""; position:absolute; pointer-events:none; border-radius:inherit; background:radial-gradient(ellipse,rgba(255,255,255,.52),transparent 68%); }
     .harmony-light-bloom::before { inset:18% -13% 4% 31%; transform:rotate(23deg); }
     .harmony-light-bloom::after { inset:35% 29% -12% -9%; transform:rotate(-31deg); }
     @keyframes studio-light-diffuse {
-      0% { opacity:.94; transform:translate(-50%,-50%) scale(.16) rotate(-5deg); }
-      46% { opacity:.50; transform:translate(-50%,-50%) scale(1.34) rotate(5deg); }
-      100% { opacity:0; transform:translate(-50%,-50%) scale(2.55,2.25) rotate(9deg); filter:blur(6px); }
+      0% { opacity:.78; transform:translate(-50%,-50%) scale(.20) rotate(-5deg); }
+      48% { opacity:.40; transform:translate(-50%,-50%) scale(.92) rotate(4deg); }
+      100% { opacity:0; transform:translate(-50%,-50%) scale(1.55,1.42) rotate(7deg); filter:blur(3px); }
     }
     @keyframes studio-view-arrive {
       from { opacity:0; transform:translateY(13px) scale(.988); filter:blur(5px); }
@@ -579,14 +579,14 @@
     function clear(node){node.replaceChildren()}
     function button(text,className="btn small ghost"){const b=document.createElement("button");b.type="button";b.className=className;b.textContent=text;return b}
 
-    /* 在实际点击点创建短促的不规则柔光；约 0.42 秒后自动删除临时节点。 */
+    /* 在实际按下点创建小范围柔光；按下即出现，并在回弹结束前删除。 */
     function emitHarmonyLightBloom(control, point = null) {
       if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       const rect = control.getBoundingClientRect();
       const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
       const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
       const y = hasPointerPoint ? point.y : rect.top + rect.height / 2;
-      const bloomSize = Math.min(190, Math.max(64, Math.max(rect.width, rect.height) * 1.12));
+      const bloomSize = Math.min(118, Math.max(48, Math.max(rect.width, rect.height) * .82));
       const bloom = document.createElement("span");
       bloom.className = "harmony-light-bloom";
       bloom.style.left = `${x}px`;
@@ -595,7 +595,7 @@
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 560);
+      window.setTimeout(() => bloom.remove(), 460);
     }
 
     /*
@@ -613,11 +613,10 @@
         if (!control) return;
         control.classList.remove("is-control-pressed");
         if (reducedMotion.matches || !canAnimate(control)) return;
-        emitHarmonyLightBloom(control, point);
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 320);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 430);
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
@@ -626,6 +625,7 @@
         pressedPoint = { x: event.clientX, y: event.clientY };
         control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
+        emitHarmonyLightBloom(control, pressedPoint);
       });
       window.addEventListener("pointerup", (event) => {
         const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
@@ -641,7 +641,10 @@
       document.addEventListener("keydown", (event) => {
         if (!["Enter", " "].includes(event.key) || event.repeat) return;
         const control = findControl(event.target);
-        if (canAnimate(control)) control.classList.add("is-control-pressed");
+        if (canAnimate(control)) {
+          control.classList.add("is-control-pressed");
+          emitHarmonyLightBloom(control);
+        }
       });
       document.addEventListener("keyup", (event) => {
         if (["Enter", " "].includes(event.key)) release(findControl(event.target));
