@@ -804,7 +804,12 @@
     }
     .content-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
     .content-card .kind { color: var(--blue); font-size: .75rem; font-weight: 700; letter-spacing: .12em; }
-    .content-card h3 { margin: 15px 0 10px; font-family: var(--font-display); font-size: 1.35rem; font-weight: 800; }
+    .content-card h3 { margin: 15px 0 7px; font-family: var(--font-display); font-size: 1.35rem; font-weight: 800; }
+    /*
+      每张文章卡片在标题下独立展示发布时间和最后修改时间。
+      颜色刻意使用较淡的辅助文字色，不会抢过标题和正文摘要。
+    */
+    .content-time-lines { display: grid; gap: 3px; margin-bottom: 11px; color: var(--muted); font-size: .72rem; line-height: 1.5; }
     .content-card p { margin: 0; color: var(--muted); line-height: 1.7; }
     .card-meta { margin-top: auto; padding-top: 19px; display: flex; justify-content: space-between; color: var(--muted); font-size: .76rem; }
     .empty { padding: 38px; border: 1px dashed #b9c7ca; border-radius: var(--radius); color: var(--muted); text-align: center; line-height: 1.8; }
@@ -993,7 +998,8 @@
     .icon-button:focus-visible { outline: 3px solid rgba(49,191,200,.30); outline-offset: 2px; }
     .reader-header { margin: 20px 0 28px; }
     .reader-header h2 { margin: 8px 0 12px; font-family: var(--font-display); font-size: clamp(2rem,6vw,3.5rem); font-weight: 840; line-height: 1.15; }
-    .reader-meta { color: var(--muted); font-size: .85rem; }
+    /* 阅读页的两个时间各占一行，位置固定在文章标题正下方。 */
+    .reader-meta { display: grid; gap: 4px; color: var(--muted); font-size: .82rem; line-height: 1.55; }
     .reader-body { font-family: var(--font-reading); font-size: 1.06rem; font-weight: 520; line-height: 2; }
     .reader-body img { display: block; max-width: 100%; height: auto; margin: 24px auto; border-radius: 12px; }
     /*
@@ -1027,7 +1033,7 @@
     }
     .pdf-export h1 { margin: 10px 0 12px; font-size: 32px; line-height: 1.35; }
     .pdf-export .pdf-kind { margin: 0; color: #557985; font-size: 13px; font-weight: 700; letter-spacing: .12em; }
-    .pdf-export .pdf-meta { margin-bottom: 30px; color: #718087; font-size: 13px; }
+    .pdf-export .pdf-meta { margin-bottom: 30px; color: #718087; font-size: 13px; line-height: 1.7; white-space: pre-line; }
     .pdf-export .pdf-body { font-size: 17px; line-height: 2; overflow-wrap: anywhere; }
     .pdf-export .pdf-body img { display: block; max-width: 100%; height: auto; margin: 22px auto; border-radius: 8px; }
     .pdf-export .pdf-body blockquote { margin: 22px 0; padding-left: 16px; border-left: 4px solid #31bfc8; color: #5d6f76; }
@@ -1044,9 +1050,9 @@
     .comment-form textarea { min-height: 46px; resize: vertical; }
     .comment { padding: 16px 0; border-top: 1px solid var(--line); }
     .comment.reply { margin-left: 32px; padding-left: 15px; border-left: 2px solid var(--cyan-soft); }
-    .comment-head { display: flex; justify-content: space-between; gap: 12px; font-size: .8rem; }
+    .comment-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: .8rem; }
     .comment-name { font-weight: 700; }
-    .comment-date { color: var(--muted); }
+    .comment-date { color: var(--muted); font-size: .76rem; white-space: nowrap; }
     .comment-body { margin: 8px 0; white-space: pre-wrap; line-height: 1.65; }
     .comment-actions { display: flex; gap: 8px; }
     /* 评论的点赞、点踩与回复是更轻量的小型玻璃胶囊。 */
@@ -1653,6 +1659,30 @@
       return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date(value));
     }
 
+    /*
+     * 文章与评论需要精确到分钟，因此不复用只显示年月日的 formatDate。
+     * hourCycle: "h23" 可以避免部分浏览器把午夜显示成“24:00”。
+     */
+    function formatDateTime(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+      }).format(date);
+    }
+
+    function contentTimeLabels(item) {
+      const published = formatDateTime(item?.published_at) || "未标注";
+      // 兼容部署前已缓存的旧接口数据：没有 updated_at 时暂以发布时间代替。
+      const updated = formatDateTime(item?.updated_at || item?.published_at) || "未标注";
+      return {
+        published: `发布时间：${published}`,
+        updated: `最新修改：${updated}`,
+      };
+    }
+
     async function api(path, options = {}) {
       const response = await fetch(path, options);
       const contentType = response.headers.get("content-type") || "";
@@ -1917,11 +1947,15 @@
       const card = document.createElement("article"); card.className = "content-card"; card.tabIndex = 0;
       const kind = document.createElement("span"); kind.className = "kind"; kind.textContent = section.name;
       const title = document.createElement("h3"); title.textContent = item.title;
+      const timeLabels = contentTimeLabels(item);
+      const times = document.createElement("div"); times.className = "content-time-lines";
+      const published = document.createElement("span"); published.textContent = timeLabels.published;
+      const updated = document.createElement("span"); updated.textContent = timeLabels.updated;
+      times.append(published, updated);
       const excerpt = document.createElement("p"); excerpt.textContent = item.excerpt || "点击阅读全文";
       const meta = document.createElement("div"); meta.className = "card-meta";
-      const date = document.createElement("span"); date.textContent = formatDate(item.published_at);
       const reactions = document.createElement("span"); reactions.textContent = `👍 ${item.like_count} · 👎 ${item.dislike_count}`;
-      meta.append(date, reactions); card.append(kind, title, excerpt, meta);
+      meta.append(reactions); card.append(kind, title, times, excerpt, meta);
       card.addEventListener("click", () => openContent(item.id));
       card.addEventListener("keydown", (event) => { if (event.key === "Enter") openContent(item.id); });
       return card;
@@ -2413,7 +2447,11 @@
         const sectionName = content.section_name || (content.type === "guide" ? "北京旅行指南" : "文章");
         document.getElementById("reader-kind").textContent = sectionName;
         document.getElementById("reader-title").textContent = content.title;
-        document.getElementById("reader-meta").textContent = `${formatDate(content.published_at)} · ${sectionName}`;
+        const timeLabels = contentTimeLabels(content);
+        const readerMeta = document.getElementById("reader-meta");
+        const published = document.createElement("span"); published.textContent = timeLabels.published;
+        const updated = document.createElement("span"); updated.textContent = timeLabels.updated;
+        readerMeta.replaceChildren(published, updated);
         renderReaderBody(content.body_html);
         syncProtectedDownloadControls();
         document.querySelector("#content-like span").textContent = content.like_count;
@@ -2447,7 +2485,8 @@
       const wrap = document.createElement("article"); wrap.className = `comment${isReply ? " reply" : ""}`;
       const head = document.createElement("div"); head.className = "comment-head";
       const name = document.createElement("span"); name.className = "comment-name"; name.textContent = comment.guest_name;
-      const date = document.createElement("span"); date.className = "comment-date"; date.textContent = formatDate(comment.created_at);
+      const date = document.createElement("span"); date.className = "comment-date";
+      date.textContent = `${isReply ? "回复于" : "评论于"} ${formatDateTime(comment.created_at) || "时间未知"}`;
       head.append(name, date);
       const body = document.createElement("div"); body.className = "comment-body"; body.textContent = comment.body;
       const actions = document.createElement("div"); actions.className = "comment-actions";
@@ -2547,6 +2586,50 @@
       }));
     }
 
+    /*
+     * jsPDF 自带字体通常不包含中文，直接调用 pdf.text("星月集") 会出现空白或乱码。
+     * 因此先用浏览器 Canvas 把中文绘制成透明 PNG，再盖到 PDF 的每一页中央。
+     */
+    function createPdfWatermarkDataUrl() {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 420;
+      const context = canvas.getContext("2d");
+      if (!context) return "";
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.translate(canvas.width / 2, canvas.height / 2);
+      context.rotate(-18 * Math.PI / 180);
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.font = '800 150px "Microsoft YaHei", "PingFang SC", sans-serif';
+      context.fillStyle = "rgba(49, 191, 200, 0.13)";
+      context.fillText("星月集", 0, 0);
+      return canvas.toDataURL("image/png");
+    }
+
+    function applyPdfWatermark(pdf) {
+      const watermark = createPdfWatermarkDataUrl();
+      if (!watermark || !pdf?.internal) return;
+      const pageCount = pdf.internal.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const watermarkWidth = Math.min(pageWidth * 0.72, 155);
+        const watermarkHeight = watermarkWidth * (420 / 1200);
+        pdf.addImage(
+          watermark,
+          "PNG",
+          (pageWidth - watermarkWidth) / 2,
+          (pageHeight - watermarkHeight) / 2,
+          watermarkWidth,
+          watermarkHeight,
+          "xingyueji-watermark",
+          "FAST",
+        );
+      }
+    }
+
     async function downloadCurrentContentPdf(button) {
       // 前端隐藏只是界面层保护；这里再次校验，防止通过控制台直接调用函数。
       if (!hasFullAccess()) { showAuthLock("download"); return; }
@@ -2577,7 +2660,8 @@
 
         const meta = document.createElement("p");
         meta.className = "pdf-meta";
-        meta.textContent = document.getElementById("reader-meta").textContent;
+        const timeLabels = contentTimeLabels(state.currentContent);
+        meta.textContent = `${timeLabels.published}\n${timeLabels.updated}`;
 
         const body = document.getElementById("reader-body").cloneNode(true);
         body.removeAttribute("id");
@@ -2586,14 +2670,18 @@
         document.body.append(exportRoot);
 
         await waitForPdfImages(exportRoot);
-        await window.html2pdf().set({
+        const pdfWorker = window.html2pdf().set({
           margin: [12, 12, 14, 12],
           filename: pdfFilename(state.currentContent.title),
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"], avoid: ["img", "pre", "blockquote", "table"] },
-        }).from(exportRoot).save();
+        }).from(exportRoot).toPdf();
+
+        // 先让 html2pdf 完成分页，再逐页叠加水印，最后才触发文件下载。
+        await pdfWorker.get("pdf").then((pdf) => applyPdfWatermark(pdf));
+        await pdfWorker.save();
       } catch (error) {
         console.error("PDF download failed", error);
         button.dataset.pdfError = error.message || "未知错误";
