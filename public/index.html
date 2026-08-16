@@ -10,6 +10,12 @@
   <!-- 网站头像和浏览器图标统一使用本地处理后的渐变毛玻璃头像。 -->
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
+  <!-- PWA 清单决定安装后的名称、图标、启动地址与独立窗口外观。 -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
+  <!-- 尽早监听浏览器安装事件，并注册只缓存公开静态外壳的 Service Worker。 -->
+  <script src="/pwa.js"></script>
   <!-- 主题脚本必须在样式前同步执行，才能避免夜览模式刷新时出现白屏闪烁。 -->
   <script src="/theme.js"></script>
   <!--
@@ -148,9 +154,9 @@
          brand/nav-label/sidebar-note 的过渡会与本段保持同步。
       */
       transition:
-        width .34s cubic-bezier(.22,.72,.18,1),
-        flex-basis .34s cubic-bezier(.22,.72,.18,1),
-        padding .34s cubic-bezier(.22,.72,.18,1),
+        width .46s cubic-bezier(.22,.72,.18,1),
+        flex-basis .46s cubic-bezier(.22,.72,.18,1),
+        padding .46s cubic-bezier(.22,.72,.18,1),
         border-color .24s ease,
         box-shadow .24s ease;
     }
@@ -182,10 +188,10 @@
       max-height: 82px; opacity: 1; transform: translateX(0) scale(1);
       overflow: hidden; visibility: visible;
       transition:
-        max-height .30s cubic-bezier(.22,.72,.18,1),
-        margin .30s cubic-bezier(.22,.72,.18,1),
-        opacity .20s ease,
-        transform .30s cubic-bezier(.22,.72,.18,1),
+        max-height .42s cubic-bezier(.22,.72,.18,1),
+        margin .42s cubic-bezier(.22,.72,.18,1),
+        opacity .26s ease,
+        transform .42s cubic-bezier(.22,.72,.18,1),
         visibility 0s linear 0s;
     }
 
@@ -256,17 +262,18 @@
       -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
       backdrop-filter: blur(2px) saturate(1.12) contrast(1.04);
       transition: color .18s ease, background .18s ease, border-color .18s ease,
-                  transform .18s ease, box-shadow .18s ease, gap .26s ease,
-                  padding .30s cubic-bezier(.22,.72,.18,1);
+                  transform .18s ease, box-shadow .18s ease, gap .36s ease,
+                  padding .42s cubic-bezier(.22,.72,.18,1);
     }
+    .nav button[hidden] { display: none; }
     .nav-icon { width: 22px; flex: 0 0 22px; text-align: center; font-size: 1.05rem; }
     .nav-label {
       min-width: 0; max-width: 166px; opacity: 1; overflow: hidden;
       transform: translateX(0); visibility: visible;
       transition:
-        max-width .27s cubic-bezier(.22,.72,.18,1),
-        opacity .17s ease,
-        transform .27s cubic-bezier(.22,.72,.18,1),
+        max-width .40s cubic-bezier(.22,.72,.18,1),
+        opacity .24s ease,
+        transform .40s cubic-bezier(.22,.72,.18,1),
         visibility 0s linear 0s;
     }
     .nav button:hover {
@@ -292,11 +299,11 @@
       font-size: .76rem; line-height: 1.65; color: var(--muted);
       opacity: 1; overflow: hidden; visibility: visible; transform: translateY(0);
       transition:
-        max-height .28s cubic-bezier(.22,.72,.18,1),
-        margin .28s ease,
-        padding .28s ease,
-        opacity .18s ease,
-        transform .28s cubic-bezier(.22,.72,.18,1),
+        max-height .42s cubic-bezier(.22,.72,.18,1),
+        margin .42s ease,
+        padding .42s ease,
+        opacity .24s ease,
+        transform .42s cubic-bezier(.22,.72,.18,1),
         visibility 0s linear 0s;
     }
     .studio-link {
@@ -318,17 +325,17 @@
     .app-shell.sidebar-collapsed .brand {
       max-height: 0; margin-bottom: 0; opacity: 0;
       transform: translateX(-9px) scale(.92); visibility: hidden; pointer-events: none;
-      transition-delay: 0s, 0s, 0s, 0s, .30s;
+      transition-delay: 0s, 0s, 0s, 0s, .42s;
     }
     .app-shell.sidebar-collapsed .nav button { justify-content: center; gap: 0; padding-inline: 10px; }
     .app-shell.sidebar-collapsed .nav-label {
       max-width: 0; opacity: 0; transform: translateX(-7px); visibility: hidden;
-      transition-delay: 0s, 0s, 0s, .27s;
+      transition-delay: 0s, 0s, 0s, .40s;
     }
     .app-shell.sidebar-collapsed .sidebar-note {
       max-height: 0; margin: 0; padding: 0; opacity: 0;
       transform: translateY(7px); visibility: hidden; pointer-events: none;
-      transition-delay: 0s, 0s, 0s, 0s, 0s, .28s;
+      transition-delay: 0s, 0s, 0s, 0s, 0s, .42s;
     }
 
     /*
@@ -976,6 +983,8 @@
     .auth-lock-card h2 { margin: 0 0 10px; font-family: var(--font-display); font-size: 1.75rem; font-weight: 830; }
     .auth-lock-card p { margin: 0 0 22px; color: var(--muted); line-height: 1.75; }
     .auth-lock-actions { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; }
+    .install-app-dialog { width: min(490px, calc(100vw - 28px)); background: transparent; }
+    .install-app-help { white-space: pre-line; text-align: left; }
 
     /* =========================================================
        09. 文章阅读弹窗、评论与图片预览弹窗
@@ -1197,8 +1206,8 @@
         padding: max(12px, env(safe-area-inset-top)) 13px 10px;
         border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
         transition:
-          max-height .34s cubic-bezier(.22,.72,.18,1),
-          padding .34s cubic-bezier(.22,.72,.18,1),
+          max-height .46s cubic-bezier(.22,.72,.18,1),
+          padding .46s cubic-bezier(.22,.72,.18,1),
           border-color .24s ease,
           box-shadow .24s ease;
       }
@@ -1212,10 +1221,10 @@
         overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; scrollbar-width: none;
         transform: translateY(0); visibility: visible;
         transition:
-          max-height .30s cubic-bezier(.22,.72,.18,1),
-          opacity .18s ease,
-          padding .30s ease,
-          transform .30s cubic-bezier(.22,.72,.18,1),
+          max-height .42s cubic-bezier(.22,.72,.18,1),
+          opacity .24s ease,
+          padding .42s ease,
+          transform .42s cubic-bezier(.22,.72,.18,1),
           visibility 0s linear 0s;
       }
       .nav::-webkit-scrollbar { display: none; }
@@ -1229,7 +1238,7 @@
       .app-shell.sidebar-collapsed .nav {
         max-height: 0; padding-bottom: 0; opacity: 0;
         transform: translateY(-6px); visibility: hidden; pointer-events: none;
-        transition-delay: 0s, 0s, 0s, 0s, .30s;
+        transition-delay: 0s, 0s, 0s, 0s, .42s;
       }
       .main { height: auto; flex: 1 1 auto; min-height: 0; }
       .content-section { height: 100%; padding: 28px 17px max(55px, env(safe-area-inset-bottom)); }
@@ -1262,9 +1271,9 @@
         width: 250px; height: 100dvh; max-height: none; flex: 0 0 250px;
         padding: 34px 22px 24px; border-right: 1px solid rgba(255,255,255,.76);
         border-bottom: 0; overflow-y: auto; overflow-x: hidden;
-        transition: width .34s cubic-bezier(.22,.72,.18,1),
-                    flex-basis .34s cubic-bezier(.22,.72,.18,1),
-                    padding .34s cubic-bezier(.22,.72,.18,1),
+        transition: width .46s cubic-bezier(.22,.72,.18,1),
+                    flex-basis .46s cubic-bezier(.22,.72,.18,1),
+                    padding .46s cubic-bezier(.22,.72,.18,1),
                     border-color .24s ease, box-shadow .24s ease;
       }
       .sidebar-toggle { margin: -11px 0 16px -7px; }
@@ -1362,6 +1371,10 @@
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
+        <!-- 支持安装的浏览器会弹出原生 PWA 确认框；其他浏览器显示对应的手动步骤。 -->
+        <button id="install-app-button" type="button" title="安装桌面应用" data-install-app hidden>
+          <span class="nav-icon">⇩</span><span class="nav-label" data-install-app-label>安装桌面应用</span>
+        </button>
         <!-- 游客不显示账户入口；renderAccount() 只在检测到登录会话后取消 hidden。 -->
         <button id="account-nav-button" data-section="account" title="账户中心" hidden><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">账户中心</span></button>
       </nav>
@@ -1554,6 +1567,18 @@
     </main>
   </div>
 
+  <!-- 浏览器没有开放原生安装弹窗时，提供 Chrome/Edge、Safari 与手机端的手动步骤。 -->
+  <dialog id="install-app-dialog" class="install-app-dialog">
+    <div class="auth-lock-card">
+      <div class="auth-lock-symbol">⇩</div>
+      <h2>安装星月集</h2>
+      <p id="install-app-message" class="install-app-help">请使用浏览器的“安装应用”或“添加到主屏幕”功能。</p>
+      <div class="auth-lock-actions">
+        <button class="btn ghost" type="button" data-close-dialog="install-app-dialog">知道了</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- 游客点击受限功能时出现；按钮直接通往登录或注册页。 -->
   <dialog id="auth-lock-dialog" class="auth-lock-dialog">
     <div class="auth-lock-card">
@@ -1668,6 +1693,8 @@
       turnstileToken: "",
       guestVerified: false,
       guestTrackTimer: null,
+      // 从入口进入网站前暂存深链接板块；入口 URL 本身保持干净，不携带 #hash。
+      entryRequestedSection: "",
       activeSection: "home",
       currentResourceFolder: "",
       activeResourceAsset: null,
@@ -1678,6 +1705,8 @@
     // 两层界面的根节点：入口层和真正的网站主体永远只显示其中一个。
     const entryScreen = document.getElementById("entry-screen");
     const appShell = document.querySelector(".app-shell");
+    const ENTRY_HISTORY_LAYER = "entry";
+    const APP_HISTORY_LAYER = "app";
 
     function showEntryScreen() {
       entryScreen.hidden = false;
@@ -1695,6 +1724,40 @@
     }
 
     /*
+     * 根页面实际上包含两层界面：登录/游客选择层与网站主体层。过去进入网站时
+     * 直接 replaceState，入口历史记录被主体覆盖，所以从主页回退会离开网站。
+     * 现在入口固定为第一条记录，主体作为下一条记录：
+     *   入口（entry） → 网站板块（app） → 后续板块（app）
+     * 这样回退到最后一个站内板块之后会回到入口，继续回退才离开本站；前进
+     * 操作则能恢复网站主体和原来的板块。
+     */
+    function cleanHistoryAddress(section = "") {
+      const url = new URL(location.href);
+      url.searchParams.delete("_xyj_refresh");
+      url.searchParams.delete("login");
+      url.hash = section ? `#${section}` : "";
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+
+    function replaceWithEntryHistory() {
+      history.replaceState({ xingyuejiLayer: ENTRY_HISTORY_LAYER }, "", cleanHistoryAddress());
+    }
+
+    function activateWebsiteHistory(section) {
+      const value = { xingyuejiLayer: APP_HISTORY_LAYER, xingyuejiSection: section };
+      const address = cleanHistoryAddress(section);
+      if (history.state?.xingyuejiLayer === ENTRY_HISTORY_LAYER) {
+        history.pushState(value, "", address);
+      } else if (history.state?.xingyuejiLayer === APP_HISTORY_LAYER) {
+        history.replaceState(value, "", address);
+      } else {
+        // 首次打开时如果账号会话仍然有效，也补出一个可以回退到的入口节点。
+        replaceWithEntryHistory();
+        history.pushState(value, "", address);
+      }
+    }
+
+    /*
      * _xyj_refresh 用于头像强制刷新，login=1 用于从站内受限功能重新打开
      * 首页登录层。页面完成重新载入后即可清理，两者都不需要长期留在地址栏。
      */
@@ -1703,7 +1766,7 @@
     const hasTransientParameter = transientParameters.some((name) => initialUrl.searchParams.has(name));
     if (hasTransientParameter) {
       transientParameters.forEach((name) => initialUrl.searchParams.delete(name));
-      history.replaceState(null, "", `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`);
+      history.replaceState(history.state, "", `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`);
     }
 
     /* ---------- 02. 通用工具：访客编号、日期和 API 请求。 ---------- */
@@ -1994,8 +2057,7 @@
     }
 
     /* 根据已读取的会话决定刷新首帧能否直接恢复目标板块。 */
-    function initialSectionState() {
-      const requested = requestedSectionFromLocation();
+    function initialSectionState(requested = requestedSectionFromLocation()) {
       const blocked = (requested === "ai-helper" && !hasFullAccess())
         || (requested === "account" && !state.auth.authenticated);
       return { requested, target: blocked ? "home" : requested, blocked };
@@ -2005,7 +2067,7 @@
       if (mode === "none") return;
       const url = new URL(location.href);
       url.hash = id;
-      const value = { ...(history.state || {}), xingyuejiSection: id };
+      const value = { xingyuejiLayer: APP_HISTORY_LAYER, xingyuejiSection: id };
       const address = `${url.pathname}${url.search}${url.hash}`;
       if (mode === "replace") history.replaceState(value, "", address);
       else if (history.state?.xingyuejiSection !== id || location.hash !== `#${id}`) history.pushState(value, "", address);
@@ -2919,6 +2981,7 @@
     /* ---------- 12. 页面启动：先显示身份入口，通过后才读取并展示网站。 ---------- */
     async function boot({ enterAsGuest = false } = {}) {
       try {
+        const requestedBeforeEntry = state.entryRequestedSection || requestedSectionFromLocation();
         const session = await api("/api/auth/session").catch(() => ({ authenticated: false, user: null }));
         state.auth = session;
 
@@ -2932,6 +2995,8 @@
         if (guestHandoff) sessionStorage.removeItem("xyj_guest_handoff");
 
         if (!session.authenticated && !enterAsGuest && !guestHandoff) {
+          state.entryRequestedSection = requestedBeforeEntry;
+          replaceWithEntryHistory();
           showEntryScreen();
           return;
         }
@@ -2940,10 +3005,11 @@
          * 先在仍隐藏的主体中选中网址 hash 对应板块，再显示页面。这样浏览器
          * 第一次绘制网站主体时就是目标板块，不会先画主页、再跳到所选板块。
          */
-        const initialSection = initialSectionState();
+        const initialSection = initialSectionState(requestedBeforeEntry);
+        state.entryRequestedSection = "";
         showSection(initialSection.target, { animate: false });
         showWebsiteShell();
-        updateSectionHistory(initialSection.target, "replace");
+        activateWebsiteHistory(initialSection.target);
         if (state.siteLoaded) {
           renderAccount();
           if (initialSection.blocked) showAuthLock(initialSection.requested === "ai-helper" ? "ai" : "account");
@@ -3221,7 +3287,7 @@
         menu.hidden = false;
         toggle.setAttribute("aria-expanded", "true");
         menu.querySelector("[data-theme-choice].active")?.focus({ preventScroll: true });
-      }, 190);
+      }, 270);
     });
     installSidebarEdgeBounce();
 
@@ -3261,6 +3327,21 @@
     });
     document.querySelectorAll("[data-jump]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.jump)));
     document.querySelectorAll("[data-close-dialog]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.closeDialog).close()));
+    const installAppDialog = document.getElementById("install-app-dialog");
+    const installAppMessage = document.getElementById("install-app-message");
+    document.getElementById("install-app-button").addEventListener("click", async () => {
+      const result = await globalThis.XYJPWA?.requestInstall?.();
+      if (result?.status === "accepted") return;
+      if (result?.status === "installed") {
+        installAppMessage.textContent = "星月集已经作为应用运行，无需重复安装。";
+      } else if (result?.status === "dismissed") {
+        installAppMessage.textContent = "本次安装已取消。以后仍可再次点击侧边栏的“安装桌面应用”。";
+      } else {
+        installAppMessage.textContent = result?.instructions
+          || "请打开浏览器菜单，选择“安装应用”“创建快捷方式”或“添加到主屏幕”。";
+      }
+      if (!installAppDialog.open) installAppDialog.showModal();
+    });
     const imageDialog = document.getElementById("image-dialog");
     const resourceDialog = document.getElementById("resource-dialog");
     resourceDialog.addEventListener("close", () => {
@@ -3339,14 +3420,24 @@
       event.preventDefault(); document.getElementById("auth-lock-dialog").close(); navigateSection("account");
     });
 
-    /* hashchange 兼容手工修改地址；popstate 专门处理桌面返回键和手机侧滑返回。 */
+    /* hashchange 兼容手工修改地址；入口层不应被地址中的旧 hash 切回网站主体。 */
     window.addEventListener("hashchange", () => {
+      if (history.state?.xingyuejiLayer === ENTRY_HISTORY_LAYER) return;
       const target = location.hash.slice(1);
       if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target, { historyMode: "none" });
     });
     window.addEventListener("popstate", (event) => {
+      if (event.state?.xingyuejiLayer === ENTRY_HISTORY_LAYER) {
+        state.entryRequestedSection = state.activeSection || "home";
+        document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+        showEntryScreen();
+        return;
+      }
       const target = event.state?.xingyuejiSection || location.hash.slice(1);
-      if (document.getElementById(target)?.classList.contains("content-section")) navigateSection(target, { historyMode: "none" });
+      if (document.getElementById(target)?.classList.contains("content-section")) {
+        showWebsiteShell();
+        navigateSection(target, { historyMode: "none" });
+      }
     });
 
     async function refreshAuthPresence() {
@@ -3456,7 +3547,7 @@
       }
     });
 
-    [document.getElementById("reader-dialog"), resourceDialog, imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
+    [installAppDialog, document.getElementById("reader-dialog"), resourceDialog, imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     }));
 
