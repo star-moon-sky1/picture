@@ -340,15 +340,16 @@
       position: fixed; z-index: 2147483646; left: 0; top: 0;
       width: var(--bloom-size); height: var(--bloom-size);
       border-radius: 46% 54% 58% 42% / 52% 42% 58% 48%;
-      pointer-events: none; opacity: 0;
-      transform: translate(-50%, -50%) scale(.16);
+      pointer-events: none; opacity: .68;
+      transform: translate(-50%, -50%) scale(.82);
       background:
         radial-gradient(ellipse at 42% 48%, rgba(255,255,255,.92) 0 7%, rgba(255,255,255,.43) 24%, rgba(255,255,255,.11) 48%, transparent 72%),
         radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
         radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
       filter: blur(1.8px); mix-blend-mode: screen;
-      animation: auth-light-diffuse .36s cubic-bezier(.12,.68,.18,1) both;
+      animation: auth-light-hold-in .11s cubic-bezier(.18,.72,.2,1) both;
     }
+    .harmony-light-bloom.is-releasing { animation: auth-light-diffuse .30s cubic-bezier(.12,.68,.18,1) both; }
     .harmony-light-bloom::before,
     .harmony-light-bloom::after {
       content: ""; position: absolute; pointer-events: none; border-radius: inherit;
@@ -356,10 +357,14 @@
     }
     .harmony-light-bloom::before { inset: 18% -13% 4% 31%; transform: rotate(23deg); }
     .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
+    @keyframes auth-light-hold-in {
+      from { opacity: .24; transform: translate(-50%, -50%) scale(.20) rotate(-4deg); }
+      to { opacity: .68; transform: translate(-50%, -50%) scale(.82) rotate(0); }
+    }
     @keyframes auth-light-diffuse {
-      0% { opacity: .78; transform: translate(-50%, -50%) scale(.20) rotate(-5deg); }
-      48% { opacity: .40; transform: translate(-50%, -50%) scale(.92) rotate(4deg); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.55, 1.42) rotate(7deg); filter: blur(3px); }
+      0% { opacity: .68; transform: translate(-50%, -50%) scale(.82) rotate(0); }
+      52% { opacity: .34; transform: translate(-50%, -50%) scale(1.03) rotate(4deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.38, 1.28) rotate(7deg); filter: blur(3px); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -598,9 +603,9 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    /* 在实际点击点创建一次短促的不规则柔光；动画结束后节点会自动销毁。 */
+    /* 按下即创建柔光；按住期间停留，松手或取消后才开始消散。 */
     function emitHarmonyLightBloom(control, point = null) {
-      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
       const rect = control.getBoundingClientRect();
       const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
       const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
@@ -613,8 +618,14 @@
       bloom.style.setProperty("--bloom-size", `${bloomSize}px`);
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
+      return bloom;
+    }
+
+    function releaseHarmonyLightBloom(bloom) {
+      if (!bloom?.isConnected || bloom.classList.contains("is-releasing")) return;
+      bloom.classList.add("is-releasing");
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 460);
+      window.setTimeout(() => bloom.remove(), 380);
     }
 
     /* 所有静态和后续动态生成的按钮统一播放单次回弹与白光扩散。 */
@@ -623,11 +634,14 @@
       const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
       let pressedControl = null;
       let pressedPoint = null;
+      let pressedBloom = null;
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       const canAnimate = (control) => control && !control.matches(":disabled");
       const release = (control, point = null) => {
         if (!control) return;
         control.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = null;
         if (reducedMotion.matches || !canAnimate(control)) return;
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
@@ -641,7 +655,8 @@
         pressedPoint = { x: event.clientX, y: event.clientY };
         control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
-        emitHarmonyLightBloom(control, pressedPoint);
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = emitHarmonyLightBloom(control, pressedPoint);
       });
       window.addEventListener("pointerup", (event) => {
         const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
@@ -651,19 +666,33 @@
       });
       window.addEventListener("pointercancel", () => {
         pressedControl?.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
+        pressedBloom = null;
       });
       document.addEventListener("keydown", (event) => {
         if (!['Enter', ' '].includes(event.key) || event.repeat) return;
         const control = findControl(event.target);
         if (canAnimate(control)) {
+          pressedControl = control;
           control.classList.add("is-control-pressed");
-          emitHarmonyLightBloom(control);
+          releaseHarmonyLightBloom(pressedBloom);
+          pressedBloom = emitHarmonyLightBloom(control);
         }
       });
       document.addEventListener("keyup", (event) => {
-        if (['Enter', ' '].includes(event.key)) release(findControl(event.target));
+        if (!['Enter', ' '].includes(event.key)) return;
+        release(pressedControl || findControl(event.target));
+        pressedControl = null;
+        pressedPoint = null;
+      });
+      window.addEventListener("blur", () => {
+        pressedControl?.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedControl = null;
+        pressedPoint = null;
+        pressedBloom = null;
       });
       document.addEventListener("click", (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
