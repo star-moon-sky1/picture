@@ -10,6 +10,10 @@
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
   <link rel="manifest" href="/manifest.webmanifest">
+  <!-- 从手机主屏幕启动时保持与网站主页一致的独立应用外观。 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="星月集">
   <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
@@ -1085,10 +1089,14 @@
     function renderGuestAnalytics(){
       const data=app.guestAnalytics;if(!data)return;
       const status=document.getElementById("visitor-analytics-status");
+      const missingTurnstileKeys=[
+        data.turnstile?.missingSiteKey?"TURNSTILE_SITE_KEY":"",
+        data.turnstile?.missingSecretKey?"TURNSTILE_SECRET_KEY":"",
+      ].filter(Boolean).join("、");
       const protection=data.turnstile?.configured
         ? "Turnstile 已启用，游客必须通过服务端验证"
         : data.turnstile?.incomplete
-          ? "Turnstile 配置不完整：请同时配置 Site Key 与 Secret Key"
+          ? `Turnstile 配置不完整：缺少 ${missingTurnstileKeys||"Site Key 或 Secret Key"}；当前临时使用 IP 频率限制`
           : "Turnstile 尚未配置，目前仅启用 IP 频率限制";
       status.textContent=`${protection}。统计时区：${data.timeZone}；明细自动保留 ${data.retentionDays} 天。IP 仅显示脱敏网段，位置来自 Cloudflare 的大致定位。`;
 
@@ -1338,7 +1346,19 @@
     });
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
     document.querySelectorAll("[data-command]").forEach(b=>b.addEventListener("click",()=>document.execCommand(b.dataset.command,false,null)));document.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>document.execCommand("formatBlock",false,b.dataset.block)));
-    document.getElementById("insert-link").addEventListener("click",()=>{const url=prompt("链接地址（需要以 https:// 开头）");if(url)document.execCommand("createLink",false,url)});document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
+    /*
+     * 文章可直接粘贴纯文本网址，公开阅读页会自动识别；也可以用“链接”按钮
+     * 把选中的文字设为链接。这里只接受 http/https，拒绝 javascript: 等协议。
+     */
+    document.getElementById("insert-link").addEventListener("click",()=>{
+      const value=prompt("链接地址（以 http:// 或 https:// 开头）");
+      if(!value)return;
+      try{
+        const url=new URL(value.trim());
+        if(!["http:","https:"].includes(url.protocol)||url.username||url.password)throw new Error();
+        document.execCommand("createLink",false,url.href);
+      }catch{alert("网址格式不正确，请填写完整的 http:// 或 https:// 地址。");}
+    });document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
     document.getElementById("insert-resource").addEventListener("click",()=>{const selection=getSelection();app.editorRange=selection.rangeCount&&document.getElementById("content-editor").contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;renderResourcePicker();document.getElementById("resource-picker").showModal()});
     document.getElementById("resource-picker-close").addEventListener("click",()=>document.getElementById("resource-picker").close());
     document.getElementById("inline-image-input").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;const notice=document.getElementById("content-notice");notice.textContent="正在上传插图…";try{const item=await uploadInline(file);document.getElementById("content-editor").focus();document.execCommand("insertImage",false,item.url);notice.textContent="插图已插入正文。"}catch(error){notice.textContent=error.message}event.target.value=""});

@@ -14,6 +14,11 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
+  <!-- iOS/部分安卓浏览器从主屏幕启动时使用独立应用外观；不影响普通网页访问。 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="星月集">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- 尽早监听浏览器安装事件，并注册只缓存公开静态外壳的 Service Worker。 -->
   <script src="/pwa.js"></script>
   <!-- 主题脚本必须在样式前同步执行，才能避免夜览模式刷新时出现白屏闪烁。 -->
@@ -294,6 +299,48 @@
       background: rgba(75,166,185,.40);
       box-shadow: 0 11px 25px rgba(74,129,146,.17), inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(45,110,126,.17);
     }
+    /*
+       “安装桌面应用”是浏览器工具，不属于主页、个人空间等内容专栏。
+       因此它不再放进 .nav，而是作为独立工具行固定在“外观”选择器下方。
+       按钮仍沿用全站的蓝色玻璃层次，避免被误认为普通文字链接。
+    */
+    .sidebar-install-slot {
+      width: 100%; padding-top: 8px; max-height: 64px;
+      opacity: 1; visibility: visible; transform: translateY(0);
+      transition:
+        max-height .34s cubic-bezier(.22,.72,.18,1),
+        padding .34s ease,
+        opacity .20s ease,
+        transform .34s cubic-bezier(.22,.72,.18,1),
+        visibility 0s linear 0s;
+    }
+    .sidebar-install-button {
+      width: 100%; min-height: 44px; padding: 9px 12px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      border: 1px solid var(--glass-line); border-radius: 15px; cursor: pointer;
+      color: var(--ink); background: rgba(70, 166, 184, .24);
+      box-shadow: var(--glass-shadow);
+      -webkit-backdrop-filter: blur(15px) saturate(1.18);
+      backdrop-filter: blur(15px) saturate(1.18);
+      transition: color .16s ease, background .16s ease, border-color .16s ease,
+                  transform .16s ease, box-shadow .16s ease, padding .34s ease;
+    }
+    .sidebar-install-button:hover {
+      color: var(--ink); border-color: rgba(255,255,255,.88);
+      background: rgba(57, 173, 190, .34); transform: translateY(-1px);
+    }
+    .sidebar-install-button:active { transform: translateY(1px) scale(.975); }
+    .sidebar-install-button:focus-visible {
+      outline: 3px solid rgba(49,191,200,.28); outline-offset: 2px;
+    }
+    .sidebar-install-icon { width: 22px; flex: 0 0 22px; text-align: center; font-size: 1.05rem; }
+    .sidebar-install-label {
+      min-width: 0; max-width: 156px; overflow: hidden; opacity: 1;
+      white-space: nowrap; transform: translateX(0); visibility: visible;
+      font-size: .80rem; font-weight: 800;
+      transition: max-width .34s cubic-bezier(.22,.72,.18,1), opacity .20s ease,
+                  transform .34s cubic-bezier(.22,.72,.18,1), visibility 0s linear 0s;
+    }
     .sidebar-note {
       margin-top: 10px; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); max-height: 140px;
       font-size: .76rem; line-height: 1.65; color: var(--muted);
@@ -331,6 +378,14 @@
     .app-shell.sidebar-collapsed .nav-label {
       max-width: 0; opacity: 0; transform: translateX(-7px); visibility: hidden;
       transition-delay: 0s, 0s, 0s, .40s;
+    }
+    /* 电脑端收起侧栏后仍保留安装图标，但隐藏文字，行为与外观按钮一致。 */
+    .app-shell.sidebar-collapsed .sidebar-install-slot { display: grid; justify-items: center; }
+    .app-shell.sidebar-collapsed .sidebar-install-button { width: 44px; padding-inline: 0; gap: 0; }
+    .app-shell.sidebar-collapsed .sidebar-install-label {
+      max-width: 0; opacity: 0; transform: translateX(-7px);
+      visibility: hidden; pointer-events: none;
+      transition-delay: 0s, 0s, 0s, .34s;
     }
     .app-shell.sidebar-collapsed .sidebar-note {
       max-height: 0; margin: 0; padding: 0; opacity: 0;
@@ -591,16 +646,18 @@
       height: 100dvh;
       min-height: 100dvh;
       padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
-      display: grid;
-      place-items: center;
-      overflow: auto;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       background: #f3f2ed;
     }
 
     /*
-     * 登录入口的照片背景：图片地址只来自最小背景接口返回的公开照片。
-     * object-fit: cover 会让照片始终铺满整个屏幕；当照片比例和屏幕比例不同
-     * 时，浏览器会从四周适量裁切。object-position 控制优先保留照片中心区域。
+     * 电脑端维持清晰 cover 铺满，不改变原来的视觉构图。手机端才启用双层：
+     * 清晰 contain 前景负责展示全图，低模糊 cover 后景只填补比例留白。
      */
     .entry-photo-background {
       position: fixed;
@@ -617,34 +674,65 @@
       z-index: 2;
       background: transparent;
     }
-    .entry-photo-background img {
+    .entry-photo-frame {
       position: absolute;
       inset: 0;
       z-index: 1;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 1.15s ease;
+    }
+    .entry-photo-frame img {
+      position: absolute;
+      display: block;
+      user-select: none;
+    }
+    .entry-photo-frame .photo-fill {
+      display: none;
+      inset: -5%;
+      width: 110%;
+      height: 110%;
+      object-fit: cover;
+      object-position: center;
+      filter: blur(9px) saturate(1.04) brightness(.88);
+      transform: scale(1.05);
+    }
+    .entry-photo-frame .photo-complete {
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       object-position: center center;
-      opacity: 0;
       filter: none;
-      transform: none;
-      transition: opacity 1.15s ease;
     }
-    .entry-photo-background img.active { opacity: 1; animation: entry-bg-fade 1.25s ease both; }
-    .entry-photo-background img.active.effect-wipe-left { animation-name: entry-bg-wipe-left; }
-    .entry-photo-background img.active.effect-wipe-right { animation-name: entry-bg-wipe-right; }
-    .entry-photo-background img.active.effect-reveal-center { animation-name: entry-bg-reveal-center; }
+    .entry-photo-frame.active { opacity: 1; animation: entry-bg-fade 1.25s ease both; }
+    .entry-photo-frame.active.effect-wipe-left { animation-name: entry-bg-wipe-left; }
+    .entry-photo-frame.active.effect-wipe-right { animation-name: entry-bg-wipe-right; }
+    .entry-photo-frame.active.effect-reveal-center { animation-name: entry-bg-reveal-center; }
     @keyframes entry-bg-fade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes entry-bg-wipe-left { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
     @keyframes entry-bg-wipe-right { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0); } }
     @keyframes entry-bg-reveal-center { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
     @media (prefers-reduced-motion: reduce) {
-      .entry-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
-      .entry-photo-background img.active { transform: none; }
+      .entry-photo-frame { transition: opacity .25s ease; animation: none !important; }
+      .entry-photo-frame .photo-fill { transform: scale(1.05); }
+    }
+    /*
+       只对触屏手机完整显示整张背景照片；桌面端不受影响。前景不模糊，
+       后景的模糊也从 24px 降到 9px，能保留更多色彩与轮廓细节。
+    */
+    @media (max-width: 900px) and (hover: none), (max-width: 900px) and (pointer: coarse) {
+      .entry-photo-frame .photo-fill { display: block; }
+      .entry-photo-frame .photo-complete {
+        object-fit: contain;
+        filter: drop-shadow(0 10px 26px rgba(0,0,0,.16));
+      }
     }
     .entry-card {
       position: relative;
       z-index: 3;
+      flex: 0 0 auto;
+      margin-block: auto;
       /*
          入口登录框由原来的 430px 加宽到 520px；上下仅保留 28px，左右使用
          更宽的自适应留白，从而形成“更宽、更矮”的横向比例。
@@ -722,9 +810,13 @@
     .entry-note { margin: 14px 0 0; color: var(--muted); text-align: center; font-size: .78rem; line-height: 1.55; }
     .guest-turnstile-wrap {
       display: grid; place-items: center; width: 100%; min-height: 65px; margin: -3px 0 13px;
-      overflow: hidden; border-radius: 12px;
+      min-width: 0; overflow: visible; border-radius: 12px;
     }
     .guest-turnstile-wrap[hidden] { display: none; }
+    .guest-turnstile-wrap.is-compact { min-height: 145px; }
+    /* flexible 模式下限制 Cloudflare 外层节点与 iframe 不超过卡片实际宽度。 */
+    .guest-turnstile-wrap > div,
+    .guest-turnstile-wrap iframe { max-width: 100% !important; }
     .guest-privacy-note { margin-top: 8px; font-size: .72rem; }
 
     /* =========================================================
@@ -810,7 +902,7 @@
     */
     @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
       .sidebar { background: rgba(246,248,246,.96); }
-      .sidebar-toggle, .nav button, .studio-link, .tab-button, .updates { background: rgba(248,250,249,.94); }
+      .sidebar-toggle, .nav button, .sidebar-install-button, .studio-link, .tab-button, .updates { background: rgba(248,250,249,.94); }
       .nav button.active, .tab-button.active { background: #b3d3db; }
     }
     .portfolio-panel { display: none; }
@@ -986,6 +1078,26 @@
     .install-app-dialog { width: min(490px, calc(100vw - 28px)); background: transparent; }
     .install-app-help { white-space: pre-line; text-align: left; }
 
+    /*
+       外部网址确认框
+       ---------------------------------------------------------
+       文章链接不会直接离开当前页面：这里先明确显示真实域名和完整地址，
+       读者确认后才在新窗口打开，减少误点伪装链接的风险。
+    */
+    .external-link-dialog { width: min(540px, calc(100vw - 28px)); background: transparent; }
+    .external-link-summary {
+      display: grid; gap: 6px; margin: 0 0 22px; padding: 15px 16px; text-align: left;
+      border: 1px solid rgba(255,255,255,.72); border-radius: 15px;
+      background: rgba(234,247,248,.58); box-shadow: inset 0 1px 0 rgba(255,255,255,.88);
+    }
+    .external-link-summary span { color: var(--muted); font-size: .76rem; font-weight: 760; }
+    .external-link-summary strong { color: var(--ink); font-size: 1rem; overflow-wrap: anywhere; }
+    .external-link-address {
+      max-height: 88px; overflow: auto; padding: 9px 10px; border-radius: 10px;
+      color: #245968; background: rgba(255,255,255,.60); font-family: var(--font-code);
+      font-size: .76rem; line-height: 1.55; overflow-wrap: anywhere; white-space: normal;
+    }
+
     /* =========================================================
        09. 文章阅读弹窗、评论与图片预览弹窗
        ========================================================= */
@@ -1042,6 +1154,48 @@
       outline-offset: 4px;
     }
     .reader-body blockquote { margin: 24px 0; padding: 4px 0 4px 18px; border-left: 4px solid var(--cyan); color: var(--muted); }
+
+    /*
+       文章网址自动识别
+       ---------------------------------------------------------
+       行内网址保持为清晰的文字链接；当一个段落只包含一个网址时，JavaScript
+       会把它提升为域名预览卡。卡片只展示本地解析结果，不向第三方抓取网页，
+       因此不会因预览功能泄露读者 IP，也不会把外站脚本带进文章。
+    */
+    .reader-body a.article-smart-link:not(.article-link-card) {
+      color: var(--cyan-deep); font-weight: 760; text-decoration: underline;
+      text-decoration-color: rgba(35,142,155,.38); text-decoration-thickness: 2px;
+      text-underline-offset: 3px; overflow-wrap: anywhere;
+    }
+    .reader-body a.article-smart-link:not(.article-link-card):hover {
+      color: #176d7a; text-decoration-color: currentColor;
+    }
+    .reader-body .article-link-card {
+      display: grid; grid-template-columns: 48px minmax(0,1fr) auto; align-items: center;
+      gap: 13px; margin: 20px 0; padding: 15px 16px; border: 1px solid rgba(255,255,255,.78);
+      border-radius: 18px; color: var(--ink); text-decoration: none; line-height: 1.45;
+      background: linear-gradient(145deg, rgba(255,255,255,.60), rgba(218,240,242,.36));
+      box-shadow: 0 12px 28px rgba(32,72,83,.10), inset 0 1px 0 rgba(255,255,255,.96);
+      -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+      transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+    .reader-body .article-link-card:hover {
+      transform: translateY(-2px); border-color: rgba(49,191,200,.46);
+      box-shadow: 0 17px 36px rgba(32,72,83,.16), inset 0 1px 0 rgba(255,255,255,.98);
+    }
+    .article-link-icon {
+      width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px;
+      color: #fff; background: #3a97a6; box-shadow: inset 0 1px 0 rgba(255,255,255,.52);
+      font-size: 1.25rem; font-weight: 900;
+    }
+    .article-link-copy { min-width: 0; display: grid; gap: 2px; }
+    .article-link-copy span { color: var(--muted); font-size: .72rem; font-weight: 760; letter-spacing: .04em; }
+    .article-link-copy strong { overflow-wrap: anywhere; font-size: .96rem; }
+    .article-link-copy small {
+      display: block; color: var(--muted); font-family: var(--font-code); font-size: .70rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .article-link-action { color: #267886; font-size: .76rem; font-weight: 800; white-space: nowrap; }
     .reader-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 25px 0; border-block: 1px solid var(--line); margin-top: 34px; }
 
     /*
@@ -1058,6 +1212,8 @@
     .pdf-export .pdf-body { font-size: 17px; line-height: 2; overflow-wrap: anywhere; }
     .pdf-export .pdf-body img { display: block; max-width: 100%; height: auto; margin: 22px auto; border-radius: 8px; }
     .pdf-export .pdf-body blockquote { margin: 22px 0; padding-left: 16px; border-left: 4px solid #31bfc8; color: #5d6f76; }
+    .pdf-export .article-link-card { color: #17262c; border-color: #c9e0e3; background: #f1f8f8; box-shadow: none; }
+    .pdf-export .article-link-action { color: #267886; }
     .pdf-export h1,
     .pdf-export h2,
     .pdf-export h3,
@@ -1172,6 +1328,8 @@
       .brand,
       .nav,
       .nav-label,
+      .sidebar-install-slot,
+      .sidebar-install-label,
       .sidebar-note { transition-duration: .01ms !important; }
       .app-shell .btn::after,
       dialog .btn::after,
@@ -1196,13 +1354,20 @@
        ========================================================= */
     @media (max-width: 760px) {
       body { overflow: hidden; }
-      .entry-screen { padding-inline: 14px; }
+      /*
+         右上角新增主题按钮后，手机登录框从按钮下方开始。margin-block:auto
+         会在空间充足时居中；内容过高时自动贴顶并允许完整纵向滚动。
+      */
+      .entry-screen {
+        padding: max(76px, calc(env(safe-area-inset-top) + 62px)) 14px max(24px, env(safe-area-inset-bottom));
+      }
       /* 手机端不能强行追求横向比例，恢复紧凑左右留白以保证输入区域宽度。 */
       .entry-card { padding: 25px 20px; border-radius: 22px; }
       .entry-actions { grid-template-columns: 1fr; }
       .app-shell { flex-direction: column; }
       .sidebar {
-        width: 100%; height: auto; max-height: 230px; flex: 0 0 auto;
+        width: 100%; height: auto; max-height: calc(230px + env(safe-area-inset-top)); flex: 0 0 auto;
+        min-height: calc(64px + env(safe-area-inset-top));
         padding: max(12px, env(safe-area-inset-top)) 13px 10px;
         border-right: 0; border-bottom: 1px solid var(--line); overflow: visible;
         transition:
@@ -1211,8 +1376,12 @@
           border-color .24s ease,
           box-shadow .24s ease;
       }
-      .sidebar-toggle { margin: 0 0 8px; }
-      .brand { margin: 0 0 10px; gap: 9px; }
+      /* 展开键固定左上、主题键固定右上，两者不再依赖内容流定位。 */
+      .sidebar-toggle {
+        position: absolute; z-index: 3;
+        top: max(12px, env(safe-area-inset-top)); left: 13px; margin: 0;
+      }
+      .brand { margin: 52px 0 10px; gap: 9px; }
       .avatar-refresh { width: 39px; height: 39px; flex-basis: 39px; padding: 0; }
       .brand h2 { font-size: 1rem; }
       .brand small, .sidebar-note { display: none; }
@@ -1230,16 +1399,30 @@
       .nav::-webkit-scrollbar { display: none; }
       .nav button { flex: 0 0 auto; width: auto; padding: 8px 12px; text-align: center; font-size: .82rem; }
       .nav-icon { width: auto; flex-basis: auto; }
+      /*
+         手机上安装入口单独占据导航下方的一行，既不参与横向专栏滚动，
+         也不会被误认为第八个内容板块。外观按钮仍固定在顶部右侧。
+      */
+      .sidebar-install-slot { width: 100%; padding: 8px 52px 0 0; }
+      .sidebar-install-button { min-height: 40px; padding-block: 7px; }
       .app-shell.sidebar-collapsed .sidebar {
-        width: 100%; max-height: 64px; flex-basis: auto;
+        width: 100%; max-height: calc(64px + env(safe-area-inset-top)); flex-basis: auto;
         padding: max(12px, env(safe-area-inset-top)) 13px 10px;
       }
       .app-shell.sidebar-collapsed .sidebar-toggle { margin: 0; }
+      .app-shell.sidebar-collapsed .brand { margin-top: 0; }
       .app-shell.sidebar-collapsed .nav {
         max-height: 0; padding-bottom: 0; opacity: 0;
         transform: translateY(-6px); visibility: hidden; pointer-events: none;
         transition-delay: 0s, 0s, 0s, 0s, .42s;
       }
+      /* 顶栏收起时不让第二行安装按钮溢出到正文上方，只保留折叠与主题按钮。 */
+      .app-shell.sidebar-collapsed .sidebar-install-slot {
+        display: block; max-height: 0; padding: 0; opacity: 0;
+        transform: translateY(-6px); visibility: hidden; pointer-events: none;
+        transition-delay: 0s, 0s, 0s, 0s, .34s;
+      }
+      .app-shell.sidebar-collapsed .sidebar-install-button { width: 100%; }
       .main { height: auto; flex: 1 1 auto; min-height: 0; }
       .content-section { height: 100%; padding: 28px 17px max(55px, env(safe-area-inset-bottom)); }
       .profile-grid, .content-grid { grid-template-columns: 1fr; }
@@ -1262,10 +1445,11 @@
 
     /*
        桌面浏览器放大时 CSS 视口也会变窄，过去会误触上面的手机布局并把
-       .sidebar-note 直接隐藏。带精细指针（鼠标/触控板）的设备继续保留
-       左侧纵向栏，让头像、昵称、导航、后台入口和版本号都能一起上下滚动。
+       .sidebar-note 直接隐藏。只有“主输入设备”同时支持悬停且为精细指针
+       （即真正的鼠标/触控板）时才保留左侧纵向栏。不能使用 any-pointer，
+       因为部分手机只要支持手写笔或外接输入就会被误判成电脑布局。
     */
-    @media (max-width: 760px) and (any-pointer: fine) {
+    @media (max-width: 760px) and (hover: hover) and (pointer: fine) {
       .app-shell { flex-direction: row; }
       .sidebar {
         width: 250px; height: 100dvh; max-height: none; flex: 0 0 250px;
@@ -1287,6 +1471,7 @@
       }
       .nav button { width: 100%; flex: 0 0 auto; padding: 11px 13px; text-align: left; font-size: inherit; }
       .nav-icon { width: 22px; flex: 0 0 22px; }
+      .sidebar-install-slot { padding: 8px 0 0; }
       .app-shell.sidebar-collapsed .sidebar {
         width: 76px; max-height: none; flex: 0 0 76px; padding: 34px 13px 24px;
       }
@@ -1300,6 +1485,9 @@
 
     @media (max-width: 480px) {
       .resource-grid { grid-template-columns:1fr; }
+      .reader-body .article-link-card { grid-template-columns: 42px minmax(0,1fr); padding: 13px; }
+      .article-link-icon { width: 42px; height: 42px; border-radius: 13px; }
+      .article-link-action { grid-column: 2; }
     }
 
   </style>
@@ -1317,6 +1505,17 @@
   <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title" hidden>
     <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留渐变底色。 -->
     <div id="entry-photo-background" class="entry-photo-background" aria-hidden="true"></div>
+    <!-- 登录入口独立提供主题选择；进入网站后改用侧边栏中的外观按钮。 -->
+    <div class="theme-picker floating-theme-picker" data-theme-picker>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
+        <span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span>
+      </button>
+      <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="登录页面主题" hidden>
+        <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
+        <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
+        <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+      </div>
+    </div>
     <div class="entry-card">
       <h1 id="entry-title">欢迎来到星月集</h1>
       <p class="entry-subtitle">登录账号以使用完整功能，或者选择游客身份浏览公开内容。</p>
@@ -1371,10 +1570,6 @@
         <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
-        <!-- 支持安装的浏览器会弹出原生 PWA 确认框；其他浏览器显示对应的手动步骤。 -->
-        <button id="install-app-button" type="button" title="安装桌面应用" data-install-app hidden>
-          <span class="nav-icon">⇩</span><span class="nav-label" data-install-app-label>安装桌面应用</span>
-        </button>
         <!-- 游客不显示账户入口；renderAccount() 只在检测到登录会话后取消 hidden。 -->
         <button id="account-nav-button" data-section="account" title="账户中心" hidden><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">账户中心</span></button>
       </nav>
@@ -1395,6 +1590,16 @@
             <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
           </div>
         </div>
+      </div>
+      <!--
+        安装入口是浏览器工具而不是网站专栏，必须单独位于“外观”下方。
+        Chromium 会打开原生安装确认框；iOS、鸿蒙及内置浏览器会显示逐步说明。
+      -->
+      <div class="sidebar-install-slot" data-install-app-container hidden>
+        <button id="install-app-button" class="sidebar-install-button" type="button" title="安装桌面应用" data-install-app hidden>
+          <span class="sidebar-install-icon" aria-hidden="true">⇩</span>
+          <span class="sidebar-install-label" data-install-app-label>安装桌面应用</span>
+        </button>
       </div>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
@@ -1589,6 +1794,27 @@
         <a id="auth-login-link" class="btn" href="/?login=1">登录</a>
         <a id="auth-register-link" class="btn ghost" href="/login?mode=register">注册</a>
         <button class="btn ghost" type="button" data-close-dialog="auth-lock-dialog">暂不登录</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!--
+    文章中的外部网址必须先经过本确认框。页面只显示浏览器本地解析出的域名
+    与标准化地址，不请求外站标题、缩略图或脚本；“继续访问”会新开安全窗口。
+  -->
+  <dialog id="external-link-dialog" class="external-link-dialog">
+    <div class="auth-lock-card">
+      <div class="auth-lock-symbol">↗</div>
+      <h2>确认打开链接</h2>
+      <p>你即将离开当前文章，请核对目标网站后再继续。</p>
+      <div class="external-link-summary">
+        <span>目标网站</span>
+        <strong id="external-link-host">—</strong>
+        <code id="external-link-address" class="external-link-address">—</code>
+      </div>
+      <div class="auth-lock-actions">
+        <button class="btn ghost" type="button" data-close-dialog="external-link-dialog">取消</button>
+        <a id="external-link-continue" class="btn" href="#" target="_blank" rel="noopener noreferrer external" referrerpolicy="no-referrer">继续访问</a>
       </div>
     </div>
   </dialog>
@@ -1866,16 +2092,27 @@
       state.guestProtectionPromise = (async () => {
         const config = await api("/api/guest/config");
         state.guestProtection = config;
-        if (config.incomplete) throw new Error("网站的人机验证配置不完整，请联系站长");
+        /*
+         * Site Key / Secret Key 只配置一项时，后端会暂时退回严格访问限流。
+         * 不再让配置失误锁死游客入口，同时给出具体缺少项，方便站长修复。
+         */
+        if (config.incomplete) {
+          const missing = config.missingSiteKey ? "TURNSTILE_SITE_KEY" : "TURNSTILE_SECRET_KEY";
+          document.getElementById("entry-notice").textContent = `人机验证暂缺 ${missing}，当前由访问频率限制保护，仍可进入游客模式。`;
+          return config;
+        }
         if (!config.enabled) return config;
         const host = document.getElementById("guest-turnstile");
         host.hidden = false;
         const turnstile = await loadTurnstileScript();
+        /* 宽度不足 360px 时使用官方紧凑组件，避免验证码在手机卡片内被裁切。 */
+        const compact = matchMedia("(max-width: 420px)").matches || host.clientWidth < 300;
+        host.classList.toggle("is-compact", compact);
         state.turnstileWidgetId = turnstile.render(host, {
           sitekey: config.siteKey,
           action: config.action || "guest_entry",
-          theme: "auto",
-          size: "flexible",
+          theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+          size: compact ? "compact" : "flexible",
           callback(token) {
             state.turnstileToken = token;
             document.getElementById("entry-notice").textContent = "人机验证已通过，可以进入游客模式。";
@@ -1905,24 +2142,43 @@
     }
 
     /*
-     * 只创建两个 img 节点并轮换 src，避免一次性下载个人空间的全部照片。
-     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。照片本身由
-     * object-fit: cover 铺满屏幕，动画只负责切换，不额外放大照片。
+     * 只创建两个 frame 并轮换，避免一次性加载全部公开照片。每个 frame 的
+     * complete 是清晰主图：电脑端 cover、触屏手机端 contain；手机端额外显示
+     * 低模糊 fill 来补齐留白。两个 img 同 URL，浏览器缓存不会重复下载原文件。
      */
     function startEntryPhotoBackground(urls) {
       const host = document.getElementById("entry-photo-background");
       if (!host || !urls.length || state.entryBackgroundStarted) return;
       state.entryBackgroundStarted = true;
 
-      const frames = [document.createElement("img"), document.createElement("img")];
-      frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
+      const createFrame = () => {
+        const root = document.createElement("div");
+        root.className = "entry-photo-frame";
+        const fill = document.createElement("img");
+        const complete = document.createElement("img");
+        fill.className = "photo-fill"; complete.className = "photo-complete";
+        fill.alt = ""; complete.alt = "";
+        fill.decoding = "async"; complete.decoding = "async";
+        root.append(fill, complete); host.append(root);
+        return { root, fill, complete };
+      };
+      const frames = [createFrame(), createFrame()];
+      const setFrameSource = (frame, url, ready) => {
+        const absoluteUrl = new URL(url, location.href).href;
+        if (frame.complete.src === absoluteUrl && frame.complete.complete) {
+          queueMicrotask(ready);
+          return;
+        }
+        frame.complete.onload = ready;
+        frame.fill.src = url;
+        frame.complete.src = url;
+      };
       let activeFrame = 0;
       let photoIndex = 0;
       const effects = ["effect-fade", "effect-wipe-left", "effect-wipe-right", "effect-reveal-center"];
       let effectIndex = 0;
-      frames[0].classList.add(effects[effectIndex]);
-      frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
-      frames[0].src = urls[0];
+      frames[0].root.classList.add(effects[effectIndex]);
+      setFrameSource(frames[0], urls[0], () => frames[0].root.classList.add("active"));
 
       if (urls.length === 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       window.setInterval(() => {
@@ -1930,15 +2186,13 @@
         photoIndex = (photoIndex + 1) % urls.length;
         const incoming = frames[nextFrame];
         const outgoing = frames[activeFrame];
-        incoming.onload = () => {
+        setFrameSource(incoming, urls[photoIndex], () => {
           effectIndex = (effectIndex + 1) % effects.length;
-          incoming.classList.remove("active", ...effects);
-          incoming.classList.add(effects[effectIndex]);
-          incoming.classList.add("active");
-          outgoing.classList.remove("active");
+          incoming.root.classList.remove("active", ...effects);
+          incoming.root.classList.add(effects[effectIndex], "active");
+          outgoing.root.classList.remove("active");
           activeFrame = nextFrame;
-        };
-        incoming.src = urls[photoIndex];
+        });
       }, 7_000);
     }
 
@@ -2425,6 +2679,134 @@
     }
 
     /*
+     * 只接受明确写出的 http:// 或 https:// 网址。这里不接受 javascript:、data:
+     * 或带用户名/密码的伪装地址；同一校验同时用于自动识别、卡片渲染和最终
+     * 确认跳转，避免只在某一个入口做检查而被绕过。
+     */
+    function safeArticleHttpUrl(value) {
+      const source = String(value || "").trim();
+      if (!/^https?:\/\//i.test(source) || source.length > 2048) return null;
+      try {
+        const url = new URL(source);
+        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+        return url;
+      } catch {
+        return null;
+      }
+    }
+
+    /* 中文或英文句号、逗号经常紧跟在网址后面，它们属于正文而不是网址。 */
+    function trimArticleUrlPunctuation(value) {
+      let linkText = String(value || "");
+      const trailing = /[.,!?;:，。！？；：、》〉】｝）)\]\}]/u;
+      while (linkText && trailing.test(linkText.slice(-1))) linkText = linkText.slice(0, -1);
+      return linkText;
+    }
+
+    function prepareArticleAnchor(anchor, url, label = "") {
+      anchor.href = url.href;
+      anchor.dataset.articleUrl = url.href;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer external";
+      anchor.referrerPolicy = "no-referrer";
+      anchor.classList.add("article-smart-link");
+      anchor.title = `确认后访问 ${url.hostname}`;
+      if (label) anchor.textContent = label;
+      return anchor;
+    }
+
+    /*
+     * 把正文中的纯文本网址转换成安全链接。TreeWalker 只访问文字节点，并跳过
+     * 已有链接、代码块和表单内容，因此不会破坏作者写好的 HTML 或代码示例。
+     */
+    function autoLinkArticleText(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+      textNodes.forEach((textNode) => {
+        const parent = textNode.parentElement;
+        if (!parent || parent.closest("a, code, pre, script, style, textarea, noscript")) return;
+        const source = textNode.nodeValue || "";
+        const matches = [];
+        const urlPattern = /https?:\/\/[^\s<>"'`]+/giu;
+        for (const match of source.matchAll(urlPattern)) {
+          const linkText = trimArticleUrlPunctuation(match[0]);
+          const url = safeArticleHttpUrl(linkText);
+          if (url && linkText) matches.push({ index: match.index, raw: match[0], linkText, url });
+        }
+        if (!matches.length) return;
+
+        const fragment = document.createDocumentFragment();
+        let cursor = 0;
+        matches.forEach((match) => {
+          fragment.append(document.createTextNode(source.slice(cursor, match.index)));
+          const anchor = prepareArticleAnchor(document.createElement("a"), match.url, match.linkText);
+          anchor.dataset.articleAutoLink = "true";
+          fragment.append(anchor);
+          /* 未计入 linkText 的末尾标点会由下一段普通文字切片原样保留。 */
+          cursor = match.index + match.linkText.length;
+        });
+        fragment.append(document.createTextNode(source.slice(cursor)));
+        textNode.replaceWith(fragment);
+      });
+    }
+
+    /*
+     * 只有“整段仅一个网址”才提升为预览卡；句子中的网址仍保持行内链接。
+     * 卡片只包含浏览器本地解析出的域名与标准地址，不请求外站元数据。
+     */
+    function promoteStandaloneArticleLinks(root) {
+      root.querySelectorAll("p").forEach((paragraph) => {
+        const directLinks = Array.from(paragraph.children).filter((child) => child.matches("a.article-smart-link"));
+        if (directLinks.length !== 1 || paragraph.querySelectorAll("a.article-smart-link").length !== 1) return;
+        const anchor = directLinks[0];
+        if (!anchor.textContent.trim() || anchor.querySelector("img, picture, video, audio, svg")) return;
+        /* 只有自动识别的纯网址或作者直接把网址作为链接文字时才升级为卡片。 */
+        if (anchor.dataset.articleAutoLink !== "true" && !/^https?:\/\//i.test(anchor.textContent.trim())) return;
+        const hasOtherContent = Array.from(paragraph.childNodes).some((node) => {
+          if (node === anchor) return false;
+          return node.nodeType !== Node.TEXT_NODE || Boolean(node.textContent.trim());
+        });
+        if (hasOtherContent) return;
+
+        const url = safeArticleHttpUrl(anchor.dataset.articleUrl);
+        if (!url) return;
+        const icon = document.createElement("span"); icon.className = "article-link-icon"; icon.textContent = "↗";
+        const copy = document.createElement("span"); copy.className = "article-link-copy";
+        const label = document.createElement("span"); label.textContent = "外部链接";
+        const host = document.createElement("strong"); host.textContent = url.hostname.replace(/^www\./i, "") || url.origin;
+        const address = document.createElement("small"); address.textContent = url.href;
+        copy.append(label, host, address);
+        const action = document.createElement("span"); action.className = "article-link-action"; action.textContent = "确认后访问";
+        anchor.classList.add("article-link-card");
+        anchor.setAttribute("aria-label", `确认后访问外部网站 ${host.textContent}`);
+        anchor.replaceChildren(icon, copy, action);
+        paragraph.replaceWith(anchor);
+      });
+    }
+
+    function enhanceArticleLinks(root) {
+      /* Studio 已经插入的链接与自动识别出的纯文本网址使用同一套安全规则。 */
+      root.querySelectorAll("a[href]").forEach((anchor) => {
+        const url = safeArticleHttpUrl(anchor.getAttribute("href"));
+        if (url) prepareArticleAnchor(anchor, url);
+      });
+      autoLinkArticleText(root);
+      promoteStandaloneArticleLinks(root);
+    }
+
+    function showArticleLinkConfirmation(value) {
+      const url = safeArticleHttpUrl(value);
+      if (!url) return;
+      document.getElementById("external-link-host").textContent = url.hostname.replace(/^www\./i, "") || url.origin;
+      document.getElementById("external-link-address").textContent = url.href;
+      document.getElementById("external-link-continue").href = url.href;
+      const dialog = document.getElementById("external-link-dialog");
+      if (!dialog.open) dialog.showModal();
+    }
+
+    /*
      * 安全地装载文章正文，并把正文中的图片接入与照片专栏相同的大图弹窗。
      * 旧文章可能保存的是 /media/:id 原片地址，所以在节点进入页面前统一改写为
      * ?preview=1；这样游客浏览正文时只会请求压缩预览，不会误取原片。
@@ -2461,6 +2843,7 @@
       });
 
       root.replaceChildren(template.content);
+      enhanceArticleLinks(root);
       const images = Array.from(root.querySelectorAll("img"));
       const photos = images.map((image, index) => {
         const source = image.getAttribute("src") || image.src;
@@ -3229,7 +3612,11 @@
           notice.textContent = "请先完成人机验证。";
           return;
         }
-        notice.textContent = protection.enabled ? "正在核验并进入游客模式…" : "正在以游客身份进入…";
+        notice.textContent = protection.enabled
+          ? "正在核验并进入游客模式…"
+          : protection.incomplete
+            ? "人机验证配置尚未补齐，正在通过访问频率限制进入…"
+            : "正在以游客身份进入…";
         await api("/api/guest/enter", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3371,6 +3758,23 @@
     document.getElementById("content-dislike").addEventListener("click", (event) => state.currentContent && sendReaction("content", state.currentContent.id, -1, event.currentTarget));
     document.getElementById("content-pdf").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
     document.getElementById("reader-print").addEventListener("click", (event) => downloadCurrentContentPdf(event.currentTarget));
+
+    /*
+     * 阅读器中的自动网址统一在这里拦截。阻止原始链接的默认动作后先展示真实
+     * 域名；只有读者点击确认框中的“继续访问”才会新开目标网站。
+     */
+    document.getElementById("reader-body").addEventListener("click", (event) => {
+      const link = event.target.closest?.("a[data-article-url]");
+      if (!link || !event.currentTarget.contains(link)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      showArticleLinkConfirmation(link.dataset.articleUrl);
+    });
+    const externalLinkDialog = document.getElementById("external-link-dialog");
+    document.getElementById("external-link-continue").addEventListener("click", () => {
+      /* 不阻止 a 标签默认动作；先关闭确认框，再由浏览器安全地打开新窗口。 */
+      externalLinkDialog.close();
+    });
 
     /* ---------- 14. 账户中心：修改昵称、密码、退出和在线心跳。 ---------- */
     document.getElementById("nickname-form").addEventListener("submit", async (event) => {
@@ -3547,7 +3951,7 @@
       }
     });
 
-    [installAppDialog, document.getElementById("reader-dialog"), resourceDialog, imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
+    [installAppDialog, document.getElementById("reader-dialog"), externalLinkDialog, resourceDialog, imageDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     }));
 
