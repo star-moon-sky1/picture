@@ -467,7 +467,7 @@
         <form id="media-form" class="panel">
           <h3>上传图片</h3>
           <div class="form-grid">
-            <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 1280px 的 WebP 压缩预览。</small></div>
+            <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 2560px、较高画质的 WebP 压缩预览，供照片专栏和登录背景显示。</small></div>
             <div class="field"><label>所属相册</label><select id="media-album"></select></div>
             <div class="field">
               <label>照片可见范围</label>
@@ -756,11 +756,12 @@
     /* =========================================================
        浏览器端图片压缩
        ---------------------------------------------------------
-       原片不做任何改写；Canvas 只额外生成最长边 1280px、质量 0.72
-       的 WebP 预览件。Worker 会把两份文件写入不同的 R2 对象键。
+       原片不做任何改写；Canvas 只额外生成最长边 2560px、质量 0.88
+       的 WebP 高清压缩预览。它仍不是原片，游客也不会取得原片地址；较高
+       分辨率用于避免电脑全屏登录背景把 1280px 旧预览放大后产生明显模糊。
        ========================================================= */
-    const PREVIEW_MAX_EDGE = 1280;
-    const PREVIEW_WEBP_QUALITY = .72;
+    const PREVIEW_MAX_EDGE = 2560;
+    const PREVIEW_WEBP_QUALITY = .88;
 
     async function decodeLocalImage(file) {
       // 新版浏览器优先使用 createImageBitmap，能正确读取大多数照片的 EXIF 方向。
@@ -899,9 +900,9 @@
           });
           actions.append(copy);
 
-          // 升级前上传的照片没有 preview_object_key，可在这里从原片补建一次。
-          if (item.kind === "photo" && !item.hasPreview) {
-            const createPreview = button("生成压缩预览");
+          // 所有照片都允许重新生成：旧的 1280px 预览可直接升级为 2560px 高清预览。
+          if (item.kind === "photo") {
+            const createPreview = button(item.hasPreview ? "重建高清预览" : "生成高清预览");
             createPreview.addEventListener("click", () => backfillMediaPreview(item, createPreview));
             actions.append(createPreview);
           }
@@ -1286,7 +1287,8 @@
     }
 
     /*
-     * 旧照片补建预览：只读取原片并上传新 WebP，服务器不会覆盖 object_key。
+     * 旧照片补建/重建高清预览：只读取原片并上传新 WebP，服务器不会覆盖
+     * object_key。已有 1280px 预览也可使用此按钮升级为 2560px 版本。
      * 站长后台 Cookie 也能读取会员板块原片，普通游客仍然没有该权限。
      */
     async function backfillMediaPreview(item, control) {

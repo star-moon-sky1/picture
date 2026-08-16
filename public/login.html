@@ -17,6 +17,8 @@
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
+  <!-- 注册与找回密码卡片使用和主页入口相同的动态背景折射层。 -->
+  <script src="/liquid-glass.js"></script>
   <style>
     /* ========================================================
        01. 登录页颜色与基础重置
@@ -70,11 +72,7 @@
       padding: clamp(24px, 5vw, 64px) clamp(13px, 4vw, 44px) 88px;
     }
 
-    /*
-     * 电脑端继续使用清晰的 cover 铺满方式，不改变原来的视觉构图。
-     * 手机端会在下方的触屏媒体查询中启用“低模糊铺满层 + 清晰完整层”：
-     * 前景照片完整显示，只有比例不一致时出现的边缘空位才由背景层补齐。
-     */
+    /* 电脑和手机统一使用无模糊 cover 主图，避免旧版手机双层背景产生雾感。 */
     .auth-photo-background {
       position: fixed;
       inset: 0;
@@ -102,16 +100,9 @@
       position: absolute;
       display: block;
       user-select: none;
-    }
-    .auth-photo-frame .photo-fill {
-      display: none;
-      inset: -5%;
-      width: 110%;
-      height: 110%;
-      object-fit: cover;
-      object-position: center;
-      filter: blur(9px) saturate(1.04) brightness(.88);
-      transform: scale(1.05);
+      image-rendering: auto;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
     }
     .auth-photo-frame .photo-complete {
       inset: 0;
@@ -131,20 +122,6 @@
     @keyframes auth-bg-reveal-center { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
     @media (prefers-reduced-motion: reduce) {
       .auth-photo-frame { transition: opacity .25s ease; animation: none !important; }
-      .auth-photo-frame .photo-fill { transform: scale(1.05); }
-    }
-
-    /*
-     * 只在触屏手机上完整显示整张背景照片。清晰的 contain 前景不做模糊；
-     * 9px 的 cover 后景只负责填补留白，比旧版 24px 模糊明显更清晰。
-     * 鼠标/触控板电脑即使把窗口缩窄，也不会套用这项改动。
-     */
-    @media (max-width: 900px) and (hover: none), (max-width: 900px) and (pointer: coarse) {
-      .auth-photo-frame .photo-fill { display: block; }
-      .auth-photo-frame .photo-complete {
-        object-fit: contain;
-        filter: drop-shadow(0 10px 26px rgba(0,0,0,.16));
-      }
     }
 
     /* 左下角入口使用有色毛玻璃；蓝灰底色保证它在浅色照片上仍有层次。 */
@@ -184,31 +161,34 @@
       width: min(100%, 720px);
       padding: 30px clamp(34px, 5vw, 52px);
       position: relative; isolation: isolate; overflow: hidden;
-      border: 1px solid rgba(255,255,255,.68);
+      border: 0;
       border-radius: 30px;
       /*
-         纯透明晶体卡片：白色填充压到很低，只保留斜向折射、清晰边线和
-         2px 的轻微光学扰动。照片不再被 31px 的毛玻璃模糊成白雾。
+         中心轻微磨砂并向四周渐变为透明玻璃。边缘的放大和模糊来自同步
+         背景副本，不再依赖一条静态白边，因此照片移动时折射也会随之变化。
       */
       background:
-        linear-gradient(125deg, rgba(255,255,255,.13), rgba(255,255,255,.012) 40%, rgba(91,207,222,.038) 72%, rgba(255,255,255,.085));
+        radial-gradient(ellipse 88% 82% at 50% 47%, rgba(247,252,252,.22) 0%, rgba(239,249,250,.13) 44%, rgba(223,244,247,.045) 72%, transparent 100%);
       box-shadow:
         0 32px 90px rgba(14,35,42,.28),
-        inset 0 1px 0 rgba(255,255,255,.96),
-        inset 1px 0 0 rgba(255,255,255,.27),
-        inset 0 -1px 0 rgba(42,83,99,.22);
-      -webkit-backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
-      backdrop-filter: blur(2px) saturate(1.12) contrast(1.05);
+        inset 0 0 36px rgba(255,255,255,.08),
+        inset 0 -12px 30px rgba(56,105,119,.055);
+      -webkit-backdrop-filter: blur(3.5px) saturate(1.10) contrast(1.025);
+      backdrop-filter: blur(3.5px) saturate(1.10) contrast(1.025);
       /* 取消整张卡片继承的白色字晕，浅色照片前文字边缘会更清晰。 */
       text-shadow: none;
     }
     .auth-card::before {
-      content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
       background:
-        linear-gradient(118deg, rgba(255,255,255,.31), transparent 8% 76%, rgba(255,255,255,.10)),
-        linear-gradient(90deg, rgba(255,255,255,.11), transparent 2% 98%, rgba(255,255,255,.07));
+        radial-gradient(ellipse 76% 72% at 50% 46%, rgba(255,255,255,.16), rgba(255,255,255,.07) 46%, transparent 86%);
+      -webkit-backdrop-filter: blur(7px) saturate(1.08);
+      backdrop-filter: blur(7px) saturate(1.08);
+      -webkit-mask-image: radial-gradient(ellipse 84% 80% at 50% 48%, #000 0 43%, rgba(0,0,0,.72) 61%, rgba(0,0,0,.16) 82%, transparent 100%);
+      mask-image: radial-gradient(ellipse 84% 80% at 50% 48%, #000 0 43%, rgba(0,0,0,.72) 61%, rgba(0,0,0,.16) 82%, transparent 100%);
     }
-    .auth-card > * { position: relative; z-index: 1; }
+    .auth-card > * { position: relative; z-index: 2; }
+    .auth-card > .liquid-glass-refraction { position: absolute; z-index: 0; }
     .card-head { margin-bottom: 20px; text-align: center; }
     /* 中文标题已经足够明确，不再额外显示 ACCOUNT LOGIN 等英文装饰行。 */
     .eyebrow { display: none; }
@@ -536,9 +516,8 @@
     }
 
     /*
-     * 两个 frame 循环复用，避免一次加载所有公开照片。photo-complete 是清晰
-     * 主图：电脑端 cover、手机端 contain；photo-fill 只在手机端补齐留白。
-     * 两张 img 使用同一地址，浏览器会命中自身缓存，不会重复下载原文件。
+     * 两个 frame 循环复用，避免一次加载所有公开照片。电脑和手机都使用清晰
+     * cover 主图；卡片折射层复用同一压缩预览，浏览器会命中自身缓存。
      */
     function startPhotoBackground(urls) {
       const host = document.getElementById("auth-photo-background");
@@ -546,15 +525,17 @@
       const createFrame = () => {
         const root = document.createElement("div");
         root.className = "auth-photo-frame";
-        const fill = document.createElement("img");
         const complete = document.createElement("img");
-        fill.className = "photo-fill"; complete.className = "photo-complete";
-        fill.alt = ""; complete.alt = "";
-        fill.decoding = "async"; complete.decoding = "async";
-        root.append(fill, complete); host.append(root);
-        return { root, fill, complete };
+        complete.className = "photo-complete";
+        complete.alt = "";
+        complete.decoding = "async";
+        root.append(complete); host.append(root);
+        return { root, complete };
       };
       const frames = [createFrame(), createFrame()];
+      const glassLens = globalThis.XingyuejiLiquidGlass?.createPhotoLens([
+        document.querySelector(".auth-card"),
+      ]);
       const setFrameSource = (frame, url, ready) => {
         const absoluteUrl = new URL(url, location.href).href;
         if (frame.complete.src === absoluteUrl && frame.complete.complete) {
@@ -562,7 +543,6 @@
           return;
         }
         frame.complete.onload = ready;
-        frame.fill.src = url;
         frame.complete.src = url;
       };
       let activeFrame = 0;
@@ -570,7 +550,10 @@
       const effects = ["effect-fade", "effect-wipe-left", "effect-wipe-right", "effect-reveal-center"];
       let effectIndex = 0;
       frames[0].root.classList.add(effects[effectIndex]);
-      setFrameSource(frames[0], urls[0], () => frames[0].root.classList.add("active"));
+      setFrameSource(frames[0], urls[0], () => {
+        frames[0].root.classList.add("active");
+        glassLens?.setSource(urls[0]);
+      });
 
       if (urls.length === 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       window.setInterval(() => {
@@ -583,6 +566,7 @@
           incoming.root.classList.remove("active", ...effects);
           incoming.root.classList.add(effects[effectIndex], "active");
           outgoing.root.classList.remove("active");
+          glassLens?.setSource(urls[photoIndex]);
           activeFrame = nextFrame;
         });
       }, 7_000);
