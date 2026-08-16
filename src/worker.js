@@ -10,6 +10,11 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_COOKIE = "xyj_user";
 const USER_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_REMEMBER_TTL_SECONDS = 60 * 60 * 24 * 30;
+const GUEST_SESSION_COOKIE = "xyj_guest";
+const GUEST_SESSION_TTL_SECONDS = 60 * 60 * 24;
+const GUEST_ANALYTICS_RETENTION_DAYS = 90;
+const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const TURNSTILE_GUEST_ACTION = "guest_entry";
 const PASSWORD_RESET_TTL_SECONDS = 60 * 60 * 24;
 /*
  * Cloudflare Workers 免费方案的单次 CPU 时间很短。600,000 次 PBKDF2 在本地
@@ -110,6 +115,23 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/*
+ * 游客统计按站点日历日汇总。默认使用北京时间，部署时可通过
+ * ANALYTICS_TIMEZONE 改成其他 IANA 时区（例如 America/New_York）。
+ */
+function analyticsDay(env, date = new Date()) {
+  const timeZone = clampText(env?.ANALYTICS_TIMEZONE || "Asia/Shanghai", 80);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(date);
+    const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${value.year}-${value.month}-${value.day}`;
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
 function clampText(value, maxLength) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
@@ -119,11 +141,17 @@ function validId(value) {
 }
 
 /*
- * 内容和照片统一使用三级可见范围：
- * public  = 游客与用户均可访问；member = 仅审核通过的用户；private = 仅 Studio。
+ * 内容和照片统一使用四级可见范围：
+ * public  = 游客与用户均可访问；member = 所有审核通过的用户；
+ * selected = 仅白名单用户；private = 仅 Studio。
  * 所有未知值都回退到 public，避免旧版本或手工请求写入无法判断的状态。
  */
 function normalizedVisibility(value) {
+  return value === "member" || value === "selected" || value === "private" ? value : "public";
+}
+
+/* 文件资源目前仍保持公开/全体会员/私密三级权限，避免写入表结构不支持的值。 */
+function normalizedAssetVisibility(value) {
   return value === "member" || value === "private" ? value : "public";
 }
 
@@ -166,8 +194,10 @@ function safeRelativePath(value) {
     .slice(0, 900);
 }
 
-function visibleToWebsite(visibility, fullAccess) {
-  return visibility === "public" || (visibility === "member" && fullAccess);
+function visibleToWebsite(visibility, fullAccess, selectedAccess = false) {
+  return visibility === "public"
+    || (visibility === "member" && fullAccess)
+    || (visibility === "selected" && fullAccess && selectedAccess);
 }
 
 function slugify(value) {
@@ -461,6 +491,26 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS content_access_users (
+      content_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(content_id, user_id),
+      FOREIGN KEY(content_id) REFERENCES content(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS media_access_users (
+      media_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(media_id, user_id),
+      FOREIGN KEY(media_id) REFERENCES media(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS user_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -484,6 +534,29 @@ async function initializeSchema(env) {
       ip_hint TEXT NOT NULL DEFAULT '',
       user_agent TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS guest_visits (
+      id TEXT PRIMARY KEY,
+      visit_day TEXT NOT NULL,
+      visitor_hash TEXT NOT NULL,
+      ip_hash TEXT NOT NULL DEFAULT '',
+      ip_hint TEXT NOT NULL DEFAULT '',
+      country TEXT NOT NULL DEFAULT '',
+      region TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      timezone TEXT NOT NULL DEFAULT '',
+      asn INTEGER NOT NULL DEFAULT 0,
+      as_organization TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT '',
+      referrer TEXT NOT NULL DEFAULT '',
+      entry_count INTEGER NOT NULL DEFAULT 1,
+      page_views INTEGER NOT NULL DEFAULT 1,
+      last_section TEXT NOT NULL DEFAULT 'home',
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      UNIQUE(visit_day, visitor_hash)
     )
     `,
     `
@@ -583,9 +656,13 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_reactions_target ON reactions(target_type, target_id)",
     "CREATE INDEX IF NOT EXISTS idx_users_status ON users(status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_content_access_user ON content_access_users(user_id, content_id)",
+    "CREATE INDEX IF NOT EXISTS idx_media_access_user ON media_access_users(user_id, media_id)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_seen ON user_sessions(last_seen_at, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_guest_visits_day ON guest_visits(visit_day, last_seen_at)",
+    "CREATE INDEX IF NOT EXISTS idx_guest_visits_ip ON guest_visits(ip_hash, last_seen_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_reset_requests(user_id, requested_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_status ON password_reset_requests(status, requested_at)",
     "CREATE INDEX IF NOT EXISTS idx_asset_folders_parent ON asset_folders(parent_id, sort_order, created_at)",
@@ -623,6 +700,8 @@ async function initializeSchema(env) {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM login_events WHERE created_at < ?")
       .bind(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()),
+    env.DB.prepare("DELETE FROM guest_visits WHERE visit_day < ?")
+      .bind(analyticsDay(env, new Date(Date.now() - GUEST_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60 * 1000))),
     env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < ?")
       .bind(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
     env.DB.prepare(`
@@ -800,6 +879,74 @@ function rows(result) {
   return result?.results || [];
 }
 
+/*
+ * “仅指定用户”采用两张白名单关联表。前端传来的用户 ID 必须去重、限制数量，
+ * 并再次确认账号已经审核通过；不能因为 Studio 下拉框正常就信任请求数据。
+ */
+const ACCESS_TABLES = Object.freeze({
+  content: { table: "content_access_users", targetColumn: "content_id" },
+  media: { table: "media_access_users", targetColumn: "media_id" },
+});
+
+function normalizedAllowedUserIds(value) {
+  let source = value;
+  if (typeof source === "string") {
+    try { source = JSON.parse(source); } catch { source = []; }
+  }
+  if (!Array.isArray(source)) return [];
+  return [...new Set(source.map((item) => String(item || "")).filter(validId))].slice(0, 200);
+}
+
+async function validatedAllowedUserIds(env, visibility, value) {
+  if (visibility !== "selected") return [];
+  const ids = normalizedAllowedUserIds(value);
+  if (!ids.length) throw new HttpError(400, "选择‘仅指定用户’时，请至少勾选一个已审核账号");
+  const placeholders = ids.map(() => "?").join(",");
+  const result = await env.DB.prepare(
+    `SELECT id FROM users WHERE status = 'approved' AND id IN (${placeholders})`,
+  ).bind(...ids).all();
+  const approved = new Set(rows(result).map((item) => item.id));
+  if (approved.size !== ids.length) throw new HttpError(400, "指定用户中包含未审核或不存在的账号，请刷新用户列表后重试");
+  return ids;
+}
+
+async function replaceAllowedUsers(env, kind, targetId, userIds, timestamp = nowIso()) {
+  const config = ACCESS_TABLES[kind];
+  if (!config) throw new Error("Unknown access table kind");
+  const statements = [
+    env.DB.prepare(`DELETE FROM ${config.table} WHERE ${config.targetColumn} = ?`).bind(targetId),
+    ...userIds.map((userId) => env.DB.prepare(`
+      INSERT INTO ${config.table} (${config.targetColumn}, user_id, created_at)
+      VALUES (?, ?, ?)
+    `).bind(targetId, userId, timestamp)),
+  ];
+  await env.DB.batch(statements);
+}
+
+async function attachAllowedUserIds(env, kind, items) {
+  const config = ACCESS_TABLES[kind];
+  if (!config || !items.length) return items;
+  const result = await env.DB.prepare(
+    `SELECT ${config.targetColumn} AS target_id, user_id FROM ${config.table}`,
+  ).all();
+  const byTarget = new Map();
+  for (const row of rows(result)) {
+    if (!byTarget.has(row.target_id)) byTarget.set(row.target_id, []);
+    byTarget.get(row.target_id).push(row.user_id);
+  }
+  return items.map((item) => ({ ...item, allowed_user_ids: byTarget.get(item.id) || [] }));
+}
+
+async function userHasSelectedAccess(env, kind, targetId, userId) {
+  const config = ACCESS_TABLES[kind];
+  if (!config || !validId(targetId) || !validId(userId)) return false;
+  const match = await env.DB.prepare(`
+    SELECT 1 AS allowed FROM ${config.table}
+    WHERE ${config.targetColumn} = ? AND user_id = ?
+  `).bind(targetId, userId).first();
+  return Boolean(match);
+}
+
 function mediaDto(row, { includeOriginal = true } = {}) {
   // R2 对象键只供 Worker 内部使用，公开接口和后台页面都只拿受控媒体地址。
   const { object_key: _objectKey, preview_object_key: previewObjectKey, ...safeRow } = row;
@@ -843,7 +990,7 @@ function assetDto(row, variants = [], { includeDownload = false } = {}) {
     mime_type: row.mime_type,
     size_bytes: Number(row.size_bytes || 0),
     kind: row.kind,
-    visibility: normalizedVisibility(row.visibility),
+    visibility: normalizedAssetVisibility(row.visibility),
     download_policy: normalizedDownloadPolicy(row.download_policy),
     relative_path: row.relative_path || "",
     status: row.status,
@@ -874,7 +1021,7 @@ function visibleAssetFolderIds(folderRows, fullAccess, adminAccess = false) {
     if (memo.has(id)) return memo.get(id);
     const folder = folderMap.get(id);
     if (!folder || trail.has(id)) return false;
-    if (!adminAccess && !visibleToWebsite(normalizedVisibility(folder.visibility), fullAccess)) {
+    if (!adminAccess && !visibleToWebsite(normalizedAssetVisibility(folder.visibility), fullAccess)) {
       memo.set(id, false);
       return false;
     }
@@ -898,7 +1045,10 @@ async function settingsObject(env) {
 async function publicBootstrap(request, env) {
   const sessionUser = await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
-  const [changelogs, sections, content, albums, media, assetFolders, assets, assetVariants, settings] = await Promise.all([
+  const [
+    changelogs, sections, content, albums, media, assetFolders, assets, assetVariants, settings,
+    contentAccess, mediaAccess,
+  ] = await Promise.all([
     env.DB.prepare(
       "SELECT id, version, title, body, published_at FROM changelogs ORDER BY published_at DESC, created_at DESC",
     ).all(),
@@ -940,17 +1090,25 @@ async function publicBootstrap(request, env) {
       FROM asset_variants WHERE status = 'ready' ORDER BY created_at ASC
     `).all(),
     settingsObject(env),
+    env.DB.prepare("SELECT content_id FROM content_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT media_id FROM media_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
   ]);
 
   const visibleSections = rows(sections).filter((item) => visibleToWebsite(item.visibility, fullAccess));
   const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
+  const allowedContentIds = new Set(rows(contentAccess).map((item) => item.content_id));
+  const allowedMediaIds = new Set(rows(mediaAccess).map((item) => item.media_id));
   const visibleContent = rows(content).filter((item) => (
-    visibleSectionIds.has(item.section_id) && visibleToWebsite(item.visibility, fullAccess)
+    visibleSectionIds.has(item.section_id)
+    && visibleToWebsite(item.visibility, fullAccess, allowedContentIds.has(item.id))
   ));
   const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
   // 照片自身和所属大板块都必须对当前身份可见；private 永远不进入普通网站数据。
   const visibleMedia = rows(media).filter((item) => (
-    visibleSectionIds.has(item.section_id) && visibleToWebsite(item.visibility, fullAccess)
+    visibleSectionIds.has(item.section_id)
+    && visibleToWebsite(item.visibility, fullAccess, allowedMediaIds.has(item.id))
   ));
   const folderRows = rows(assetFolders);
   const visibleFolderIds = visibleAssetFolderIds(folderRows, fullAccess);
@@ -962,7 +1120,7 @@ async function publicBootstrap(request, env) {
   }
   const visibleAssets = rows(assets).filter((item) => (
     (!item.folder_id || visibleFolderIds.has(item.folder_id))
-    && visibleToWebsite(normalizedVisibility(item.visibility), fullAccess)
+    && visibleToWebsite(normalizedAssetVisibility(item.visibility), fullAccess)
   ));
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
@@ -992,6 +1150,25 @@ async function publicBootstrap(request, env) {
   };
 }
 
+/*
+ * 登录入口的轮播背景在完成人机验证前也必须能够显示，因此使用一个最小接口：
+ * 它只返回公开照片的压缩预览地址，不返回标题、说明、文章或原片地址。
+ */
+async function publicEntryBackground(env) {
+  const result = await env.DB.prepare(`
+    SELECT m.id, m.updated_at, m.created_at
+    FROM media m JOIN portfolio_sections s ON s.id = m.section_id
+    WHERE m.kind = 'photo' AND m.visibility = 'public' AND s.visibility = 'public'
+    ORDER BY m.created_at DESC
+    LIMIT 40
+  `).all();
+  return {
+    photos: rows(result).map((item) => ({
+      url: `/media/${item.id}?preview=1&v=${encodeURIComponent(String(item.updated_at || item.created_at || "1"))}`,
+    })),
+  };
+}
+
 async function getPublicContent(request, env, id) {
   const item = await env.DB.prepare(`
     SELECT c.id, c.type, c.section_id, c.title, c.slug, c.excerpt, c.body_html,
@@ -1006,7 +1183,13 @@ async function getPublicContent(request, env, id) {
   if (item.visibility === "private" || item.section_visibility === "private") {
     throw new HttpError(404, "内容不存在或尚未发布");
   }
-  if (item.visibility === "member" || item.section_visibility === "member") {
+  if (item.visibility === "selected") {
+    const user = await requireApprovedUser(request, env);
+    if (!(await userHasSelectedAccess(env, "content", item.id, user.id))) {
+      // 不向无权限账号暴露文章是否存在，行为与不存在的文章保持一致。
+      throw new HttpError(404, "内容不存在或尚未发布");
+    }
+  } else if (item.visibility === "member" || item.section_visibility === "member") {
     await requireApprovedUser(request, env);
   }
   return {
@@ -1698,6 +1881,193 @@ async function clientMeta(request) {
   };
 }
 
+/* ============================================================
+ * 游客验证、会话与按日访问统计
+ * ============================================================
+ * - TURNSTILE_SITE_KEY 是可公开的站点密钥；TURNSTILE_SECRET_KEY / SECRET
+ *   只能保存在 Cloudflare Secret 中。
+ * - D1 不保存完整 IP，只保存不可逆摘要和 203.0.113.* 形式的脱敏提示。
+ * - visitor_hash 来自浏览器随机编号的 HMAC，只代表同一浏览器，不代表真实身份。
+ */
+function turnstileStatus(env) {
+  const siteKey = clampText(env.TURNSTILE_SITE_KEY, 200);
+  const secretKey = String(env.TURNSTILE_SECRET_KEY || env.TURNSTILE_SECRET || "").trim();
+  return {
+    configured: Boolean(siteKey && secretKey),
+    incomplete: Boolean(siteKey) !== Boolean(secretKey),
+    siteKey,
+    secretKey,
+  };
+}
+
+function guestSessionSecret(env) {
+  const secret = String(env.SESSION_SECRET || env.ADMIN_PASSWORD || "").trim();
+  if (!secret) throw new HttpError(503, "游客会话密钥尚未配置，请先设置 SESSION_SECRET 或 ADMIN_PASSWORD");
+  return secret;
+}
+
+async function guestVisitorHash(env, visitorId) {
+  return hmac(`guest-visitor:${visitorId}`, guestSessionSecret(env));
+}
+
+async function makeGuestSession(env, visitorHash) {
+  const payload = encodeBase64Url(JSON.stringify({
+    exp: Math.floor(Date.now() / 1000) + GUEST_SESSION_TTL_SECONDS,
+    visitorHash,
+    nonce: crypto.randomUUID(),
+  }));
+  return `${payload}.${await hmac(payload, guestSessionSecret(env))}`;
+}
+
+function guestSessionCookie(request, value, maxAge) {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `${GUEST_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+}
+
+async function getGuestSession(request, env) {
+  const token = getCookie(request, GUEST_SESSION_COOKIE);
+  if (!token || !token.includes(".")) return null;
+  const secret = String(env.SESSION_SECRET || env.ADMIN_PASSWORD || "").trim();
+  if (!secret) return null;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature || !(await timingSafeEqualText(await hmac(payload, secret), signature))) return null;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload)));
+    if (Number(parsed.exp) <= Math.floor(Date.now() / 1000)) return null;
+    if (!/^[a-zA-Z0-9_-]{20,160}$/.test(String(parsed.visitorHash || ""))) return null;
+    return { visitorHash: parsed.visitorHash, expiresAt: Number(parsed.exp) };
+  } catch {
+    return null;
+  }
+}
+
+async function requireGuestSession(request, env) {
+  const session = await getGuestSession(request, env);
+  if (!session) throw new HttpError(401, "请先完成游客验证，或登录账号后继续访问");
+  return session;
+}
+
+async function requireWebsiteVisitor(request, env) {
+  if (await getUserSession(request, env, false)) return { type: "user" };
+  if (await isAdmin(request, env)) return { type: "admin" };
+  return { type: "guest", ...(await requireGuestSession(request, env)) };
+}
+
+function safeReferrerHost(request) {
+  const value = clampText(request.headers.get("Referer"), 600);
+  if (!value) return "";
+  try { return clampText(new URL(value).hostname, 160); }
+  catch { return ""; }
+}
+
+async function guestRequestMeta(request) {
+  const base = await clientMeta(request);
+  const cf = request.cf || {};
+  return {
+    ...base,
+    country: clampText(cf.country, 12),
+    region: clampText(cf.region, 100),
+    city: clampText(cf.city, 100),
+    timezone: clampText(cf.timezone, 80),
+    asn: Number.isFinite(Number(cf.asn)) ? Number(cf.asn) : 0,
+    asOrganization: clampText(cf.asOrganization, 180),
+    referrer: safeReferrerHost(request),
+  };
+}
+
+async function verifyGuestTurnstile(request, env, token) {
+  const status = turnstileStatus(env);
+  if (status.incomplete) throw new HttpError(503, "Turnstile 配置不完整，请同时设置 Site Key 和 Secret Key");
+  // 尚未配置时仍启用严格的 IP 频率限制，避免部署后直接中断现有游客访问。
+  if (!status.configured) return { protected: false };
+  const responseToken = clampText(token, 2048);
+  if (!responseToken) throw new HttpError(403, "请先完成人机验证");
+
+  const form = new FormData();
+  form.append("secret", status.secretKey);
+  form.append("response", responseToken);
+  form.append("remoteip", request.headers.get("CF-Connecting-IP") || "");
+  form.append("idempotency_key", crypto.randomUUID());
+  let result;
+  try {
+    const response = await fetch(TURNSTILE_VERIFY_URL, { method: "POST", body: form });
+    result = await response.json();
+  } catch (error) {
+    console.error("Turnstile Siteverify failed", error);
+    throw new HttpError(502, "人机验证服务暂时不可用，请稍后重试");
+  }
+  if (!result?.success || result.action !== TURNSTILE_GUEST_ACTION) {
+    console.warn("Turnstile rejected guest entry", result?.["error-codes"] || []);
+    throw new HttpError(403, "人机验证未通过或已经过期，请重新验证");
+  }
+  const configuredHostnames = String(env.TURNSTILE_HOSTNAMES || "")
+    .split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+  const expectedHostnames = configuredHostnames.length
+    ? configuredHostnames
+    : [new URL(request.url).hostname.toLowerCase()];
+  if (!expectedHostnames.includes(String(result.hostname || "").toLowerCase())) {
+    throw new HttpError(403, "人机验证来源不匹配");
+  }
+  return { protected: true };
+}
+
+async function recordGuestVisit(env, request, visitorHash, { entries = 0, pageViews = 1, section = "home" } = {}) {
+  const meta = await guestRequestMeta(request);
+  const timestamp = nowIso();
+  const day = analyticsDay(env);
+  const normalizedSection = validId(section) ? String(section) : "home";
+  await env.DB.prepare(`
+    INSERT INTO guest_visits
+      (id, visit_day, visitor_hash, ip_hash, ip_hint, country, region, city, timezone,
+       asn, as_organization, user_agent, referrer, entry_count, page_views, last_section,
+       first_seen_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(visit_day, visitor_hash) DO UPDATE SET
+      ip_hash = excluded.ip_hash,
+      ip_hint = excluded.ip_hint,
+      country = excluded.country,
+      region = excluded.region,
+      city = excluded.city,
+      timezone = excluded.timezone,
+      asn = excluded.asn,
+      as_organization = excluded.as_organization,
+      user_agent = excluded.user_agent,
+      referrer = CASE WHEN guest_visits.referrer = '' THEN excluded.referrer ELSE guest_visits.referrer END,
+      entry_count = guest_visits.entry_count + excluded.entry_count,
+      page_views = guest_visits.page_views + excluded.page_views,
+      last_section = excluded.last_section,
+      last_seen_at = excluded.last_seen_at
+  `).bind(
+    crypto.randomUUID(), day, visitorHash, meta.ipHash, meta.ipHint,
+    meta.country, meta.region, meta.city, meta.timezone, meta.asn, meta.asOrganization,
+    meta.userAgent, meta.referrer, Math.max(0, Number(entries) || 0),
+    Math.max(0, Number(pageViews) || 0), normalizedSection, timestamp, timestamp,
+  ).run();
+}
+
+async function enterGuestWebsite(request, env) {
+  await consumeRateLimit(env, await clientRateKey(request, "guest-entry"), 12, 15 * 60);
+  const body = await readJson(request);
+  const visitorId = clampText(body.visitorId, 80);
+  if (!validId(visitorId)) throw new HttpError(400, "游客浏览器编号无效，请刷新页面后重试");
+  const verification = await verifyGuestTurnstile(request, env, body.turnstileToken);
+  const visitorHash = await guestVisitorHash(env, visitorId);
+  await recordGuestVisit(env, request, visitorHash, { entries: 1, pageViews: 1, section: "home" });
+  const session = await makeGuestSession(env, visitorHash);
+  return json({ ok: true, protected: verification.protected }, 200, {
+    "Set-Cookie": guestSessionCookie(request, session, GUEST_SESSION_TTL_SECONDS),
+  });
+}
+
+async function trackGuestWebsite(request, env) {
+  const session = await requireGuestSession(request, env);
+  await consumeRateLimit(env, `guest-track:${session.visitorHash}`, 180, 60 * 60);
+  const body = await readJson(request);
+  const section = clampText(body.section, 80) || "home";
+  await recordGuestVisit(env, request, session.visitorHash, { entries: 0, pageViews: 1, section });
+  return { ok: true };
+}
+
 function userSessionCookie(request, value, maxAge) {
   const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
   return `${USER_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
@@ -2026,22 +2396,42 @@ async function resetUserPassword(request, env) {
   return { ok: true, message: "密码已重置，请使用新密码登录。" };
 }
 
-async function buildAiContext(env) {
-  const [settings, logs, sections, albums, media, published] = await Promise.all([
+async function buildAiContext(env, userId) {
+  const [settings, logs, sections, albums, media, published, contentAccess, mediaAccess] = await Promise.all([
     settingsObject(env),
     env.DB.prepare("SELECT version, title, body, published_at FROM changelogs ORDER BY published_at DESC LIMIT 15").all(),
-    env.DB.prepare("SELECT id, name, kind, description FROM portfolio_sections ORDER BY sort_order ASC").all(),
+    env.DB.prepare("SELECT id, name, kind, description, visibility FROM portfolio_sections ORDER BY sort_order ASC").all(),
     env.DB.prepare("SELECT section_id, name, description FROM albums ORDER BY sort_order ASC").all(),
-    env.DB.prepare("SELECT section_id, filename, caption FROM media WHERE kind = 'photo' ORDER BY created_at DESC LIMIT 80").all(),
     env.DB.prepare(`
-      SELECT c.type, c.title, c.excerpt, c.body_html, c.published_at, s.name AS section_name
+      SELECT m.id, m.section_id, m.filename, m.caption, m.visibility,
+             s.visibility AS section_visibility
+      FROM media m LEFT JOIN portfolio_sections s ON s.id = m.section_id
+      WHERE m.kind = 'photo' ORDER BY m.created_at DESC LIMIT 240
+    `).all(),
+    env.DB.prepare(`
+      SELECT c.id, c.type, c.title, c.excerpt, c.body_html, c.published_at, c.visibility,
+             s.name AS section_name, s.visibility AS section_visibility
       FROM content c LEFT JOIN portfolio_sections s ON s.id = c.section_id
       WHERE c.status = 'published'
-      ORDER BY published_at DESC LIMIT 30
+      ORDER BY published_at DESC LIMIT 120
     `).all(),
+    env.DB.prepare("SELECT content_id FROM content_access_users WHERE user_id = ?").bind(userId).all(),
+    env.DB.prepare("SELECT media_id FROM media_access_users WHERE user_id = ?").bind(userId).all(),
   ]);
 
-  const contentText = rows(published).map((item) => [
+  const allowedContentIds = new Set(rows(contentAccess).map((item) => item.content_id));
+  const allowedMediaIds = new Set(rows(mediaAccess).map((item) => item.media_id));
+  const visibleSections = rows(sections).filter((item) => visibleToWebsite(item.visibility, true));
+  const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
+  const visiblePublished = rows(published).filter((item) => (
+    visibleToWebsite(item.section_visibility, true)
+    && visibleToWebsite(item.visibility, true, allowedContentIds.has(item.id))
+  )).slice(0, 30);
+  const visibleMedia = rows(media).filter((item) => (
+    visibleToWebsite(item.section_visibility, true)
+    && visibleToWebsite(item.visibility, true, allowedMediaIds.has(item.id))
+  )).slice(0, 80);
+  const contentText = visiblePublished.map((item) => [
     item.section_name || (item.type === "guide" ? "北京旅行指南" : "文章"),
     item.title,
     item.excerpt,
@@ -2051,9 +2441,9 @@ async function buildAiContext(env) {
   return [
     `网站设置：${JSON.stringify(settings)}`,
     `版本更新：${rows(logs).map((item) => `${item.version} ${item.title} ${item.body}`).join("；")}`,
-    `个人空间大板块：${rows(sections).map((item) => `${item.name}（${item.kind === "gallery" ? "图片" : "文章"}）：${item.description}`).join("；")}`,
-    `图片子板块：${rows(albums).map((item) => `${item.name}：${item.description}`).join("；")}`,
-    `公开图片说明：${rows(media).map((item) => item.caption || item.filename).filter(Boolean).join("；")}`,
+    `个人空间大板块：${visibleSections.map((item) => `${item.name}（${item.kind === "gallery" ? "图片" : "文章"}）：${item.description}`).join("；")}`,
+    `图片子板块：${rows(albums).filter((item) => visibleSectionIds.has(item.section_id)).map((item) => `${item.name}：${item.description}`).join("；")}`,
+    `当前账号可见的图片说明：${visibleMedia.map((item) => item.caption || item.filename).filter(Boolean).join("；")}`,
     `已发布内容：\n${contentText}`,
   ].join("\n\n").slice(0, 24_000);
 }
@@ -2091,7 +2481,7 @@ async function fetchAiJson(url, options, unavailableMessage) {
 }
 
 // 读取问题、执行限流并构造站内知识上下文；流式与非流式接口共用这一步。
-async function prepareAiRequest(request, env) {
+async function prepareAiRequest(request, env, sessionUser) {
   const body = await readJson(request);
   const question = clampText(body.question || body.prompt, 3000);
   if (!question) throw new HttpError(400, "请输入问题");
@@ -2101,7 +2491,7 @@ async function prepareAiRequest(request, env) {
   try {
     await ensureSchema(env);
     await consumeRateLimit(env, await clientRateKey(request, "ai"), 40, 60 * 60);
-    context = await buildAiContext(env);
+    context = await buildAiContext(env, sessionUser.id);
   } catch (error) {
     if (error instanceof HttpError && error.status === 429) throw error;
     console.error("AI is using fallback context because D1 context failed", {
@@ -2237,8 +2627,8 @@ function streamOpenAiSse(upstream) {
   return aiStreamResponse(stream, "live");
 }
 
-async function askAi(request, env) {
-  const { question, context } = await prepareAiRequest(request, env);
+async function askAi(request, env, sessionUser) {
+  const { question, context } = await prepareAiRequest(request, env, sessionUser);
 
   if (env.DEEPSEEK_API_KEY) {
     const result = await fetchAiJson(`${(env.DEEPSEEK_API_BASE || "https://api.deepseek.com").replace(/\/$/, "")}/chat/completions`, {
@@ -2259,8 +2649,8 @@ async function askAi(request, env) {
   return { answer: result.output?.choices?.[0]?.message?.content || result.answer || "AI 暂时没有返回内容。" };
 }
 
-async function askAiStream(request, env) {
-  const { question, context } = await prepareAiRequest(request, env);
+async function askAiStream(request, env, sessionUser) {
+  const { question, context } = await prepareAiRequest(request, env, sessionUser);
 
   if (env.DEEPSEEK_API_KEY) {
     const response = await fetchAiResponse(
@@ -2307,16 +2697,24 @@ async function serveMedia(request, env, id) {
    */
   const requestsOriginal = wantsDownload || params.get("preview") !== "1";
   const isPrivate = media.section_visibility === "private" || media.media_visibility === "private";
-  const isProtected = isPrivate || media.section_visibility === "member" || media.media_visibility === "member";
+  const isSelected = media.media_visibility === "selected";
+  const isProtected = isPrivate || isSelected
+    || media.section_visibility === "member" || media.media_visibility === "member";
   // 受保护图片或原片请求只验证一次 Studio 会话，避免重复读取/校验 Cookie。
   const adminAccess = (isProtected || requestsOriginal) ? await isAdmin(request, env) : false;
   // 私密图片只允许带有效 Studio 管理会话的请求读取。
   if (isPrivate && !adminAccess) throw new HttpError(404, "图片不存在");
-  if (isProtected && !adminAccess) {
-    await requireApprovedUser(request, env);
+  let approvedUser = null;
+  if (isSelected && !adminAccess) {
+    approvedUser = await requireApprovedUser(request, env);
+    if (!(await userHasSelectedAccess(env, "media", id, approvedUser.id))) {
+      throw new HttpError(404, "图片不存在");
+    }
+  } else if (isProtected && !adminAccess) {
+    approvedUser = await requireApprovedUser(request, env);
   }
   // 即使图片本身是公开的，读取或下载原片也只开放给审核通过的登录用户。
-  if (requestsOriginal && !adminAccess && !isProtected) {
+  if (requestsOriginal && !adminAccess && !approvedUser) {
     await requireApprovedUser(request, env);
   }
   // 下载操作永远使用 object_key；只有普通展示请求才允许读取 WebP 预览件。
@@ -2369,12 +2767,12 @@ async function assetAccessContext(request, env, asset) {
   `).all();
   const folderMap = new Map(rows(folderResult).map((item) => [item.id, item]));
   let folder = asset.folder_id ? folderMap.get(asset.folder_id) : null;
-  let inheritedVisibility = normalizedVisibility(asset.visibility);
+  let inheritedVisibility = normalizedAssetVisibility(asset.visibility);
   const visited = new Set();
   while (folder) {
     if (visited.has(folder.id)) throw new HttpError(500, "文件夹层级存在循环，请在后台修复");
     visited.add(folder.id);
-    const folderVisibility = normalizedVisibility(folder.visibility);
+    const folderVisibility = normalizedAssetVisibility(folder.visibility);
     if (folderVisibility === "private") inheritedVisibility = "private";
     else if (folderVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
     folder = folder.parent_id ? folderMap.get(folder.parent_id) : null;
@@ -2478,6 +2876,7 @@ async function deleteContentCascade(env, id) {
   const commentIds = rows(await env.DB.prepare("SELECT id FROM comments WHERE content_id = ?").bind(id).all());
   const statements = [
     env.DB.prepare("DELETE FROM reactions WHERE target_type = 'content' AND target_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM content_access_users WHERE content_id = ?").bind(id),
     env.DB.prepare("DELETE FROM comments WHERE content_id = ?").bind(id),
     env.DB.prepare("DELETE FROM content WHERE id = ?").bind(id),
   ];
@@ -2493,12 +2892,23 @@ function inlineMediaIdsFromHtml(html) {
   return [...ids];
 }
 
-async function syncInlineMediaVisibility(env, bodyHtml, visibility) {
+async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds = []) {
   const ids = inlineMediaIdsFromHtml(bodyHtml);
   if (!ids.length) return;
-  await env.DB.batch(ids.map((mediaId) => env.DB.prepare(`
+  const placeholders = ids.map(() => "?").join(",");
+  const existing = await env.DB.prepare(
+    `SELECT id FROM media WHERE kind = 'inline' AND id IN (${placeholders})`,
+  ).bind(...ids).all();
+  const mediaIds = rows(existing).map((item) => item.id);
+  if (!mediaIds.length) return;
+  const timestamp = nowIso();
+  await env.DB.batch(mediaIds.map((mediaId) => env.DB.prepare(`
     UPDATE media SET visibility = ?, updated_at = ? WHERE id = ? AND kind = 'inline'
-  `).bind(visibility, nowIso(), mediaId)));
+  `).bind(visibility, timestamp, mediaId)));
+  // 文章内图片沿用文章白名单，防止通过复制 /media/:id 地址绕过正文权限。
+  for (const mediaId of mediaIds) {
+    await replaceAllowedUsers(env, "media", mediaId, visibility === "selected" ? allowedUserIds : [], timestamp);
+  }
 }
 
 /* ---------- 个人空间大板块：新增、改名、排序、删除。 ---------- */
@@ -2575,6 +2985,7 @@ async function adminSections(request, env, id) {
     const statements = [];
     for (const item of sectionMedia) {
       statements.push(env.DB.prepare("UPDATE content SET cover_media_id = NULL WHERE cover_media_id = ?").bind(item.id));
+      statements.push(env.DB.prepare("DELETE FROM media_access_users WHERE media_id = ?").bind(item.id));
     }
     statements.push(
       env.DB.prepare("DELETE FROM media WHERE section_id = ?").bind(id),
@@ -2593,9 +3004,10 @@ async function adminContent(request, env, id) {
     if (id) {
       const item = await env.DB.prepare("SELECT * FROM content WHERE id = ?").bind(id).first();
       if (!item) throw new HttpError(404, "内容不存在");
-      return item;
+      return (await attachAllowedUserIds(env, "content", [item]))[0];
     }
-    return rows(await env.DB.prepare("SELECT * FROM content ORDER BY updated_at DESC").all());
+    const items = rows(await env.DB.prepare("SELECT * FROM content ORDER BY updated_at DESC").all());
+    return attachAllowedUserIds(env, "content", items);
   }
 
   if (request.method === "POST" || request.method === "PUT") {
@@ -2608,6 +3020,7 @@ async function adminContent(request, env, id) {
     const coverMediaId = validId(body.coverMediaId) ? body.coverMediaId : null;
     const status = body.status === "published" ? "published" : "draft";
     const visibility = normalizedVisibility(body.visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
     if (!title) throw new HttpError(400, "标题不能为空");
     const timestamp = nowIso();
 
@@ -2623,7 +3036,8 @@ async function adminContent(request, env, id) {
         newId, type, sectionId, title, slug, excerpt, bodyHtml, coverMediaId, status,
         status === "published" ? timestamp : null, visibility, timestamp, timestamp,
       ).run();
-      await syncInlineMediaVisibility(env, bodyHtml, visibility);
+      await replaceAllowedUsers(env, "content", newId, allowedUserIds, timestamp);
+      await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
       return { id: newId };
     }
 
@@ -2637,7 +3051,8 @@ async function adminContent(request, env, id) {
           status = ?, visibility = ?, published_at = ?, updated_at = ?
       WHERE id = ?
     `).bind(type, sectionId, title, excerpt, bodyHtml, coverMediaId, status, visibility, publishedAt, timestamp, id).run();
-    await syncInlineMediaVisibility(env, bodyHtml, visibility);
+    await replaceAllowedUsers(env, "content", id, allowedUserIds, timestamp);
+    await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
     return { id };
   }
 
@@ -2760,7 +3175,7 @@ async function adminAssetFolders(request, env, id) {
     const name = clampText(body.name, 120);
     const description = clampText(body.description, 800);
     const parentId = validId(body.parentId) ? String(body.parentId) : null;
-    const visibility = normalizedVisibility(body.visibility);
+    const visibility = normalizedAssetVisibility(body.visibility);
     const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
     const archiveAssetId = validId(body.archiveAssetId) ? String(body.archiveAssetId) : null;
     if (!name) throw new HttpError(400, "文件夹名称不能为空");
@@ -2910,7 +3325,7 @@ async function adminAssets(request, env, id) {
       const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
       if (!folder) throw new HttpError(400, "目标文件夹不存在");
     }
-    const visibility = normalizedVisibility(body.visibility ?? existing.visibility);
+    const visibility = normalizedAssetVisibility(body.visibility ?? existing.visibility);
     const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy ?? existing.download_policy);
     const streamUid = clampText(body.streamUid ?? existing.stream_uid, 240);
     const streamHlsUrl = clampText(body.streamHlsUrl ?? existing.stream_hls_url, 1200);
@@ -3002,7 +3417,7 @@ async function createAssetUpload(request, env) {
     objectKey = `assets/${datePrefix}/${assetId}/original-${filename}`;
     const displayName = clampText(body.displayName, 220) || filename;
     const kind = normalizedAssetKind(body.kind, mimeType, filename);
-    const visibility = normalizedVisibility(body.visibility);
+    const visibility = normalizedAssetVisibility(body.visibility);
     const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy);
     const relativePath = safeRelativePath(body.relativePath);
     await env.DB.prepare(`
@@ -3151,8 +3566,9 @@ async function uploadMedia(request, env) {
   const albumId = validId(form.get("albumId")) ? String(form.get("albumId")) : null;
   const caption = clampText(form.get("caption"), 500);
   const kind = form.get("kind") === "inline" ? "inline" : "photo";
-  // 图片专栏与文章插图都接受三级权限，后端不能依赖前端下拉框自行保证安全。
+  // 图片专栏与文章插图都接受四级权限，后端不能依赖前端下拉框自行保证安全。
   const visibility = normalizedVisibility(form.get("visibility"));
+  const allowedUserIds = await validatedAllowedUserIds(env, visibility, form.get("allowedUserIds"));
   let sectionId = null;
   if (kind === "photo") {
     if (albumId) {
@@ -3186,16 +3602,19 @@ async function uploadMedia(request, env) {
       id, objectKey, previewObjectKey, file.name.slice(0, 240), file.type, file.size,
       sectionId, albumId, caption, kind, visibility, timestamp, timestamp,
     ).run();
+    await replaceAllowedUsers(env, "media", id, allowedUserIds, timestamp);
   } catch (error) {
     // 任一步失败都清理已经写入的对象，避免 R2 留下数据库无法管理的孤立文件。
     await env.BUCKET.delete(objectKey).catch(() => null);
     if (previewObjectKey) await env.BUCKET.delete(previewObjectKey).catch(() => null);
+    await env.DB.prepare("DELETE FROM media_access_users WHERE media_id = ?").bind(id).run().catch(() => null);
+    await env.DB.prepare("DELETE FROM media WHERE id = ?").bind(id).run().catch(() => null);
     throw error;
   }
   return mediaDto({
     id, preview_object_key: previewObjectKey, filename: file.name, mime_type: file.type,
     size_bytes: file.size, section_id: sectionId, album_id: albumId, caption, kind,
-    visibility, created_at: timestamp, updated_at: timestamp,
+    visibility, allowed_user_ids: allowedUserIds, created_at: timestamp, updated_at: timestamp,
   });
 }
 
@@ -3234,19 +3653,24 @@ async function updateMediaPreview(request, env, id) {
 async function adminMedia(request, env, id, action = "") {
   if (action === "preview") return updateMediaPreview(request, env, id);
   if (request.method === "GET") {
-    return rows(await env.DB.prepare(`
+    const items = rows(await env.DB.prepare(`
       SELECT m.*, a.name AS album_name
       FROM media m LEFT JOIN albums a ON a.id = m.album_id
       ORDER BY m.created_at DESC
-    `).all()).map(mediaDto);
+    `).all());
+    return (await attachAllowedUserIds(env, "media", items)).map(mediaDto);
   }
   if (request.method === "POST") return uploadMedia(request, env);
   if (request.method === "PUT") {
+    if (!validId(id)) throw new HttpError(400, "图片 ID 错误");
+    const existing = await env.DB.prepare("SELECT id FROM media WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "图片不存在");
     const body = await readJson(request);
     const albumId = validId(body.albumId) ? body.albumId : null;
     const caption = clampText(body.caption, 500);
     const kind = body.kind === "inline" ? "inline" : "photo";
     const visibility = normalizedVisibility(body.visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
     let sectionId = null;
     if (kind === "photo") {
       if (albumId) {
@@ -3259,7 +3683,8 @@ async function adminMedia(request, env, id, action = "") {
     }
     await env.DB.prepare("UPDATE media SET section_id = ?, album_id = ?, caption = ?, kind = ?, visibility = ?, updated_at = ? WHERE id = ?")
       .bind(sectionId, albumId, caption, kind, visibility, nowIso(), id).run();
-    return { id };
+    await replaceAllowedUsers(env, "media", id, allowedUserIds);
+    return { id, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     const media = await env.DB.prepare(
@@ -3271,6 +3696,7 @@ async function adminMedia(request, env, id, action = "") {
     }
     await env.DB.batch([
       env.DB.prepare("UPDATE content SET cover_media_id = NULL WHERE cover_media_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM media_access_users WHERE media_id = ?").bind(id),
       env.DB.prepare("DELETE FROM media WHERE id = ?").bind(id),
     ]);
     return { ok: true };
@@ -3512,8 +3938,71 @@ async function adminPasswordResets(request, env, id) {
   throw new HttpError(405, "不支持的请求方法");
 }
 
+async function adminGuestAnalytics(request, env, url) {
+  if (request.method !== "GET") throw new HttpError(405, "不支持的请求方法");
+  const days = Math.min(90, Math.max(1, Number.parseInt(url.searchParams.get("days") || "30", 10) || 30));
+  const requestedDay = clampText(url.searchParams.get("day"), 10);
+  if (requestedDay && !/^\d{4}-\d{2}-\d{2}$/.test(requestedDay)) {
+    throw new HttpError(400, "统计日期格式错误");
+  }
+  const fromDay = analyticsDay(env, new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000));
+  const [summary, visitors] = await Promise.all([
+    env.DB.prepare(`
+      SELECT visit_day,
+             COUNT(*) AS unique_visitors,
+             COUNT(DISTINCT ip_hash) AS unique_ips,
+             COALESCE(SUM(entry_count), 0) AS entries,
+             COALESCE(SUM(page_views), 0) AS page_views
+      FROM guest_visits
+      WHERE visit_day >= ?
+      GROUP BY visit_day
+      ORDER BY visit_day DESC
+    `).bind(fromDay).all(),
+    requestedDay
+      ? env.DB.prepare(`
+          SELECT visit_day, substr(visitor_hash, 1, 12) AS visitor_id, ip_hint, country,
+                 region, city, timezone, asn, as_organization, user_agent, referrer,
+                 entry_count, page_views, last_section, first_seen_at, last_seen_at
+          FROM guest_visits
+          WHERE visit_day = ?
+          ORDER BY last_seen_at DESC
+          LIMIT 500
+        `).bind(requestedDay).all()
+      : env.DB.prepare(`
+          SELECT visit_day, substr(visitor_hash, 1, 12) AS visitor_id, ip_hint, country,
+                 region, city, timezone, asn, as_organization, user_agent, referrer,
+                 entry_count, page_views, last_section, first_seen_at, last_seen_at
+          FROM guest_visits
+          WHERE visit_day >= ?
+          ORDER BY last_seen_at DESC
+          LIMIT 300
+        `).bind(fromDay).all(),
+  ]);
+  const protection = turnstileStatus(env);
+  return {
+    today: analyticsDay(env),
+    timeZone: clampText(env.ANALYTICS_TIMEZONE || "Asia/Shanghai", 80),
+    retentionDays: GUEST_ANALYTICS_RETENTION_DAYS,
+    turnstile: { configured: protection.configured, incomplete: protection.incomplete },
+    summary: rows(summary).map((item) => ({
+      ...item,
+      unique_visitors: Number(item.unique_visitors || 0),
+      unique_ips: Number(item.unique_ips || 0),
+      entries: Number(item.entries || 0),
+      page_views: Number(item.page_views || 0),
+    })),
+    visitors: rows(visitors).map((item) => ({
+      ...item,
+      asn: Number(item.asn || 0),
+      entry_count: Number(item.entry_count || 0),
+      page_views: Number(item.page_views || 0),
+    })),
+  };
+}
+
 async function adminDashboard(env) {
-  const [content, published, comments, media, assets, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests] = await Promise.all([
+  const today = analyticsDay(env);
+  const [content, published, comments, media, assets, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests, guestVisitors, guestPageViews] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS count FROM content").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM content WHERE status = 'published'").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM comments").first(),
@@ -3530,6 +4019,8 @@ async function adminDashboard(env) {
       WHERE revoked_at IS NULL AND expires_at > ? AND last_seen_at > ?
     `).bind(nowIso(), new Date(Date.now() - 2 * 60 * 1000).toISOString()).first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM password_reset_requests WHERE status = 'pending'").first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM guest_visits WHERE visit_day = ?").bind(today).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(page_views), 0) AS count FROM guest_visits WHERE visit_day = ?").bind(today).first(),
   ]);
   return {
     content: Number(content?.count || 0),
@@ -3545,6 +4036,8 @@ async function adminDashboard(env) {
     pendingUsers: Number(pendingUsers?.count || 0),
     onlineUsers: Number(onlineUsers?.count || 0),
     resetRequests: Number(resetRequests?.count || 0),
+    guestVisitorsToday: Number(guestVisitors?.count || 0),
+    guestPageViewsToday: Number(guestPageViews?.count || 0),
   };
 }
 
@@ -3574,6 +4067,7 @@ async function handleAdmin(request, env, url) {
   if (resource === "users") return adminUsers(request, env, id);
   if (resource === "user-events") return adminUserEvents(request, env, id, url);
   if (resource === "password-resets") return adminPasswordResets(request, env, id);
+  if (resource === "guest-analytics") return adminGuestAnalytics(request, env, url);
   if (resource === "settings") return adminSettings(request, env);
   throw new HttpError(404, "后台接口不存在");
 }
@@ -3648,6 +4142,11 @@ async function handleApi(request, env, url, ctx) {
         qqBotConfigured,
         qqRecipientBound,
       },
+      guestProtection: {
+        turnstileConfigured: turnstileStatus(env).configured,
+        turnstileIncomplete: turnstileStatus(env).incomplete,
+        analyticsRetentionDays: GUEST_ANALYTICS_RETENTION_DAYS,
+      },
       databaseReachable,
       schemaReady: schemaReadyForRequests,
       ...(schemaError ? { schemaError } : {}),
@@ -3655,6 +4154,26 @@ async function handleApi(request, env, url, ctx) {
   }
 
   await ensureSchema(env);
+
+  /* 游客入口：先读取公开背景，再由 Turnstile + Worker 签发 24 小时游客会话。 */
+  if (url.pathname === "/api/guest/config" && request.method === "GET") {
+    const status = turnstileStatus(env);
+    return json({
+      enabled: status.configured,
+      incomplete: status.incomplete,
+      siteKey: status.configured ? status.siteKey : "",
+      action: TURNSTILE_GUEST_ACTION,
+    });
+  }
+  if (url.pathname === "/api/guest/entry-background" && request.method === "GET") {
+    return json(await publicEntryBackground(env));
+  }
+  if (url.pathname === "/api/guest/enter" && request.method === "POST") {
+    return enterGuestWebsite(request, env);
+  }
+  if (url.pathname === "/api/guest/track" && request.method === "POST") {
+    return json(await trackGuestWebsite(request, env));
+  }
 
   /* 普通用户注册、登录、资料、密码和会话接口。 */
   if (url.pathname === "/api/auth/register" && request.method === "POST") {
@@ -3687,35 +4206,42 @@ async function handleApi(request, env, url, ctx) {
 
   /* AI 的前端按钮和后端接口都要求审核通过，不能只靠 CSS 隐藏。 */
   if (url.pathname === "/api/ai" && request.method === "POST") {
-    await requireApprovedUser(request, env);
-    if (url.searchParams.get("stream") === "1") return askAiStream(request, env);
-    return json(await askAi(request, env));
+    const sessionUser = await requireApprovedUser(request, env);
+    if (url.searchParams.get("stream") === "1") return askAiStream(request, env, sessionUser);
+    return json(await askAi(request, env, sessionUser));
   }
 
   if (url.pathname === "/api/bootstrap" && request.method === "GET") {
+    await requireWebsiteVisitor(request, env);
     return json(await publicBootstrap(request, env));
   }
   if (url.pathname.startsWith("/api/content/") && request.method === "GET") {
+    await requireWebsiteVisitor(request, env);
     const id = url.pathname.split("/").filter(Boolean)[2];
     return json(await getPublicContent(request, env, id));
   }
   if (url.pathname === "/api/comments" && request.method === "GET") {
+    await requireWebsiteVisitor(request, env);
     const contentId = url.searchParams.get("contentId") || "";
     if (!validId(contentId)) throw new HttpError(400, "缺少文章 ID");
     return json({ comments: await listPublicComments(request, env, contentId) });
   }
   if (url.pathname === "/api/comments" && request.method === "POST") {
+    await requireWebsiteVisitor(request, env);
     return json(await createComment(request, env), 201);
   }
   if (url.pathname === "/api/feedback" && request.method === "GET") {
+    await requireWebsiteVisitor(request, env);
     return json({ feedback: await listPublicFeedback(env) });
   }
   if (url.pathname === "/api/feedback" && request.method === "POST") {
+    await requireWebsiteVisitor(request, env);
     const item = await createFeedback(request, env);
     if (ctx) ctx.waitUntil(notifyFeedback(env, item));
     return json({ id: item.id, created_at: item.created_at }, 201);
   }
   if (url.pathname === "/api/reactions" && request.method === "POST") {
+    await requireWebsiteVisitor(request, env);
     return json(await react(request, env));
   }
   if (url.pathname === "/api/admin/login" && request.method === "POST") {
