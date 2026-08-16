@@ -13,12 +13,23 @@
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
   const root = document.documentElement;
 
+  /*
+   * 页面可以用 data-theme-default 指定特殊页面的初始外观；星月集当前所有
+   * 登录、注册和内容页面都不强制指定，因此首次访问默认跟随系统。用户在
+   * 右上角或侧边栏手动选择后，仍以浏览器中已保存的选择为最高优先级。
+   */
+  function pageDefaultPreference() {
+    const value = root.dataset.themeDefault || "system";
+    return VALID_PREFERENCES.has(value) ? value : "system";
+  }
+
   function savedPreference() {
     try {
-      const value = localStorage.getItem(STORAGE_KEY) || "system";
-      return VALID_PREFERENCES.has(value) ? value : "system";
+      const value = localStorage.getItem(STORAGE_KEY);
+      if (!value) return pageDefaultPreference();
+      return VALID_PREFERENCES.has(value) ? value : pageDefaultPreference();
     } catch {
-      return "system";
+      return pageDefaultPreference();
     }
   }
 

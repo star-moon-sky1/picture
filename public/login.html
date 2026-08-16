@@ -9,6 +9,10 @@
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
   <link rel="manifest" href="/manifest.webmanifest">
+  <!-- 从手机主屏幕启动时保持与网站主页一致的独立应用外观。 -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="星月集">
   <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
@@ -67,8 +71,9 @@
     }
 
     /*
-     * 全屏照片背景使用两个图层交替显示。object-fit: cover 会让照片铺满
-     * 整个视口；照片比例不同时允许从四周适量裁切，并优先保留中央内容。
+     * 电脑端继续使用清晰的 cover 铺满方式，不改变原来的视觉构图。
+     * 手机端会在下方的触屏媒体查询中启用“低模糊铺满层 + 清晰完整层”：
+     * 前景照片完整显示，只有比例不一致时出现的边缘空位才由背景层补齐。
      */
     .auth-photo-background {
       position: fixed;
@@ -76,7 +81,7 @@
       z-index: 0;
       overflow: hidden;
       pointer-events: none;
-      background: #15191b;
+      background: #edf3f5;
     }
     .auth-photo-background::after {
       content: "";
@@ -85,30 +90,61 @@
       z-index: 2;
       background: transparent;
     }
-    .auth-photo-background img {
+    .auth-photo-frame {
       position: absolute;
       inset: 0;
       z-index: 1;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 1.15s ease;
+    }
+    .auth-photo-frame img {
+      position: absolute;
+      display: block;
+      user-select: none;
+    }
+    .auth-photo-frame .photo-fill {
+      display: none;
+      inset: -5%;
+      width: 110%;
+      height: 110%;
+      object-fit: cover;
+      object-position: center;
+      filter: blur(9px) saturate(1.04) brightness(.88);
+      transform: scale(1.05);
+    }
+    .auth-photo-frame .photo-complete {
+      inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       object-position: center center;
-      opacity: 0;
       filter: none;
-      transform: none;
-      transition: opacity 1.15s ease;
     }
-    .auth-photo-background img.active { opacity: 1; animation: auth-bg-fade 1.25s ease both; }
-    .auth-photo-background img.active.effect-wipe-left { animation-name: auth-bg-wipe-left; }
-    .auth-photo-background img.active.effect-wipe-right { animation-name: auth-bg-wipe-right; }
-    .auth-photo-background img.active.effect-reveal-center { animation-name: auth-bg-reveal-center; }
+    .auth-photo-frame.active { opacity: 1; animation: auth-bg-fade 1.25s ease both; }
+    .auth-photo-frame.active.effect-wipe-left { animation-name: auth-bg-wipe-left; }
+    .auth-photo-frame.active.effect-wipe-right { animation-name: auth-bg-wipe-right; }
+    .auth-photo-frame.active.effect-reveal-center { animation-name: auth-bg-reveal-center; }
     @keyframes auth-bg-fade { from { opacity: 0; } to { opacity: 1; } }
     @keyframes auth-bg-wipe-left { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
     @keyframes auth-bg-wipe-right { from { clip-path: inset(0 0 0 100%); } to { clip-path: inset(0); } }
     @keyframes auth-bg-reveal-center { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
     @media (prefers-reduced-motion: reduce) {
-      .auth-photo-background img { transition: opacity .25s ease; transform: none; animation: none !important; }
-      .auth-photo-background img.active { transform: none; }
+      .auth-photo-frame { transition: opacity .25s ease; animation: none !important; }
+      .auth-photo-frame .photo-fill { transform: scale(1.05); }
+    }
+
+    /*
+     * 只在触屏手机上完整显示整张背景照片。清晰的 contain 前景不做模糊；
+     * 9px 的 cover 后景只负责填补留白，比旧版 24px 模糊明显更清晰。
+     * 鼠标/触控板电脑即使把窗口缩窄，也不会套用这项改动。
+     */
+    @media (max-width: 900px) and (hover: none), (max-width: 900px) and (pointer: coarse) {
+      .auth-photo-frame .photo-fill { display: block; }
+      .auth-photo-frame .photo-complete {
+        object-fit: contain;
+        filter: drop-shadow(0 10px 26px rgba(0,0,0,.16));
+      }
     }
 
     /* 左下角入口使用有色毛玻璃；蓝灰底色保证它在浅色照片上仍有层次。 */
@@ -332,9 +368,21 @@
     }
 
     @media (max-width: 850px) {
-      .auth-page { align-items: flex-start; padding-top: 18px; }
+      /* 主题按钮占用右上角；表单从其下方开始，并允许整页自然向下滚动。 */
+      .auth-page {
+        align-items: flex-start;
+        padding-top: max(76px, calc(env(safe-area-inset-top) + 62px));
+      }
       .card-side { align-items: flex-start; }
       .auth-card { position: relative; z-index: 2; border-radius: 19px; }
+    }
+    @media (max-height: 700px) {
+      /* 横屏手机和矮窗口不再强制垂直居中，避免登录框上半部分滚不到。 */
+      .auth-page {
+        align-items: flex-start;
+        padding-top: max(76px, calc(env(safe-area-inset-top) + 62px));
+      }
+      .card-side { align-items: flex-start; }
     }
     @media (max-width: 540px) {
       /* 手机端保持单列和足够大的触控区域，不套用桌面端横向压缩方式。 */
@@ -351,6 +399,17 @@
 <body>
   <!-- 仅由公开图片专栏生成；不会把会员照片放到未登录页面。 -->
   <div id="auth-photo-background" class="auth-photo-background" aria-hidden="true"></div>
+  <!-- 注册、找回密码与重置密码页面共用右上角白天/夜览/跟随系统入口。 -->
+  <div class="theme-picker floating-theme-picker" data-theme-picker>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
+      <span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span>
+    </button>
+    <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="登录与注册页面主题" hidden>
+      <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
+      <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
+      <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+    </div>
+  </div>
   <main class="auth-page">
     <!-- 页面左下角只保留返回入口，登录与注册表单自身位于屏幕正中。 -->
     <a class="home-link" href="/">← 返回网站首页</a>
@@ -462,38 +521,51 @@
       return data;
     }
 
-    /* 背景只采用“公开大板块中的公开照片”，即使当前浏览器已经登录也不例外。 */
+    /*
+     * 专用入口接口已经在 Worker 端完成“大板块公开 + 照片公开”双重筛选，
+     * 并且不要求游客会话。旧代码请求 /api/bootstrap，会在尚未登录/验证时
+     * 得到 401，注册页因而只能显示黑色备用背景。
+     */
     function publicPhotoUrls(data) {
-      const publicSectionIds = new Set(
-        (data?.sections || []).filter((section) => section.visibility === "public").map((section) => section.id),
-      );
-      return [...new Set((data?.media || [])
-        .filter((photo) => (
-          photo.kind === "photo"
-          && photo.visibility === "public"
-          && publicSectionIds.has(photo.section_id)
-        ))
-        .map((photo) => photo.previewUrl || photo.url)
-        .filter(Boolean))];
+      return [...new Set((data?.photos || []).map((photo) => photo.url).filter(Boolean))];
     }
 
     /*
-     * 两个 img 节点循环复用，避免一次加载所有公开照片。
-     * 每次换图依次使用淡入、左右揭幕和中间展开四种效果。照片本身由
-     * object-fit: cover 铺满屏幕，动画只负责切换，不额外放大照片。
+     * 两个 frame 循环复用，避免一次加载所有公开照片。photo-complete 是清晰
+     * 主图：电脑端 cover、手机端 contain；photo-fill 只在手机端补齐留白。
+     * 两张 img 使用同一地址，浏览器会命中自身缓存，不会重复下载原文件。
      */
     function startPhotoBackground(urls) {
       const host = document.getElementById("auth-photo-background");
       if (!host || !urls.length) return;
-      const frames = [document.createElement("img"), document.createElement("img")];
-      frames.forEach((frame) => { frame.alt = ""; frame.decoding = "async"; host.append(frame); });
+      const createFrame = () => {
+        const root = document.createElement("div");
+        root.className = "auth-photo-frame";
+        const fill = document.createElement("img");
+        const complete = document.createElement("img");
+        fill.className = "photo-fill"; complete.className = "photo-complete";
+        fill.alt = ""; complete.alt = "";
+        fill.decoding = "async"; complete.decoding = "async";
+        root.append(fill, complete); host.append(root);
+        return { root, fill, complete };
+      };
+      const frames = [createFrame(), createFrame()];
+      const setFrameSource = (frame, url, ready) => {
+        const absoluteUrl = new URL(url, location.href).href;
+        if (frame.complete.src === absoluteUrl && frame.complete.complete) {
+          queueMicrotask(ready);
+          return;
+        }
+        frame.complete.onload = ready;
+        frame.fill.src = url;
+        frame.complete.src = url;
+      };
       let activeFrame = 0;
       let photoIndex = 0;
       const effects = ["effect-fade", "effect-wipe-left", "effect-wipe-right", "effect-reveal-center"];
       let effectIndex = 0;
-      frames[0].classList.add(effects[effectIndex]);
-      frames[0].addEventListener("load", () => frames[0].classList.add("active"), { once: true });
-      frames[0].src = urls[0];
+      frames[0].root.classList.add(effects[effectIndex]);
+      setFrameSource(frames[0], urls[0], () => frames[0].root.classList.add("active"));
 
       if (urls.length === 1 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       window.setInterval(() => {
@@ -501,20 +573,18 @@
         photoIndex = (photoIndex + 1) % urls.length;
         const incoming = frames[nextFrame];
         const outgoing = frames[activeFrame];
-        incoming.onload = () => {
+        setFrameSource(incoming, urls[photoIndex], () => {
           effectIndex = (effectIndex + 1) % effects.length;
-          incoming.classList.remove("active", ...effects);
-          incoming.classList.add(effects[effectIndex]);
-          incoming.classList.add("active");
-          outgoing.classList.remove("active");
+          incoming.root.classList.remove("active", ...effects);
+          incoming.root.classList.add(effects[effectIndex], "active");
+          outgoing.root.classList.remove("active");
           activeFrame = nextFrame;
-        };
-        incoming.src = urls[photoIndex];
+        });
       }, 7_000);
     }
 
     async function initializePhotoBackground() {
-      try { startPhotoBackground(publicPhotoUrls(await api("/api/bootstrap"))); }
+      try { startPhotoBackground(publicPhotoUrls(await api("/api/guest/entry-background"))); }
       catch { /* 数据服务失败时保留纯色背景，不影响登录和注册表单。 */ }
     }
 

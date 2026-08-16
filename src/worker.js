@@ -226,7 +226,9 @@ function stripHtml(value) {
 function isSafeUrl(value, allowImage = false) {
   const url = String(value ?? "").trim();
   if (url.startsWith("/media/")) return true;
+  /* 图片仍只允许 HTTPS；普通文章链接可以保留 http://，但公开页面会在跳转前确认。 */
   if (/^https:\/\//i.test(url)) return true;
+  if (!allowImage && /^http:\/\//i.test(url)) return true;
   if (!allowImage && /^(mailto:|tel:)/i.test(url)) return true;
   return false;
 }
@@ -1890,11 +1892,24 @@ async function clientMeta(request) {
  * - visitor_hash 来自浏览器随机编号的 HMAC，只代表同一浏览器，不代表真实身份。
  */
 function turnstileStatus(env) {
-  const siteKey = clampText(env.TURNSTILE_SITE_KEY, 200);
-  const secretKey = String(env.TURNSTILE_SECRET_KEY || env.TURNSTILE_SECRET || "").trim();
+  /*
+   * 同时兼容此前文档使用的 TURNSTILE_* 与部分 Cloudflare 模板使用的
+   * CF_TURNSTILE_* 名称，避免密钥已经填写却因变量名不同而被误判为缺失。
+   */
+  const siteKey = clampText(env.TURNSTILE_SITE_KEY || env.CF_TURNSTILE_SITE_KEY, 200);
+  const secretKey = String(
+    env.TURNSTILE_SECRET_KEY
+    || env.TURNSTILE_SECRET
+    || env.CF_TURNSTILE_SECRET_KEY
+    || "",
+  ).trim();
+  const missingSiteKey = !siteKey;
+  const missingSecretKey = !secretKey;
   return {
     configured: Boolean(siteKey && secretKey),
-    incomplete: Boolean(siteKey) !== Boolean(secretKey),
+    incomplete: missingSiteKey !== missingSecretKey,
+    missingSiteKey,
+    missingSecretKey,
     siteKey,
     secretKey,
   };
@@ -1977,9 +1992,12 @@ async function guestRequestMeta(request) {
 
 async function verifyGuestTurnstile(request, env, token) {
   const status = turnstileStatus(env);
-  if (status.incomplete) throw new HttpError(503, "Turnstile 配置不完整，请同时设置 Site Key 和 Secret Key");
-  // 尚未配置时仍启用严格的 IP 频率限制，避免部署后直接中断现有游客访问。
-  if (!status.configured) return { protected: false };
+  /*
+   * 完全未配置或只配置了一项时，都退回 enterGuestWebsite() 上方的严格 IP
+   * 限流。这样配置失误不会锁死整个游客入口；Studio 和登录页仍会明确提示
+   * 缺少项，补齐两项后会自动恢复 Turnstile 服务端校验。
+   */
+  if (!status.configured) return { protected: false, degraded: status.incomplete };
   const responseToken = clampText(token, 2048);
   if (!responseToken) throw new HttpError(403, "请先完成人机验证");
 
@@ -3983,7 +4001,12 @@ async function adminGuestAnalytics(request, env, url) {
     today: analyticsDay(env),
     timeZone: clampText(env.ANALYTICS_TIMEZONE || "Asia/Shanghai", 80),
     retentionDays: GUEST_ANALYTICS_RETENTION_DAYS,
-    turnstile: { configured: protection.configured, incomplete: protection.incomplete },
+    turnstile: {
+      configured: protection.configured,
+      incomplete: protection.incomplete,
+      missingSiteKey: protection.missingSiteKey,
+      missingSecretKey: protection.missingSecretKey,
+    },
     summary: rows(summary).map((item) => ({
       ...item,
       unique_visitors: Number(item.unique_visitors || 0),
@@ -4145,6 +4168,8 @@ async function handleApi(request, env, url, ctx) {
       guestProtection: {
         turnstileConfigured: turnstileStatus(env).configured,
         turnstileIncomplete: turnstileStatus(env).incomplete,
+        turnstileMissingSiteKey: turnstileStatus(env).missingSiteKey,
+        turnstileMissingSecretKey: turnstileStatus(env).missingSecretKey,
         analyticsRetentionDays: GUEST_ANALYTICS_RETENTION_DAYS,
       },
       databaseReachable,
@@ -4161,6 +4186,8 @@ async function handleApi(request, env, url, ctx) {
     return json({
       enabled: status.configured,
       incomplete: status.incomplete,
+      missingSiteKey: status.missingSiteKey,
+      missingSecretKey: status.missingSecretKey,
       siteKey: status.configured ? status.siteKey : "",
       action: TURNSTILE_GUEST_ACTION,
     });

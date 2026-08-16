@@ -149,6 +149,104 @@
 }
 .theme-menu button.active::after { content: "✓"; margin-left: auto; color: var(--cyan); font-weight: 900; }
 
+/* ======================== 登录 / 注册页右上角主题入口 ======================== */
+/*
+ * 根页面登录入口和独立注册页共用这一套浮动按钮。它始终与安全区保持距离，
+ * 不占用登录框的高度；菜单向下展开，手机端也不会被底部浏览器工具栏遮挡。
+ */
+.floating-theme-picker {
+  position: fixed;
+  z-index: 80;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+}
+.floating-theme-picker .theme-toggle { width: 44px; padding-inline: 0; }
+.floating-theme-picker .theme-toggle [data-theme-label] { display: none; }
+.floating-theme-picker .theme-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  bottom: auto;
+  left: auto;
+  width: min(190px, calc(100vw - 28px));
+  max-height: min(240px, calc(100dvh - 82px));
+  overflow-y: auto;
+}
+
+/*
+ * 水滴边缘折射
+ * ------------------------------------------------------------------
+ * backdrop-filter 本身不能真正改变背景的几何比例，因此这里用一条 3px 的
+ * 环形区域单独加强模糊、饱和度与明暗对比，再叠加内外双高光，模拟水滴边缘
+ * “轻微放大并变虚”的光学感觉。mask 仅保留边缘，不会模糊正文和按钮文字。
+ */
+:is(
+  .entry-card,
+  .auth-card,
+  .usage-guide,
+  .updates,
+  .chat-shell,
+  .nav button,
+  .sidebar-toggle,
+  .theme-toggle,
+  .sidebar-install-button,
+  .entry-primary,
+  .entry-actions .btn,
+  .auth-card .btn
+) {
+  position: relative;
+  isolation: isolate;
+}
+@supports ((-webkit-mask-composite: xor) or (mask-composite: exclude)) {
+  :is(
+    .entry-card,
+    .auth-card,
+    .usage-guide,
+    .updates,
+    .chat-shell,
+    .nav button,
+    .sidebar-toggle,
+    .theme-toggle,
+    .sidebar-install-button,
+    .entry-primary,
+    .entry-actions .btn,
+    .auth-card .btn
+  )::after {
+    content: "";
+    position: absolute;
+    z-index: 4;
+    inset: 1px;
+    padding: 3px;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,.82), rgba(207,244,249,.24) 38%, rgba(35,105,124,.18) 76%, rgba(255,255,255,.50));
+    box-shadow:
+      inset 0 0 7px rgba(255,255,255,.50),
+      inset 0 -2px 5px rgba(43,94,110,.16);
+    -webkit-backdrop-filter: blur(4.5px) saturate(1.42) contrast(1.08);
+    backdrop-filter: blur(4.5px) saturate(1.42) contrast(1.08);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+}
+
+/* 白天模式的注册卡片保留透明晶体感，但加入淡白环境色，避免深色照片透过后
+ * 整个注册界面看起来像黑色面板。用户手动选择夜览后仍由下方深色规则接管。 */
+:root[data-theme="light"] .auth-card {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.76), transparent 44%),
+    linear-gradient(125deg, rgba(248,252,252,.60), rgba(238,249,250,.43) 48%, rgba(215,244,248,.34));
+  box-shadow: 0 32px 90px rgba(14,35,42,.25), inset 0 1px 0 rgba(255,255,255,.97), inset 0 -1px 0 rgba(42,83,99,.16);
+}
+:root[data-theme="light"] .entry-card {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255,255,255,.60), transparent 44%),
+    linear-gradient(125deg, rgba(248,252,252,.38), rgba(238,249,250,.22) 48%, rgba(215,244,248,.18));
+}
+
 /* ============================== 夜览：首页 ============================== */
 :root[data-theme="dark"] body {
   background: radial-gradient(circle at 80% 5%, rgba(49,191,200,.10), transparent 34%), var(--cream);
@@ -158,7 +256,7 @@
   background: radial-gradient(circle at 4% 0%, rgba(99,164,176,.13), transparent 38%), linear-gradient(155deg, rgba(18,36,44,.91), rgba(12,25,31,.84));
   box-shadow: inset -1px 0 0 rgba(196,239,244,.09), 10px 0 34px rgba(0,0,0,.22);
 }
-:root[data-theme="dark"] :is(.nav button, .sidebar-toggle, .studio-link, .tab-button, .updates, .theme-toggle) {
+:root[data-theme="dark"] :is(.nav button, .sidebar-toggle, .sidebar-install-button, .studio-link, .tab-button, .updates, .theme-toggle) {
   color: var(--ink);
   border-color: rgba(174,221,227,.20);
   background: rgba(72,126,143,.18);
@@ -255,6 +353,19 @@
 :root[data-theme="dark"] .bubble.ai { color: var(--ink); border-color: rgba(164,216,222,.18); background: rgba(30,53,62,.72); box-shadow: 0 8px 22px rgba(0,0,0,.19); }
 :root[data-theme="dark"] .chat-form input { color: var(--ink); border-color: rgba(162,216,223,.20); background: rgba(12,28,34,.72); }
 :root[data-theme="dark"] .auth-lock-card { color: var(--ink); background: radial-gradient(circle at 12% 0%, rgba(76,139,151,.18), transparent 40%), linear-gradient(145deg, rgba(20,41,49,.92), rgba(12,28,34,.88)); }
+:root[data-theme="dark"] .external-link-summary {
+  border-color: rgba(165,216,223,.18); background: rgba(13,35,42,.72);
+  box-shadow: inset 0 1px 0 rgba(207,242,246,.08);
+}
+:root[data-theme="dark"] .external-link-address { color: #b7e8ec; background: rgba(5,19,25,.70); }
+:root[data-theme="dark"] .reader-body a.article-smart-link:not(.article-link-card) { color: #8edfe7; text-decoration-color: rgba(142,223,231,.42); }
+:root[data-theme="dark"] .reader-body a.article-smart-link:not(.article-link-card):hover { color: #c1f2f5; }
+:root[data-theme="dark"] .reader-body .article-link-card {
+  color: var(--ink); border-color: rgba(167,218,225,.20);
+  background: linear-gradient(145deg, rgba(25,52,61,.82), rgba(12,32,39,.72));
+  box-shadow: 0 14px 34px rgba(0,0,0,.24), inset 0 1px 0 rgba(208,244,248,.10);
+}
+:root[data-theme="dark"] .article-link-action { color: #8edfe7; }
 :root[data-theme="dark"] dialog::backdrop { background: rgba(1,8,12,.78); }
 :root[data-theme="dark"] .empty { border-color: #3a5058; }
 :root[data-theme="dark"] .resource-viewer-message { color: var(--muted); background: var(--paper); }
@@ -263,8 +374,24 @@
 :root[data-theme="dark"] code { background: #0b171c; color: #d9f3f5; }
 
 /* =========================== 夜览：登录/注册页 =========================== */
+:root[data-theme="dark"] .entry-screen { color: var(--ink); background: #081318; }
+:root[data-theme="dark"] .entry-photo-background::after { background: rgba(3,10,14,.22); }
+:root[data-theme="dark"] .entry-card {
+  color: var(--ink);
+  border-color: rgba(178,225,231,.24);
+  background: linear-gradient(125deg, rgba(25,49,58,.58), rgba(9,23,29,.48) 45%, rgba(25,93,104,.22));
+  box-shadow: 0 30px 84px rgba(0,0,0,.44), inset 0 1px 0 rgba(214,247,250,.18), inset 0 -1px 0 rgba(0,0,0,.33);
+}
+:root[data-theme="dark"] .entry-field input {
+  color: var(--ink); border-color: rgba(170,218,224,.22); background: rgba(8,22,28,.64);
+}
+:root[data-theme="dark"] .entry-actions .btn.ghost {
+  color: var(--ink); border-color: rgba(170,218,224,.24); background: rgba(27,82,98,.58);
+}
+:root[data-theme="dark"] .entry-link { color: #8edfe7; }
 :root[data-theme="dark"] .auth-page { color: var(--ink); }
 :root[data-theme="dark"] .auth-photo-background::after { background: rgba(3,10,14,.24); }
+:root[data-theme="dark"] .auth-photo-background { background: #081318; }
 :root[data-theme="dark"] .auth-card {
   color: var(--ink);
   border-color: rgba(178,225,231,.24);
@@ -313,6 +440,35 @@
   .theme-menu { position: fixed; top: auto; right: max(12px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(220px, calc(100vw - 24px)); }
 }
 
+/* 上面的通用手机菜单默认放在屏幕底部；登录/注册的浮动主题按钮例外，菜单
+ * 必须紧贴右上角按钮向下展开，避免用户找不到刚刚点开的选项。 */
+@media (max-width: 620px) {
+  .floating-theme-picker .theme-menu {
+    position: absolute;
+    top: calc(100% + 9px);
+    right: 0;
+    bottom: auto;
+    left: auto;
+  }
+}
+
+:root[data-theme="dark"] :is(
+  .entry-card,
+  .auth-card,
+  .usage-guide,
+  .updates,
+  .chat-shell,
+  .nav button,
+  .sidebar-toggle,
+  .theme-toggle,
+  .sidebar-install-button,
+  .entry-primary,
+  .entry-actions .btn,
+  .auth-card .btn
+)::after {
+  opacity: .72;
+}
+
 @media (max-width: 760px) {
   /* 手机端侧栏是顶部玻璃栏，主题按钮固定在其右上角。 */
   .sidebar-theme-slot {
@@ -328,4 +484,31 @@
     position: absolute; top: calc(100% + 8px); left: auto; right: 0; bottom: auto;
     width: min(220px, calc(100vw - 24px));
   }
+}
+
+/*
+ * 电脑浏览器放大后也可能小于 760px。只有主输入设备明确是鼠标/触控板时，
+ * index.html 才会恢复左侧纵栏；这里使用完全相同的判断，把主题选择器也恢复
+ * 到纵栏底部。不能使用 any-pointer，带手写笔的手机同样可能满足该条件。
+ */
+@media (max-width: 760px) and (hover: hover) and (pointer: fine) {
+  .sidebar-theme-slot {
+    position: static; width: 100%; margin-top: auto; padding-top: 18px;
+    display: grid; right: auto; top: auto;
+  }
+  .sidebar-theme-title { display: block; }
+  .sidebar-theme-picker { width: 100%; }
+  .sidebar-theme-picker .theme-toggle { width: 100%; padding-inline: 12px; }
+  .sidebar-theme-picker [data-theme-label] { display: inline-block; }
+  .sidebar-theme-picker .theme-menu {
+    position: absolute; top: auto; right: auto; bottom: calc(100% + 9px); left: 0;
+    width: 174px;
+  }
+  .app-shell.sidebar-collapsed .sidebar-theme-slot {
+    padding-top: 14px; justify-items: center;
+  }
+  .app-shell.sidebar-collapsed .sidebar-theme-title { display: block; }
+  .app-shell.sidebar-collapsed .sidebar-theme-picker,
+  .app-shell.sidebar-collapsed .sidebar-theme-picker .theme-toggle { width: 44px; }
+  .app-shell.sidebar-collapsed .sidebar-theme-picker .theme-toggle { padding-inline: 0; }
 }
