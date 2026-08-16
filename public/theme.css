@@ -160,7 +160,22 @@
   top: max(14px, env(safe-area-inset-top));
   right: max(14px, env(safe-area-inset-right));
 }
-.floating-theme-picker .theme-toggle { width: 44px; padding-inline: 0; }
+.floating-theme-picker .theme-toggle {
+  width: 44px;
+  padding-inline: 0;
+  overflow: hidden;
+  border: 0;
+  /* 与登录框一致：中心略带磨砂，边缘逐渐透明，不再显示蓝色描边。 */
+  background:
+    radial-gradient(circle at 50% 46%, rgba(248,252,252,.23), rgba(239,249,250,.10) 48%, rgba(220,243,247,.025) 76%, transparent 100%);
+  box-shadow:
+    0 12px 30px rgba(17,38,45,.18),
+    inset 0 0 16px rgba(255,255,255,.11),
+    inset 0 -7px 14px rgba(42,91,106,.055);
+  -webkit-backdrop-filter: blur(5px) saturate(1.12) contrast(1.03);
+  backdrop-filter: blur(5px) saturate(1.12) contrast(1.03);
+}
+.floating-theme-picker .theme-toggle > * { position: relative; z-index: 2; }
 .floating-theme-picker .theme-toggle [data-theme-label] { display: none; }
 .floating-theme-picker .theme-menu {
   position: absolute;
@@ -174,11 +189,45 @@
 }
 
 /*
- * 水滴边缘折射
+ * 动态背景折射层
  * ------------------------------------------------------------------
- * backdrop-filter 本身不能真正改变背景的几何比例，因此这里用一条 3px 的
- * 环形区域单独加强模糊、饱和度与明暗对比，再叠加内外双高光，模拟水滴边缘
- * “轻微放大并变虚”的光学感觉。mask 仅保留边缘，不会模糊正文和按钮文字。
+ * liquid-glass.js 会把当前登录背景的压缩预览同步到这里。照片副本与视口
+ * 对齐后轻微放大 3.6%、模糊 2.2px；遮罩从卡片中部逐渐增强到外沿，形成
+ * 宽而柔和的水滴折射区。它不是一条边框，背景轮播时其纹理也会一起移动。
+ */
+.liquid-glass-refraction {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: .94;
+  -webkit-mask-image:
+    radial-gradient(ellipse 92% 88% at 50% 50%, transparent 0 43%, rgba(0,0,0,.08) 56%, rgba(0,0,0,.44) 76%, #000 100%);
+  mask-image:
+    radial-gradient(ellipse 92% 88% at 50% 50%, transparent 0 43%, rgba(0,0,0,.08) 56%, rgba(0,0,0,.44) 76%, #000 100%);
+}
+.liquid-glass-refraction > img {
+  position: absolute;
+  left: var(--liquid-lens-left, 0);
+  top: var(--liquid-lens-top, 0);
+  width: var(--liquid-lens-width, 100vw);
+  height: var(--liquid-lens-height, 100dvh);
+  max-width: none;
+  object-fit: cover;
+  object-position: center center;
+  user-select: none;
+  transform: scale(1.036);
+  transform-origin: center center;
+  filter: blur(2.2px) saturate(1.17) contrast(1.045);
+}
+
+/*
+ * 通用水滴边缘折射
+ * ------------------------------------------------------------------
+ * 普通站内控件仍由 backdrop-filter 模拟；登录与注册卡片则在上方额外使用
+ * 真实的背景副本完成放大。通用高光宽度由 3px 扩大到 7px，减轻描边感。
  */
 :is(
   .entry-card,
@@ -216,7 +265,7 @@
     position: absolute;
     z-index: 4;
     inset: 1px;
-    padding: 3px;
+    padding: 7px;
     border-radius: inherit;
     pointer-events: none;
     background:
@@ -224,8 +273,8 @@
     box-shadow:
       inset 0 0 7px rgba(255,255,255,.50),
       inset 0 -2px 5px rgba(43,94,110,.16);
-    -webkit-backdrop-filter: blur(4.5px) saturate(1.42) contrast(1.08);
-    backdrop-filter: blur(4.5px) saturate(1.42) contrast(1.08);
+    -webkit-backdrop-filter: blur(3.5px) saturate(1.34) contrast(1.06);
+    backdrop-filter: blur(3.5px) saturate(1.34) contrast(1.06);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -233,18 +282,44 @@
   }
 }
 
+/*
+ * 登录框、注册框和右上角主题键已经拥有宽幅动态折射层，这里把通用的硬环形
+ * mask 改成由中心透明、向外沿逐渐显现的柔和高光，彻底取消“加一条边框”的
+ * 观感。伪元素不处理点击，也不会覆盖输入框的交互。
+ */
+:is(.entry-card, .auth-card, .floating-theme-picker .theme-toggle)::after {
+  content: "";
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  padding: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 17% 8%, rgba(255,255,255,.68), transparent 28%),
+    radial-gradient(circle at 88% 92%, rgba(151,224,234,.22), transparent 34%),
+    linear-gradient(132deg, rgba(255,255,255,.13), transparent 35% 70%, rgba(255,255,255,.08));
+  box-shadow:
+    inset 0 0 22px rgba(255,255,255,.14),
+    inset 0 -9px 20px rgba(43,94,110,.08);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  -webkit-mask: radial-gradient(ellipse 92% 88% at 50% 50%, transparent 0 49%, rgba(0,0,0,.10) 62%, rgba(0,0,0,.66) 84%, #000 100%);
+  mask: radial-gradient(ellipse 92% 88% at 50% 50%, transparent 0 49%, rgba(0,0,0,.10) 62%, rgba(0,0,0,.66) 84%, #000 100%);
+  -webkit-mask-composite: source-over;
+  mask-composite: add;
+}
+
 /* 白天模式的注册卡片保留透明晶体感，但加入淡白环境色，避免深色照片透过后
  * 整个注册界面看起来像黑色面板。用户手动选择夜览后仍由下方深色规则接管。 */
 :root[data-theme="light"] .auth-card {
   background:
-    radial-gradient(circle at 12% 0%, rgba(255,255,255,.76), transparent 44%),
-    linear-gradient(125deg, rgba(248,252,252,.60), rgba(238,249,250,.43) 48%, rgba(215,244,248,.34));
-  box-shadow: 0 32px 90px rgba(14,35,42,.25), inset 0 1px 0 rgba(255,255,255,.97), inset 0 -1px 0 rgba(42,83,99,.16);
+    radial-gradient(ellipse 88% 82% at 50% 47%, rgba(248,252,252,.24) 0%, rgba(239,249,250,.14) 44%, rgba(215,244,248,.045) 74%, transparent 100%);
+  box-shadow: 0 32px 90px rgba(14,35,42,.25), inset 0 0 34px rgba(255,255,255,.08), inset 0 -12px 30px rgba(42,83,99,.055);
 }
 :root[data-theme="light"] .entry-card {
   background:
-    radial-gradient(circle at 12% 0%, rgba(255,255,255,.60), transparent 44%),
-    linear-gradient(125deg, rgba(248,252,252,.38), rgba(238,249,250,.22) 48%, rgba(215,244,248,.18));
+    radial-gradient(ellipse 88% 82% at 50% 47%, rgba(248,252,252,.24) 0%, rgba(239,249,250,.14) 44%, rgba(215,244,248,.045) 74%, transparent 100%);
 }
 
 /* ============================== 夜览：首页 ============================== */
@@ -378,9 +453,9 @@
 :root[data-theme="dark"] .entry-photo-background::after { background: rgba(3,10,14,.22); }
 :root[data-theme="dark"] .entry-card {
   color: var(--ink);
-  border-color: rgba(178,225,231,.24);
-  background: linear-gradient(125deg, rgba(25,49,58,.58), rgba(9,23,29,.48) 45%, rgba(25,93,104,.22));
-  box-shadow: 0 30px 84px rgba(0,0,0,.44), inset 0 1px 0 rgba(214,247,250,.18), inset 0 -1px 0 rgba(0,0,0,.33);
+  border: 0;
+  background: radial-gradient(ellipse 88% 82% at 50% 47%, rgba(17,38,46,.34) 0%, rgba(9,25,31,.20) 47%, rgba(25,93,104,.055) 76%, transparent 100%);
+  box-shadow: 0 30px 84px rgba(0,0,0,.44), inset 0 0 34px rgba(189,236,242,.045), inset 0 -12px 30px rgba(0,0,0,.09);
 }
 :root[data-theme="dark"] .entry-field input {
   color: var(--ink); border-color: rgba(170,218,224,.22); background: rgba(8,22,28,.64);
@@ -394,14 +469,21 @@
 :root[data-theme="dark"] .auth-photo-background { background: #081318; }
 :root[data-theme="dark"] .auth-card {
   color: var(--ink);
-  border-color: rgba(178,225,231,.24);
-  background: linear-gradient(125deg, rgba(25,49,58,.60), rgba(9,23,29,.50) 45%, rgba(25,93,104,.22));
-  box-shadow: 0 32px 90px rgba(0,0,0,.46), inset 0 1px 0 rgba(214,247,250,.18), inset 0 -1px 0 rgba(0,0,0,.33);
+  border: 0;
+  background: radial-gradient(ellipse 88% 82% at 50% 47%, rgba(17,38,46,.35) 0%, rgba(9,25,31,.21) 47%, rgba(25,93,104,.06) 76%, transparent 100%);
+  box-shadow: 0 32px 90px rgba(0,0,0,.46), inset 0 0 36px rgba(189,236,242,.045), inset 0 -12px 30px rgba(0,0,0,.09);
 }
 :root[data-theme="dark"] .auth-card :is(input, textarea, select) { color: var(--ink); border-color: rgba(170,218,224,.22); background: rgba(8,22,28,.64); }
 :root[data-theme="dark"] .summary-row,
 :root[data-theme="dark"] .success-box { border-color: var(--line); background: rgba(13,32,39,.70); }
 :root[data-theme="dark"] .home-link { color: var(--ink); background: rgba(27,82,98,.58); }
+
+/* 夜览入口的主题键仍与登录框同款透明玻璃，不继承侧边栏按钮的蓝色底和边线。 */
+:root[data-theme="dark"] .floating-theme-picker .theme-toggle {
+  border: 0;
+  background: radial-gradient(circle at 50% 46%, rgba(34,67,77,.30), rgba(14,35,42,.15) 50%, rgba(25,93,104,.035) 78%, transparent 100%);
+  box-shadow: 0 12px 30px rgba(0,0,0,.30), inset 0 0 16px rgba(200,240,245,.06), inset 0 -7px 14px rgba(0,0,0,.08);
+}
 
 /* ============================== 夜览：Studio ============================== */
 :root[data-theme="dark"] html,
