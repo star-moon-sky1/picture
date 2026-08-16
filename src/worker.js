@@ -1963,7 +1963,8 @@ async function requireGuestSession(request, env) {
 }
 
 async function requireWebsiteVisitor(request, env) {
-  if (await getUserSession(request, env, false)) return { type: "user" };
+  const user = await getUserSession(request, env, false);
+  if (user) return { type: "user", user };
   if (await isAdmin(request, env)) return { type: "admin" };
   return { type: "guest", ...(await requireGuestSession(request, env)) };
 }
@@ -2084,6 +2085,92 @@ async function trackGuestWebsite(request, env) {
   const section = clampText(body.section, 80) || "home";
   await recordGuestVisit(env, request, session.visitorHash, { entries: 0, pageViews: 1, section });
   return { ok: true };
+}
+
+/* ============================================================
+ * 网站主体运行时反机器人复核
+ * ============================================================
+ * 入口 Turnstile 只能证明“进入网站的这一刻”通过了验证，不能覆盖进入后的
+ * 自动化操作。主页因此每隔一段时间只上报行为数量，不上报按键内容、鼠标
+ * 坐标或正在阅读的正文。Worker 仅对高置信度信号执行拦截，避免把安静阅读、
+ * 长时间停留、触控板滚动以及辅助功能用户误判为机器人。
+ */
+function finiteBehaviorCount(value, maximum = 100_000) {
+  const count = Math.floor(Number(value));
+  if (!Number.isFinite(count)) return 0;
+  return Math.min(maximum, Math.max(0, count));
+}
+
+async function runtimeSecurityIdentity(request, env) {
+  const identity = await requireWebsiteVisitor(request, env);
+  if (identity.type === "guest") return { ...identity, rateKey: `runtime-guest:${identity.visitorHash}` };
+  if (identity.type === "user") return { ...identity, rateKey: `runtime-user:${identity.user.id}` };
+  return { ...identity, rateKey: await clientRateKey(request, "runtime-admin") };
+}
+
+async function runtimeBotBlockedResponse(request, env, identity, reasons) {
+  const headers = new Headers({
+    ...SECURITY_HEADERS,
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Xingyueji-Version": APP_VERSION,
+  });
+
+  /*
+   * 只撤销当前用于浏览网站的身份，不牵连同一网络中的其他正常用户。
+   * 普通账号的随机会话同时在 D1 中标记为撤销，不能只靠删除浏览器 Cookie。
+   */
+  if (identity.type === "guest") {
+    headers.append("Set-Cookie", guestSessionCookie(request, "", 0));
+  } else if (identity.type === "user") {
+    await env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE token_hash = ?")
+      .bind(nowIso(), identity.user.token_hash).run();
+    await recordLoginEvent(env, request, "runtime_bot_blocked", identity.user.id, identity.user.username_normalized)
+      .catch((error) => console.error("Runtime bot event logging failed", error));
+    headers.append("Set-Cookie", userSessionCookie(request, "", 0));
+  } else {
+    headers.append("Set-Cookie", secureCookie(request, "", 0));
+  }
+
+  console.warn("Runtime bot protection terminated a website session", {
+    identityType: identity.type,
+    reasons,
+  });
+  return new Response(JSON.stringify({
+    error: "检测到异常自动化行为，当前访问已被终止。",
+    errorCode: "BOT_DETECTED",
+    closePage: true,
+  }), { status: 403, headers });
+}
+
+async function runtimeSecurityHeartbeat(request, env) {
+  const identity = await runtimeSecurityIdentity(request, env);
+  /* 正常页面 45 秒一次；20 次/5 分钟为多标签页和网络重试保留充足余量。 */
+  await consumeRateLimit(env, identity.rateKey, 20, 5 * 60);
+  const body = await readJson(request);
+  const elapsedMs = finiteBehaviorCount(body.elapsedMs, 10 * 60 * 1000);
+  const clicks = finiteBehaviorCount(body.clicks);
+  const keydowns = finiteBehaviorCount(body.keydowns);
+  const scrolls = finiteBehaviorCount(body.scrolls);
+  const navigations = finiteBehaviorCount(body.navigations);
+  const untrustedActions = finiteBehaviorCount(body.untrustedActions);
+  const maxClickBurst = finiteBehaviorCount(body.maxClickBurst, 10_000);
+  const reasons = [];
+
+  /*
+   * 阈值刻意设置得远高于真人快速操作范围。单纯“没有鼠标移动”或“长时间
+   * 没有操作”绝不构成异常；那两种情况通常只是正在阅读文章或使用键盘。
+   */
+  if (body.webdriver === true) reasons.push("webdriver");
+  if (untrustedActions >= 4) reasons.push("repeated-untrusted-events");
+  if (maxClickBurst >= 16) reasons.push("impossible-click-burst");
+  if (elapsedMs > 0 && elapsedMs <= 60_000 && clicks >= 160) reasons.push("excessive-click-rate");
+  if (elapsedMs > 0 && elapsedMs <= 60_000 && keydowns >= 900) reasons.push("excessive-key-rate");
+  if (elapsedMs > 0 && elapsedMs <= 60_000 && navigations >= 90) reasons.push("excessive-navigation-rate");
+  if (elapsedMs > 0 && elapsedMs <= 60_000 && scrolls >= 2_400) reasons.push("excessive-scroll-rate");
+
+  if (reasons.length) return runtimeBotBlockedResponse(request, env, identity, reasons);
+  return json({ ok: true, nextCheckSeconds: 45 }, 200, { "Cache-Control": "no-store" });
 }
 
 function userSessionCookie(request, value, maxAge) {
@@ -4200,6 +4287,14 @@ async function handleApi(request, env, url, ctx) {
   }
   if (url.pathname === "/api/guest/track" && request.method === "POST") {
     return json(await trackGuestWebsite(request, env));
+  }
+
+  /*
+   * 登录账号、游客会话和站长会话进入网站主体后共用本接口持续复核。
+   * 命中高置信度自动化信号时，函数会直接返回 403 并撤销当前会话。
+   */
+  if (url.pathname === "/api/security/heartbeat" && request.method === "POST") {
+    return runtimeSecurityHeartbeat(request, env);
   }
 
   /* 普通用户注册、登录、资料、密码和会话接口。 */

@@ -5,7 +5,8 @@
  * 下载全部绕过缓存，防止账号内容或受限资源残留在浏览器公共缓存中。
  */
 const CACHE_PREFIX = "xyj-static-shell-";
-const STATIC_CACHE = `${CACHE_PREFIX}pwa-navigation-1`;
+// 修改此名称会让已安装的桌面/PWA 版本立即替换旧的离线首页外壳。
+const STATIC_CACHE = `${CACHE_PREFIX}runtime-security-glass-hold-1`;
 const APP_SHELL = [
   "/",
   "/theme.css",

@@ -611,15 +611,19 @@
       width: var(--bloom-size); height: var(--bloom-size);
       border-radius: 46% 54% 58% 42% / 52% 42% 58% 48%;
       pointer-events: none;
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(.16);
+      opacity: .68;
+      transform: translate(-50%, -50%) scale(.82);
       background:
         radial-gradient(ellipse at 42% 48%, rgba(255,255,255,.92) 0 7%, rgba(255,255,255,.43) 24%, rgba(255,255,255,.11) 48%, transparent 72%),
         radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
         radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
       filter: blur(1.8px);
       mix-blend-mode: screen;
-      animation: harmony-light-diffuse .36s cubic-bezier(.12,.68,.18,1) both;
+      /* 按住期间停留在 hold-in 的末帧，白光不会自行消散。 */
+      animation: harmony-light-hold-in .11s cubic-bezier(.18,.72,.2,1) both;
+    }
+    .harmony-light-bloom.is-releasing {
+      animation: harmony-light-diffuse .30s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,
     .harmony-light-bloom::after {
@@ -628,11 +632,41 @@
     }
     .harmony-light-bloom::before { inset: 18% -13% 4% 31%; transform: rotate(23deg); }
     .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
-    @keyframes harmony-light-diffuse {
-      0%   { opacity: .78; transform: translate(-50%, -50%) scale(.20) rotate(-5deg); }
-      48%  { opacity: .40; transform: translate(-50%, -50%) scale(.92) rotate(4deg); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.55, 1.42) rotate(7deg); filter: blur(3px); }
+    @keyframes harmony-light-hold-in {
+      from { opacity: .24; transform: translate(-50%, -50%) scale(.20) rotate(-4deg); }
+      to   { opacity: .68; transform: translate(-50%, -50%) scale(.82) rotate(0); }
     }
+    @keyframes harmony-light-diffuse {
+      0%   { opacity: .68; transform: translate(-50%, -50%) scale(.82) rotate(0); }
+      52%  { opacity: .34; transform: translate(-50%, -50%) scale(1.03) rotate(4deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.38, 1.28) rotate(7deg); filter: blur(3px); }
+    }
+
+    /*
+       站内运行时反机器人拦截层
+       --------------------------------------------------------
+       Worker 判定为高置信度自动化后，本层会立即盖住所有页面内容并让主体
+       失去交互能力。浏览器若拒绝脚本关闭手动打开的标签页，本层会继续保留，
+       不会重新露出网站内容。
+    */
+    .runtime-security-block {
+      position: fixed; z-index: 2147483647; inset: 0;
+      display: grid; place-items: center; padding: 24px;
+      color: #effcff; background: rgba(7,18,25,.88);
+      -webkit-backdrop-filter: blur(22px) saturate(1.18);
+      backdrop-filter: blur(22px) saturate(1.18);
+    }
+    .runtime-security-block[hidden] { display: none; }
+    .runtime-security-card {
+      width: min(520px, 100%); padding: clamp(28px, 6vw, 48px);
+      text-align: center; border: 1px solid rgba(218,249,255,.46); border-radius: 28px;
+      background: rgba(39,74,84,.42);
+      box-shadow: 0 24px 70px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.34);
+    }
+    .runtime-security-symbol { font-size: 2.4rem; line-height: 1; margin-bottom: 17px; }
+    .runtime-security-card h1 { margin: 0 0 14px; font-size: clamp(1.55rem, 4vw, 2.15rem); }
+    .runtime-security-card p { margin: 0; line-height: 1.85; color: rgba(239,252,255,.84); }
+    .runtime-security-card p + p { margin-top: 9px; font-size: .82rem; color: rgba(239,252,255,.62); }
 
     /* =========================================================
        05. 网站第一层：全屏登录 / 游客入口
@@ -1772,6 +1806,19 @@
     </main>
   </div>
 
+  <!--
+    Worker 只在高置信度自动化信号出现时显示本层。这里没有“继续访问”按钮，
+    因为命中后服务器已经撤销当前游客、用户或站长会话。
+  -->
+  <section id="runtime-security-block" class="runtime-security-block" role="alertdialog" aria-modal="true" aria-labelledby="runtime-security-title" tabindex="-1" hidden>
+    <div class="runtime-security-card">
+      <div class="runtime-security-symbol" aria-hidden="true">⚠</div>
+      <h1 id="runtime-security-title">访问已终止</h1>
+      <p id="runtime-security-message">检测到异常自动化行为，当前页面已停止运行。</p>
+      <p>页面正在尝试关闭；如果浏览器阻止自动关闭，请手动关闭此标签页。</p>
+    </div>
+  </section>
+
   <!-- 浏览器没有开放原生安装弹窗时，提供 Chrome/Edge、Safari 与手机端的手动步骤。 -->
   <dialog id="install-app-dialog" class="install-app-dialog">
     <div class="auth-lock-card">
@@ -1919,6 +1966,18 @@
       turnstileToken: "",
       guestVerified: false,
       guestTrackTimer: null,
+      runtimeSecurity: {
+        started: false,
+        blocked: false,
+        sending: false,
+        listenersInstalled: false,
+        intervalId: null,
+        firstCheckId: null,
+        lastReportAt: 0,
+        lastScrollAt: 0,
+        recentClicks: [],
+        counters: { clicks: 0, keydowns: 0, scrolls: 0, navigations: 0, untrustedActions: 0, maxClickBurst: 0 },
+      },
       // 从入口进入网站前暂存深链接板块；入口 URL 本身保持干净，不携带 #hash。
       entryRequestedSection: "",
       activeSection: "home",
@@ -1935,6 +1994,8 @@
     const APP_HISTORY_LAYER = "app";
 
     function showEntryScreen() {
+      if (state.runtimeSecurity.blocked) return;
+      stopRuntimeBotProtection();
       entryScreen.hidden = false;
       appShell.hidden = true;
       document.body.classList.add("entry-active");
@@ -1944,9 +2005,11 @@
     }
 
     function showWebsiteShell() {
+      if (state.runtimeSecurity.blocked) return;
       entryScreen.hidden = true;
       appShell.hidden = false;
       document.body.classList.remove("entry-active");
+      startRuntimeBotProtection();
     }
 
     /*
@@ -2039,8 +2102,149 @@
       const response = await fetch(path, options);
       const contentType = response.headers.get("content-type") || "";
       const data = contentType.includes("application/json") ? await response.json() : null;
-      if (!response.ok) throw new Error(data?.error || `请求失败（${response.status}）`);
+      if (!response.ok) {
+        const error = new Error(data?.error || `请求失败（${response.status}）`);
+        error.code = data?.errorCode || "";
+        if (error.code === "BOT_DETECTED") handleRuntimeBotDetected(error.message);
+        throw error;
+      }
       return data;
+    }
+
+    /*
+     * 网站主体持续反机器人保护
+     * --------------------------------------------------------
+     * 这里只统计事件数量，不保存输入内容、鼠标坐标、文章正文或表单值。服务端
+     * 只处理高置信度异常；没有操作、缓慢阅读和页面切到后台都不会触发拦截。
+     */
+    function emptyRuntimeSecurityCounters() {
+      return { clicks: 0, keydowns: 0, scrolls: 0, navigations: 0, untrustedActions: 0, maxClickBurst: 0 };
+    }
+
+    function websiteShellIsVisible() {
+      return !appShell.hidden && !state.runtimeSecurity.blocked;
+    }
+
+    function handleRuntimeBotDetected(message = "检测到异常自动化行为，当前页面已停止运行。") {
+      const security = state.runtimeSecurity;
+      if (security.blocked) return;
+      security.blocked = true;
+      stopRuntimeBotProtection({ preserveBlocked: true });
+      state.auth = { authenticated: false, user: null };
+      state.guestVerified = false;
+      sessionStorage.setItem("xyj_runtime_blocked", "1");
+      window.stop();
+      document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+      appShell.inert = true;
+      entryScreen.inert = true;
+      const block = document.getElementById("runtime-security-block");
+      document.getElementById("runtime-security-message").textContent = message;
+      block.hidden = false;
+      block.focus({ preventScroll: true });
+      document.documentElement.style.overflow = "hidden";
+      history.replaceState({ xingyuejiLayer: "security-blocked" }, "", "/?security=blocked");
+
+      /*
+       * 浏览器只允许脚本关闭由脚本打开的标签页。仍然调用 window.close()；
+       * 若浏览器拒绝，无法交互的全屏拦截层会继续停留，不会暴露页面内容。
+       */
+      window.setTimeout(() => window.close(), 720);
+    }
+
+    function installRuntimeSecurityListeners() {
+      const security = state.runtimeSecurity;
+      if (security.listenersInstalled) return;
+      security.listenersInstalled = true;
+
+      document.addEventListener("click", (event) => {
+        if (!websiteShellIsVisible()) return;
+        const counters = security.counters;
+        if (!event.isTrusted) {
+          counters.untrustedActions += 1;
+          if (counters.untrustedActions >= 4) sendRuntimeSecurityHeartbeat({ urgent: true });
+          return;
+        }
+        counters.clicks += 1;
+        const now = performance.now();
+        security.recentClicks = security.recentClicks.filter((time) => now - time <= 1000);
+        security.recentClicks.push(now);
+        counters.maxClickBurst = Math.max(counters.maxClickBurst, security.recentClicks.length);
+        if (counters.maxClickBurst >= 16) sendRuntimeSecurityHeartbeat({ urgent: true });
+      }, true);
+
+      document.addEventListener("keydown", (event) => {
+        if (!websiteShellIsVisible()) return;
+        /* 长按方向键会产生大量 repeat 事件，但这仍属于正常操作，不计入速率。 */
+        if (!event.isTrusted) security.counters.untrustedActions += 1;
+        else if (!event.repeat) security.counters.keydowns += 1;
+      }, true);
+      document.addEventListener("scroll", (event) => {
+        if (!websiteShellIsVisible() || !event.isTrusted) return;
+        /* 触控板一次手势可产生数百个 scroll 事件，按 80ms 合并避免误判。 */
+        const now = performance.now();
+        if (now - security.lastScrollAt >= 80) {
+          security.lastScrollAt = now;
+          security.counters.scrolls += 1;
+        }
+      }, { capture: true, passive: true });
+    }
+
+    async function sendRuntimeSecurityHeartbeat({ urgent = false } = {}) {
+      const security = state.runtimeSecurity;
+      if (!security.started || security.blocked || security.sending || !websiteShellIsVisible()) return;
+      if (!urgent && document.visibilityState !== "visible") return;
+      security.sending = true;
+      const now = Date.now();
+      const snapshot = { ...security.counters };
+      try {
+        await api("/api/security/heartbeat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...snapshot,
+            elapsedMs: Math.max(1, now - security.lastReportAt),
+            webdriver: navigator.webdriver === true,
+          }),
+        });
+        security.counters = emptyRuntimeSecurityCounters();
+        security.recentClicks = [];
+        security.lastReportAt = now;
+      } catch (error) {
+        /* BOT_DETECTED 已由 api() 统一显示拦截层；普通断网不应中断阅读。 */
+        if (error.code !== "BOT_DETECTED") console.warn("Runtime security heartbeat unavailable", error.message);
+      } finally {
+        security.sending = false;
+      }
+    }
+
+    function startRuntimeBotProtection() {
+      const security = state.runtimeSecurity;
+      if (security.blocked || security.started) return;
+      installRuntimeSecurityListeners();
+      security.started = true;
+      security.lastReportAt = Date.now();
+      security.counters = emptyRuntimeSecurityCounters();
+      security.recentClicks = [];
+      security.lastScrollAt = 0;
+      security.firstCheckId = window.setTimeout(
+        () => sendRuntimeSecurityHeartbeat({ urgent: navigator.webdriver === true }),
+        navigator.webdriver === true ? 900 : 12_000,
+      );
+      security.intervalId = window.setInterval(() => sendRuntimeSecurityHeartbeat(), 45_000);
+    }
+
+    function stopRuntimeBotProtection({ preserveBlocked = false } = {}) {
+      const security = state.runtimeSecurity;
+      window.clearTimeout(security.firstCheckId);
+      window.clearInterval(security.intervalId);
+      security.firstCheckId = null;
+      security.intervalId = null;
+      security.started = false;
+      security.sending = false;
+      security.counters = emptyRuntimeSecurityCounters();
+      security.recentClicks = [];
+      security.lastScrollAt = 0;
+      if (!preserveBlocked) security.blocked = false;
     }
 
     /*
@@ -2344,6 +2548,7 @@
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
       if (showSection(id, { animate })) {
+        if (state.runtimeSecurity.started) state.runtimeSecurity.counters.navigations += 1;
         updateSectionHistory(id, historyMode);
         scheduleGuestSectionTrack(id);
       }
@@ -3427,12 +3632,12 @@
     }
 
     /*
-     * 在控件中心或实际按下点生成一次小范围白光。白光现在随 pointerdown
-     * 出现，而不是等到松手才出现；范围限制在 48–118px，避免遮住周围内容。
-     * animationend 后立即删除，不会累积节点或影响按钮的点击区域。
+     * 在控件中心或实际按下点生成一团小范围白光。节点会停留在按下状态的
+     * 末帧，只有 pointerup / keyup / cancel 后才开始消散；因此无论按住多久，
+     * 光都不会提前消失。范围限制在 48–118px，避免遮住周围内容。
      */
     function emitHarmonyLightBloom(control, point = null) {
-      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (!control || matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
       const rect = control.getBoundingClientRect();
       const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
       const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
@@ -3445,8 +3650,14 @@
       bloom.style.setProperty("--bloom-size", `${bloomSize}px`);
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
+      return bloom;
+    }
+
+    function releaseHarmonyLightBloom(bloom) {
+      if (!bloom?.isConnected || bloom.classList.contains("is-releasing")) return;
+      bloom.classList.add("is-releasing");
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 460);
+      window.setTimeout(() => bloom.remove(), 380);
     }
 
     /*
@@ -3458,6 +3669,7 @@
       const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
       let pressedControl = null;
       let pressedPoint = null;
+      let pressedBloom = null;
 
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       /*
@@ -3470,6 +3682,8 @@
       const release = (control, point = null) => {
         if (!control) return;
         control.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = null;
         if (reducedMotion.matches || !canAnimate(control)) return;
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
@@ -3484,7 +3698,8 @@
         pressedPoint = { x: event.clientX, y: event.clientY };
         control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
-        emitHarmonyLightBloom(control, pressedPoint);
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = emitHarmonyLightBloom(control, pressedPoint);
       });
       window.addEventListener("pointerup", (event) => {
         const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
@@ -3494,20 +3709,33 @@
       });
       window.addEventListener("pointercancel", () => {
         pressedControl?.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
+        pressedBloom = null;
       });
       document.addEventListener("keydown", (event) => {
         if (!['Enter', ' '].includes(event.key) || event.repeat) return;
         const control = findControl(event.target);
         if (canAnimate(control)) {
+          pressedControl = control;
           control.classList.add("is-control-pressed");
-          emitHarmonyLightBloom(control);
+          releaseHarmonyLightBloom(pressedBloom);
+          pressedBloom = emitHarmonyLightBloom(control);
         }
       });
       document.addEventListener("keyup", (event) => {
         if (!['Enter', ' '].includes(event.key)) return;
-        release(findControl(event.target));
+        release(pressedControl || findControl(event.target));
+        pressedControl = null;
+        pressedPoint = null;
+      });
+      window.addEventListener("blur", () => {
+        pressedControl?.classList.remove("is-control-pressed");
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedControl = null;
+        pressedPoint = null;
+        pressedBloom = null;
       });
 
       /*
@@ -3955,8 +4183,13 @@
       if (event.target === dialog) dialog.close();
     }));
 
-    initializeEntryPhotoBackground();
-    boot();
+    /* 命中过运行时拦截的同一标签页刷新后仍保持关闭状态，不能靠刷新绕过。 */
+    if (sessionStorage.getItem("xyj_runtime_blocked") === "1") {
+      handleRuntimeBotDetected("本标签页此前因异常自动化行为被终止，请将其关闭后重新访问。");
+    } else {
+      initializeEntryPhotoBackground();
+      boot();
+    }
   </script>
 </body>
 </html>
