@@ -57,6 +57,15 @@
     .field { display:grid; gap:7px; margin-bottom:15px; }
     .field label { font-size:.8rem; color:var(--muted); font-weight:700; }
     .field small { color:var(--muted); font-size:.76rem; line-height:1.55; }
+    /*
+      指定用户白名单：仅在“仅指定用户”权限下展开。每个账号使用复选框，
+      方便同一篇文章或照片同时开放给多个人，而不必手工复制用户 ID。
+    */
+    .audience-picker { display:grid; gap:7px; max-height:190px; overflow-y:auto; padding:10px; border:1px solid var(--line); border-radius:11px; background:#f7fbfb; }
+    .audience-picker .audience-empty { margin:0; color:var(--muted); font-size:.76rem; line-height:1.55; }
+    .audience-option { display:flex; align-items:center; gap:8px; padding:6px 7px; border-radius:8px; background:rgba(255,255,255,.76); font-size:.78rem; }
+    .audience-option input { width:auto; flex:0 0 auto; margin:0; }
+    .audience-option span { min-width:0; overflow-wrap:anywhere; }
     input,textarea,select { width:100%; border:1px solid rgba(255,255,255,.76); border-radius:12px; padding:10px 12px; background:rgba(255,255,255,.64); color:var(--ink); outline:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.9); }
     /* 只有 Studio 登录框中的输入项使用透明晶体；后台白色工作面板保持清晰表单。 */
     .login-card input { background:rgba(255,255,255,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 0 rgba(49,90,105,.10); backdrop-filter:blur(2px); -webkit-backdrop-filter:blur(2px); }
@@ -78,6 +87,7 @@
        ========================================================= */
     .studio { min-height:100dvh; display:grid; grid-template-columns:220px 1fr; }
     .side { position:sticky; top:0; height:100dvh; padding:25px 16px; background:#172d35; color:white; display:flex; flex-direction:column; overflow-y:auto; }
+    .side > * { flex-shrink:0; }
     /* 登录后的 Studio 左栏也显示同一头像，文字与头像组成一个完整品牌区。 */
     .side-brand { display:flex; align-items:center; gap:10px; margin:0 6px 23px; }
     .studio-avatar {
@@ -115,6 +125,7 @@
     .split { display:grid; grid-template-columns:minmax(260px,.72fr) minmax(0,1.5fr); gap:16px; }
     .list { display:grid; gap:8px; }
     .list-item { padding:13px; border:1px solid var(--line); border-radius:11px; background:white; }
+    .list button.list-item { width:100%; text-align:left; color:inherit; cursor:pointer; }
     .list-item.active { border-color:var(--cyan); background:var(--soft); }
     .list-title { font-weight:700; }
     .list-meta { margin-top:6px; color:var(--muted); font-size:.76rem; }
@@ -147,7 +158,7 @@
     .media-info { padding:10px; }
     .media-info strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:.83rem; }
     .media-info small { color:var(--muted); }
-    /* 每张已上传图片都可以单独修改可见范围；保存时会立即同步到 D1。 */
+    /* 每张已上传图片都可以单独修改可见范围；点击保存后同步到 D1。 */
     .media-visibility { display:grid; gap:5px; margin-top:10px; }
     .media-visibility label { color:var(--muted); font-size:.72rem; font-weight:700; }
     .media-visibility select { padding:7px 9px; font-size:.78rem; }
@@ -328,6 +339,7 @@
         <button data-view="assets">文件与视频</button>
         <button data-view="comments">评论管理</button>
         <button data-view="feedback">留言与反馈</button>
+        <button data-view="visitors">游客统计</button>
         <button data-view="users">用户与审核</button>
         <button data-view="settings">网站设置</button>
       </nav>
@@ -388,8 +400,10 @@
                 <select id="content-visibility">
                   <option value="public">公开（游客与登录用户均可见）</option>
                   <option value="member">仅审核用户（审核通过后可见）</option>
+                  <option value="selected">仅指定用户（按账号白名单开放）</option>
                   <option value="private">私密（仅站长后台可见）</option>
                 </select>
+                <div id="content-user-picker" class="audience-picker hidden"></div>
                 <small>“草稿”表示尚未发布；“私密”内容即使设为已发布，也不会出现在普通网站中。</small>
               </div>
               <div class="field wide"><label>标题</label><input id="content-title" maxlength="120" required placeholder="输入标题"></div>
@@ -447,8 +461,10 @@
               <select id="media-visibility">
                 <option value="public">公开（游客与登录用户均可见）</option>
                 <option value="member">仅审核用户（审核通过后可见）</option>
+                <option value="selected">仅指定用户（按账号白名单开放）</option>
                 <option value="private">私密（仅站长后台可见）</option>
               </select>
+              <div id="media-user-picker" class="audience-picker hidden"></div>
               <small>可见范围同时保护压缩预览与原片下载；上传后仍可在照片卡片中修改。</small>
             </div>
             <div class="field"><label>图片说明</label><input id="media-caption" maxlength="500"></div>
@@ -491,6 +507,27 @@
         <div class="panel" style="margin-top:0">
           <div class="actions" style="margin:0 0 14px"><button id="refresh-feedback" class="btn small ghost">刷新留言</button><span class="status">QQ 官方机器人通知需配置 QQ_BOT_SECRET，并通过“绑定网站通知”指令绑定站长 QQ；企业微信仍可使用 WECOM_WEBHOOK_URL。</span></div>
           <div id="feedback-admin-list" class="list"></div>
+        </div>
+      </section>
+
+      <!-- ==================== 游客访问与反机器人状态 ==================== -->
+      <section id="view-visitors" class="view">
+        <div class="panel" style="margin-top:0">
+          <div class="actions" style="margin:0 0 14px">
+            <label class="field" style="margin:0;min-width:150px">统计范围
+              <select id="visitor-days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="90">最近 90 天</option></select>
+            </label>
+            <label class="field" style="margin:0;min-width:180px">明细日期（留空显示最近记录）
+              <input id="visitor-day" type="date">
+            </label>
+            <button id="refresh-visitors" class="btn small ghost" type="button">刷新统计</button>
+          </div>
+          <p id="visitor-analytics-status" class="status"></p>
+          <div id="visitor-total-cards" class="cards"></div>
+        </div>
+        <div class="split" style="margin-top:18px">
+          <div class="panel" style="margin-top:0"><h3>每日汇总</h3><div id="visitor-day-list" class="list"></div></div>
+          <div class="panel" style="margin-top:0"><h3>游客明细</h3><div id="visitor-detail-list" class="list"></div></div>
         </div>
       </section>
 
@@ -550,7 +587,7 @@
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script>
     const app = {
-      sections: [], content: [], changelogs: [], albums: [], media: [], assetFolders: [], assets: [], comments: [], feedback: [],
+      sections: [], content: [], changelogs: [], albums: [], media: [], assetFolders: [], assets: [], comments: [], feedback: [], guestAnalytics: null,
       users: [], passwordResets: [], userEvents: [], generatedResetLinks: new Map(), settings: {},
       currentAssetFolder: "", editorRange: null, variantTarget: null,
     };
@@ -560,6 +597,7 @@
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
       assets:["文件与视频","分片上传大文件或文件夹，管理文档预览、视频清晰度和下载权限。"],
       comments:["评论管理","查看、隐藏或永久删除文章评论及其全部回复。"], feedback:["留言与反馈","处理、删除游客留言；公开留言只有站长能够回复。"],
+      visitors:["游客统计","按日查看游客数量、页面访问、脱敏 IP、大致地区和设备信息。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页公开资料、本站使用说明和左下角版本号。"],
     };
@@ -567,6 +605,7 @@
     const visibilityLabels = {
       public: "公开",
       member: "仅审核用户",
+      selected: "仅指定用户",
       private: "私密（仅 Studio）",
     };
 
@@ -578,6 +617,31 @@
     function formatDate(value){return value?new Intl.DateTimeFormat("zh-CN",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).format(new Date(value)):""}
     function clear(node){node.replaceChildren()}
     function button(text,className="btn small ghost"){const b=document.createElement("button");b.type="button";b.className=className;b.textContent=text;return b}
+
+    /* ---------- 文章/照片指定用户白名单 ---------- */
+    function approvedAudienceUsers(){return app.users.filter(item=>item.status==="approved")}
+    function audienceNode(target){return typeof target==="string"?document.getElementById(target):target}
+    function selectedAudienceIds(target){
+      const host=audienceNode(target);if(!host)return[];
+      return [...host.querySelectorAll("input[type='checkbox']:checked")].map(input=>input.value);
+    }
+    function renderAudiencePicker(target,selectedIds=[]){
+      const host=audienceNode(target);if(!host)return;
+      const selected=new Set((selectedIds||[]).map(String));clear(host);
+      const users=approvedAudienceUsers();
+      if(!users.length){const empty=document.createElement("p");empty.className="audience-empty";empty.textContent="目前没有已审核账号，请先在“用户与审核”中批准用户。";host.append(empty);return}
+      users.forEach(user=>{
+        const label=document.createElement("label");label.className="audience-option";
+        const input=document.createElement("input");input.type="checkbox";input.value=user.id;input.checked=selected.has(user.id);
+        const name=document.createElement("span");name.textContent=`${user.nickname}（@${user.username}）`;
+        label.append(input,name);host.append(label);
+      });
+    }
+    function syncAudiencePicker(selectTarget,pickerTarget,selectedIds=[]){
+      const select=audienceNode(selectTarget);const picker=audienceNode(pickerTarget);if(!select||!picker)return;
+      renderAudiencePicker(picker,selectedIds);
+      picker.classList.toggle("hidden",select.value!=="selected");
+    }
 
     /* 在实际按下点创建小范围柔光；按下即出现，并在回弹结束前删除。 */
     function emitHarmonyLightBloom(control, point = null) {
@@ -726,8 +790,12 @@
       document.getElementById("view-title").textContent=viewInfo[name][0];document.getElementById("view-desc").textContent=viewInfo[name][1];
     }
 
-    async function loadAll(){await loadSections();await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadAssets(),loadComments(),loadFeedback(),loadUsers(),loadSettings()])}
-    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["文件与视频",data.assets],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+    async function loadAll(){
+      // 先取得已审核用户，随后渲染文章和照片时才能立即生成白名单选择器。
+      await Promise.all([loadSections(),loadUsers()]);
+      await Promise.all([loadDashboard(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadAssets(),loadComments(),loadFeedback(),loadGuestAnalytics(),loadSettings()]);
+    }
+    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["今日游客",data.guestVisitorsToday],["今日浏览",data.guestPageViewsToday],["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["文件与视频",data.assets],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
 
     async function loadSections(){app.sections=await api("/api/admin/sections");renderSectionList();refreshSectionOptions()}
     function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
@@ -737,10 +805,10 @@
     function refreshSectionOptions(){const contentSelect=document.getElementById("content-section");const mediaSelect=document.getElementById("media-section");const currentContent=contentSelect.value;const currentMedia=mediaSelect.value;clear(contentSelect);clear(mediaSelect);app.sections.filter(item=>item.kind==="content").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;contentSelect.append(option)});app.sections.filter(item=>item.kind==="gallery").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;mediaSelect.append(option)});if([...contentSelect.options].some(o=>o.value===currentContent))contentSelect.value=currentContent;if([...mediaSelect.options].some(o=>o.value===currentMedia))mediaSelect.value=currentMedia}
 
     async function loadContent(){app.content=await api("/api/admin/content");renderContentList();refreshCoverOptions()}
-    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
-    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";renderContentList()}
-    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
-    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,visibility:document.getElementById("content-visibility").value,title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
+    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);const audienceCount=item.visibility==="selected"?`（${item.allowed_user_ids?.length||0} 人）`:"";meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public}${audienceCount} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
+    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";syncAudiencePicker("content-visibility","content-user-picker",[]);renderContentList()}
+    function editContent(item){document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";syncAudiencePicker("content-visibility","content-user-picker",item.allowed_user_ids||[]);document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
+    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,visibility:document.getElementById("content-visibility").value,allowedUserIds:selectedAudienceIds("content-user-picker"),title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
 
     async function loadChangelogs(){app.changelogs=await api("/api/admin/changelogs");renderChangelogs()}
     function renderChangelogs(){const list=document.getElementById("changelog-list");clear(list);app.changelogs.forEach(item=>{const row=document.createElement("div");row.className="list-item";const title=document.createElement("div");title.className="list-title";title.textContent=`v${item.version} · ${item.title}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=formatDate(item.published_at);row.append(title,meta);row.addEventListener("click",()=>editChangelog(item));list.append(row)})}
@@ -763,20 +831,28 @@
           const title = document.createElement("strong"); title.textContent = item.caption || item.filename;
           const small = document.createElement("small");
           const locationLabel = item.album_name || (item.kind === "inline" ? "文章插图" : "未分类");
-          small.textContent = `${locationLabel} · ${visibilityLabels[item.visibility] || visibilityLabels.public} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
+          const audienceCount = item.visibility === "selected" ? `（${item.allowed_user_ids?.length || 0} 人）` : "";
+          small.textContent = `${locationLabel} · ${visibilityLabels[item.visibility] || visibilityLabels.public}${audienceCount} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
 
-          // 已上传照片不必删除重传，可直接在卡片内切换公开、会员或私密。
+          // 已上传照片不必删除重传，可直接在卡片内调整四级权限和用户白名单。
           const visibilityField = document.createElement("div"); visibilityField.className = "media-visibility";
           const visibilityLabel = document.createElement("label"); visibilityLabel.textContent = "可见范围";
           const visibilitySelect = document.createElement("select");
           visibilitySelect.setAttribute("aria-label", `${item.caption || item.filename}的可见范围`);
-          [["public", "公开（游客与用户）"], ["member", "仅审核用户"], ["private", "私密（仅站长后台）"]].forEach(([value, text]) => {
+          [["public", "公开（游客与用户）"], ["member", "仅审核用户"], ["selected", "仅指定用户"], ["private", "私密（仅站长后台）"]].forEach(([value, text]) => {
             const option = document.createElement("option"); option.value = value; option.textContent = text;
             visibilitySelect.append(option);
           });
           visibilitySelect.value = item.visibility || "public";
-          visibilitySelect.addEventListener("change", () => updateMediaVisibility(item, visibilitySelect));
-          visibilityField.append(visibilityLabel, visibilitySelect);
+          const audiencePicker = document.createElement("div"); audiencePicker.className = "audience-picker";
+          renderAudiencePicker(audiencePicker, item.allowed_user_ids || []);
+          audiencePicker.classList.toggle("hidden", visibilitySelect.value !== "selected");
+          visibilitySelect.addEventListener("change", () => {
+            audiencePicker.classList.toggle("hidden", visibilitySelect.value !== "selected");
+          });
+          const saveVisibility = button("保存照片权限");
+          saveVisibility.addEventListener("click", () => updateMediaVisibility(item, visibilitySelect, audiencePicker, saveVisibility));
+          visibilityField.append(visibilityLabel, visibilitySelect, audiencePicker, saveVisibility);
 
           const actions = document.createElement("div"); actions.className = "list-actions";
           const copy = button("复制预览地址");
@@ -993,16 +1069,75 @@
     async function updateFeedback(item,status,isPublic){await api(`/api/admin/feedback/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,isPublic})});await loadFeedback();await loadDashboard()}
     async function deleteFeedback(item){if(!confirm("确定永久删除这条留言吗？"))return;await api(`/api/admin/feedback/${item.id}`,{method:"DELETE"});await loadFeedback();await loadDashboard()}
 
+    /* ---------- 游客按日统计与 Turnstile 配置状态 ---------- */
+    async function loadGuestAnalytics(){
+      const days=document.getElementById("visitor-days").value||"30";
+      const day=document.getElementById("visitor-day").value;
+      const query=new URLSearchParams({days});if(day)query.set("day",day);
+      app.guestAnalytics=await api(`/api/admin/guest-analytics?${query}`);
+      renderGuestAnalytics();
+    }
+
+    function renderGuestAnalytics(){
+      const data=app.guestAnalytics;if(!data)return;
+      const status=document.getElementById("visitor-analytics-status");
+      const protection=data.turnstile?.configured
+        ? "Turnstile 已启用，游客必须通过服务端验证"
+        : data.turnstile?.incomplete
+          ? "Turnstile 配置不完整：请同时配置 Site Key 与 Secret Key"
+          : "Turnstile 尚未配置，目前仅启用 IP 频率限制";
+      status.textContent=`${protection}。统计时区：${data.timeZone}；明细自动保留 ${data.retentionDays} 天。IP 仅显示脱敏网段，位置来自 Cloudflare 的大致定位。`;
+
+      const totals=(data.summary||[]).reduce((sum,item)=>({
+        visitors:sum.visitors+item.unique_visitors,ips:sum.ips+item.unique_ips,
+        entries:sum.entries+item.entries,views:sum.views+item.page_views,
+      }),{visitors:0,ips:0,entries:0,views:0});
+      const cards=document.getElementById("visitor-total-cards");clear(cards);
+      [["日访客累计",totals.visitors],["独立 IP 累计",totals.ips],["进入次数",totals.entries],["页面浏览",totals.views]].forEach(([label,value])=>{
+        const card=document.createElement("div");card.className="stat";
+        const name=document.createElement("span");name.textContent=label;
+        const number=document.createElement("strong");number.textContent=value;
+        card.append(name,number);cards.append(card);
+      });
+
+      const daily=document.getElementById("visitor-day-list");clear(daily);
+      if(!(data.summary||[]).length){const p=document.createElement("p");p.className="status";p.textContent="所选范围内还没有游客记录。";daily.append(p)}
+      (data.summary||[]).forEach(item=>{
+        const row=document.createElement("button");row.type="button";row.className="list-item";
+        const title=document.createElement("div");title.className="list-title";title.textContent=item.visit_day===data.today?`${item.visit_day}（今天）`:item.visit_day;
+        const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`访客 ${item.unique_visitors} · IP ${item.unique_ips} · 进入 ${item.entries} · 浏览 ${item.page_views}`;
+        row.append(title,meta);row.addEventListener("click",()=>{document.getElementById("visitor-day").value=item.visit_day;loadGuestAnalytics().catch(error=>alert(error.message))});daily.append(row);
+      });
+
+      const details=document.getElementById("visitor-detail-list");clear(details);
+      if(!(data.visitors||[]).length){const p=document.createElement("p");p.className="status";p.textContent="没有符合条件的游客明细。";details.append(p)}
+      (data.visitors||[]).forEach(item=>{
+        const row=document.createElement("article");row.className="list-item";
+        const title=document.createElement("div");title.className="list-title";title.textContent=`访客 ${item.visitor_id} · ${item.ip_hint||"IP 未知"}`;
+        const location=[item.country,item.region,item.city].filter(Boolean).join(" / ")||"地区未知";
+        const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.visit_day} · ${location} · 首次 ${formatDate(item.first_seen_at)} · 最近 ${formatDate(item.last_seen_at)}`;
+        const activity=document.createElement("div");activity.className="list-meta";activity.textContent=`进入 ${item.entry_count} 次 · 浏览 ${item.page_views} 页 · 最后板块 ${item.last_section||"未知"}`;
+        const network=document.createElement("div");network.className="list-meta";network.textContent=`${item.asn?`ASN ${item.asn}`:"ASN 未知"}${item.as_organization?` · ${item.as_organization}`:""}${item.timezone?` · ${item.timezone}`:""}${item.referrer?` · 来源 ${item.referrer}`:""}`;
+        const agent=document.createElement("div");agent.className="list-meta";agent.textContent=`设备/浏览器：${item.user_agent||"未知"}`;
+        row.append(title,meta,activity,network,agent);details.append(row);
+      });
+    }
+
     /* ---------- 普通用户、注册审核与密码重置 ---------- */
     const userStatusLabels={pending:"待审核",approved:"已批准",rejected:"未通过",disabled:"已停用"};
     const eventLabels={register:"注册申请",login_success:"登录成功",login_failed:"登录失败",login_blocked:"登录被阻止",logout:"退出登录",password_change:"修改密码",password_reset:"重置密码"};
     const resetStatusLabels={pending:"待核实",approved:"链接已生成",rejected:"已拒绝",used:"已完成",expired:"已过期"};
 
     async function loadUsers(){
+      const contentSelection=selectedAudienceIds("content-user-picker");
+      const mediaSelection=selectedAudienceIds("media-user-picker");
       [app.users,app.passwordResets]=await Promise.all([
         api("/api/admin/users"),api("/api/admin/password-resets"),
       ]);
       renderUsers();renderPasswordResets();
+      renderAudiencePicker("content-user-picker",contentSelection);
+      renderAudiencePicker("media-user-picker",mediaSelection);
+      if(app.media.length)renderMedia();
     }
 
     function renderUsers(){
@@ -1095,9 +1230,15 @@
     async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-site-version").value=app.settings.site_version||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-usage-guide").value=app.settings.usage_guide||"";document.getElementById("setting-email").value=app.settings.contact_email||""}
 
     async function uploadInline(file) {
+      const visibility = document.getElementById("content-visibility").value;
+      const allowedUserIds = selectedAudienceIds("content-user-picker");
+      if (visibility === "selected" && !allowedUserIds.length) {
+        throw new Error("插入图片前，请至少勾选一个能够查看本文的已审核账号");
+      }
       const form = new FormData();
       form.append("file", file); form.append("kind", "inline");
-      form.append("visibility", document.getElementById("content-visibility").value);
+      form.append("visibility", visibility);
+      form.append("allowedUserIds", JSON.stringify(allowedUserIds));
       await appendCompressedPreview(form, file);
       const item = await api("/api/admin/media", { method: "POST", body: form });
       app.media.unshift(item); refreshCoverOptions(); return item;
@@ -1128,13 +1269,14 @@
     }
     /*
      * 修改单张图片的权限。请求会保留它原来的板块、相册、说明和类型，
-     * 只更改 visibility，防止调整权限时意外把照片移出原相册。
+     * 只更改可见范围及白名单，防止调整权限时意外把照片移出原相册。
      */
-    async function updateMediaVisibility(item, control) {
+    async function updateMediaVisibility(item, control, audiencePicker, saveButton) {
       const previous = item.visibility || "public";
       const next = control.value;
-      if (next === previous) return;
-      control.disabled = true;
+      const allowedUserIds = selectedAudienceIds(audiencePicker);
+      if (next === "selected" && !allowedUserIds.length) { alert("请至少勾选一个已审核账号"); return; }
+      control.disabled = true; saveButton.disabled = true;
       try {
         await api(`/api/admin/media/${item.id}`, {
           method: "PUT",
@@ -1145,13 +1287,16 @@
             caption: item.caption,
             kind: item.kind,
             visibility: next,
+            allowedUserIds,
           }),
         });
         item.visibility = next;
+        item.allowed_user_ids = next === "selected" ? allowedUserIds : [];
         renderMedia();
       } catch (error) {
         control.value = previous;
-        control.disabled = false;
+        audiencePicker.classList.toggle("hidden", previous !== "selected");
+        control.disabled = false; saveButton.disabled = false;
         alert(`可见范围保存失败：${error.message}`);
       }
     }
@@ -1168,7 +1313,25 @@
     document.getElementById("section-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("section-id").value;const notice=document.getElementById("section-notice");notice.textContent="正在保存…";try{await api(id?`/api/admin/sections/${id}`:"/api/admin/sections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sectionPayload())});notice.textContent="板块已保存。";resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
     document.getElementById("delete-section").addEventListener("click",async()=>{const id=document.getElementById("section-id").value;const item=app.sections.find(s=>s.id===id);if(!item)return;const warning=`确定删除大板块“${item.name}”吗？\n\n该板块内的文章、评论、相册、图片和 R2 原文件都会一并永久删除，此操作不可撤销。`;if(!confirm(warning))return;await api(`/api/admin/sections/${id}`,{method:"DELETE"});resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadComments();await loadDashboard()});
     document.getElementById("new-content").addEventListener("click",resetContentForm);document.getElementById("refresh-content").addEventListener("click",loadContent);
-    document.getElementById("content-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("content-id").value;const notice=document.getElementById("content-notice");notice.textContent="正在保存…";try{await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(contentPayload())});notice.textContent="已保存。";await loadContent();await loadDashboard();if(!id)resetContentForm()}catch(error){notice.textContent=error.message}});
+    document.getElementById("content-visibility").addEventListener("change",()=>{
+      const picker=document.getElementById("content-user-picker");
+      picker.classList.toggle("hidden",document.getElementById("content-visibility").value!=="selected");
+    });
+    document.getElementById("content-form").addEventListener("submit",async event=>{
+      event.preventDefault();
+      const id=document.getElementById("content-id").value;
+      const notice=document.getElementById("content-notice");
+      const payload=contentPayload();
+      if(payload.visibility==="selected"&&!payload.allowedUserIds.length){
+        notice.textContent="选择“仅指定用户”时，请至少勾选一个已审核账号。";
+        return;
+      }
+      notice.textContent="正在保存…";
+      try{
+        await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        notice.textContent="已保存。";await loadContent();await loadDashboard();if(!id)resetContentForm();
+      }catch(error){notice.textContent=error.message}
+    });
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
     document.querySelectorAll("[data-command]").forEach(b=>b.addEventListener("click",()=>document.execCommand(b.dataset.command,false,null)));document.querySelectorAll("[data-block]").forEach(b=>b.addEventListener("click",()=>document.execCommand("formatBlock",false,b.dataset.block)));
     document.getElementById("insert-link").addEventListener("click",()=>{const url=prompt("链接地址（需要以 https:// 开头）");if(url)document.execCommand("createLink",false,url)});document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
@@ -1180,6 +1343,10 @@
     document.getElementById("new-changelog").addEventListener("click",resetChangelog);document.getElementById("delete-changelog").addEventListener("click",async()=>{const id=document.getElementById("changelog-id").value;if(!id||!confirm("确定删除这条更新记录吗？"))return;await api(`/api/admin/changelogs/${id}`,{method:"DELETE"});resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()});
 
     document.getElementById("media-section").addEventListener("change",()=>{renderAlbums();renderMedia()});
+    document.getElementById("media-visibility").addEventListener("change",()=>{
+      const picker=document.getElementById("media-user-picker");
+      picker.classList.toggle("hidden",document.getElementById("media-visibility").value!=="selected");
+    });
     document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId})});await loadAlbumsAndMedia()});
     document.getElementById("media-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1190,6 +1357,12 @@
       const notice = document.getElementById("media-notice");
       const submit = mediaForm.querySelector("button[type='submit']");
       if (!file) return;
+      const visibility = document.getElementById("media-visibility").value;
+      const allowedUserIds = selectedAudienceIds("media-user-picker");
+      if (visibility === "selected" && !allowedUserIds.length) {
+        notice.textContent = "选择“仅指定用户”时，请至少勾选一个已审核账号。";
+        return;
+      }
       submit.disabled = true;
       try {
         const form = new FormData();
@@ -1198,12 +1371,13 @@
         form.append("albumId", document.getElementById("media-album").value);
         form.append("caption", document.getElementById("media-caption").value);
         form.append("kind", "photo");
-        form.append("visibility", document.getElementById("media-visibility").value);
+        form.append("visibility", visibility);
+        form.append("allowedUserIds", JSON.stringify(allowedUserIds));
         notice.textContent = "正在生成压缩预览…";
         await appendCompressedPreview(form, file, { required: true });
         notice.textContent = "正在上传原片和压缩预览…";
         await api("/api/admin/media", { method: "POST", body: form });
-        mediaForm.reset(); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
+        mediaForm.reset(); syncAudiencePicker("media-visibility","media-user-picker",[]); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
         await loadAlbumsAndMedia(); await loadDashboard();
       } catch (error) {
         notice.textContent = error.message;
@@ -1221,6 +1395,9 @@
     document.getElementById("asset-variant-input").addEventListener("change",async event=>{const file=event.target.files[0];event.target.value="";const target=app.variantTarget;app.variantTarget=null;if(!file||!target)return;try{await uploadAssetFile(file,{assetId:target.item.id,variantLabel:target.label});await loadAssets()}catch(error){document.getElementById("asset-notice").textContent=`版本上传失败：${error.message}`}});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
     document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
+    document.getElementById("refresh-visitors").addEventListener("click",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
+    document.getElementById("visitor-days").addEventListener("change",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
+    document.getElementById("visitor-day").addEventListener("change",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
     document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});
     document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,usage_guide:document.getElementById("setting-usage-guide").value,contact_email:document.getElementById("setting-email").value})});notice.textContent="网站设置已保存，主页使用说明已同步。"}catch(error){notice.textContent=error.message}});
 

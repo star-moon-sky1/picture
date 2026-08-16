@@ -154,6 +154,12 @@
         border-color .24s ease,
         box-shadow .24s ease;
     }
+    /*
+       浏览器放大后可视高度会明显变小。flex 子项默认允许收缩，会把头像区和
+       底部版本信息压扁到看不见，却不会增加 scrollHeight。禁止侧栏直属子项
+       收缩后，头像、全部导航、外观和后台入口会共同进入同一个纵向滚动范围。
+    */
+    .sidebar > * { flex-shrink: 0; }
     .sidebar-toggle {
       width: 40px; height: 40px; flex: 0 0 40px; margin: -11px 0 16px -7px;
       border: 1px solid var(--glass-line); border-radius: 13px; cursor: pointer;
@@ -282,7 +288,7 @@
       box-shadow: 0 11px 25px rgba(74,129,146,.17), inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(45,110,126,.17);
     }
     .sidebar-note {
-      margin-top: 10px; padding-top: 10px; max-height: 86px;
+      margin-top: 10px; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); max-height: 140px;
       font-size: .76rem; line-height: 1.65; color: var(--muted);
       opacity: 1; overflow: hidden; visibility: visible; transform: translateY(0);
       transition:
@@ -585,7 +591,7 @@
     }
 
     /*
-     * 登录入口的照片背景：图片地址只来自 /api/bootstrap 返回的公开照片。
+     * 登录入口的照片背景：图片地址只来自最小背景接口返回的公开照片。
      * object-fit: cover 会让照片始终铺满整个屏幕；当照片比例和屏幕比例不同
      * 时，浏览器会从四周适量裁切。object-position 控制优先保留照片中心区域。
      */
@@ -707,6 +713,12 @@
       text-shadow: none;
     }
     .entry-note { margin: 14px 0 0; color: var(--muted); text-align: center; font-size: .78rem; line-height: 1.55; }
+    .guest-turnstile-wrap {
+      display: grid; place-items: center; width: 100%; min-height: 65px; margin: -3px 0 13px;
+      overflow: hidden; border-radius: 12px;
+    }
+    .guest-turnstile-wrap[hidden] { display: none; }
+    .guest-privacy-note { margin-top: 8px; font-size: .72rem; }
 
     /* =========================================================
        05. 首页版本更新记录
@@ -1239,6 +1251,44 @@
       .image-nav.next { right: 5px; }
     }
 
+    /*
+       桌面浏览器放大时 CSS 视口也会变窄，过去会误触上面的手机布局并把
+       .sidebar-note 直接隐藏。带精细指针（鼠标/触控板）的设备继续保留
+       左侧纵向栏，让头像、昵称、导航、后台入口和版本号都能一起上下滚动。
+    */
+    @media (max-width: 760px) and (any-pointer: fine) {
+      .app-shell { flex-direction: row; }
+      .sidebar {
+        width: 250px; height: 100dvh; max-height: none; flex: 0 0 250px;
+        padding: 34px 22px 24px; border-right: 1px solid rgba(255,255,255,.76);
+        border-bottom: 0; overflow-y: auto; overflow-x: hidden;
+        transition: width .34s cubic-bezier(.22,.72,.18,1),
+                    flex-basis .34s cubic-bezier(.22,.72,.18,1),
+                    padding .34s cubic-bezier(.22,.72,.18,1),
+                    border-color .24s ease, box-shadow .24s ease;
+      }
+      .sidebar-toggle { margin: -11px 0 16px -7px; }
+      .brand { margin: 0 0 28px; gap: 13px; }
+      .avatar-refresh { width: 66px; height: 66px; flex-basis: 66px; }
+      .brand h2 { font-size: 1.28rem; }
+      .brand small, .sidebar-note { display: block; }
+      .nav {
+        display: grid; gap: 7px; max-height: none; opacity: 1;
+        overflow: visible; padding-bottom: 0; transform: none; visibility: visible;
+      }
+      .nav button { width: 100%; flex: 0 0 auto; padding: 11px 13px; text-align: left; font-size: inherit; }
+      .nav-icon { width: 22px; flex: 0 0 22px; }
+      .app-shell.sidebar-collapsed .sidebar {
+        width: 76px; max-height: none; flex: 0 0 76px; padding: 34px 13px 24px;
+      }
+      .app-shell.sidebar-collapsed .sidebar-toggle { margin: -11px 0 16px 5px; }
+      .app-shell.sidebar-collapsed .nav {
+        display: grid; max-height: none; padding-bottom: 0; opacity: 1;
+        transform: none; visibility: visible; pointer-events: auto;
+      }
+      .main { height: 100dvh; flex: 1 1 auto; min-height: 0; }
+    }
+
     @media (max-width: 480px) {
       .resource-grid { grid-template-columns:1fr; }
     }
@@ -1278,11 +1328,14 @@
       </form>
 
       <div class="entry-divider">或者</div>
+      <!-- 仅配置 TURNSTILE_SITE_KEY + Secret 后显示；Token 仍会在 Worker 端二次校验。 -->
+      <div id="guest-turnstile" class="guest-turnstile-wrap" hidden aria-label="游客人机验证"></div>
       <div class="entry-actions">
         <button id="entry-guest" class="btn ghost" type="button">以游客身份浏览</button>
         <a class="btn ghost" href="/login?mode=register&amp;next=/">注册账号</a>
       </div>
       <p class="entry-note">游客可以浏览公开页面；AI 助手和个人空间完整内容仅向审核通过的账号开放。</p>
+      <p class="entry-note guest-privacy-note">游客进入后会记录脱敏 IP、大致城市/地区、浏览器和访问时间，用于安全与按日统计；记录最多保留 90 天。</p>
     </div>
   </section>
 
@@ -1608,6 +1661,13 @@
       pdfLibraryPromise: null,
       bootstrapPromise: null,
       entryBackgroundStarted: false,
+      guestProtection: { enabled: false, incomplete: false, siteKey: "", action: "guest_entry" },
+      guestProtectionPromise: null,
+      turnstileScriptPromise: null,
+      turnstileWidgetId: null,
+      turnstileToken: "",
+      guestVerified: false,
+      guestTrackTimer: null,
       activeSection: "home",
       currentResourceFolder: "",
       activeResourceAsset: null,
@@ -1623,6 +1683,9 @@
       entryScreen.hidden = false;
       appShell.hidden = true;
       document.body.classList.add("entry-active");
+      initializeGuestProtection().catch((error) => {
+        document.getElementById("entry-notice").textContent = error.message;
+      });
     }
 
     function showWebsiteShell() {
@@ -1692,7 +1755,8 @@
     }
 
     /*
-     * 入口背景与网站主体共用一次 bootstrap 请求，避免首次访问重复读取 D1。
+     * bootstrap 只读取通过登录或游客验证后可以看到的网站主体数据；入口背景
+     * 使用更小的 /api/guest/entry-background，避免验证前暴露文章和相册清单。
      * 登录身份发生改变时传入 fresh=true，重新取得该身份可以看到的内容。
      */
     function loadBootstrap({ fresh = false } = {}) {
@@ -1706,19 +1770,75 @@
       return state.bootstrapPromise;
     }
 
-    /* 背景候选必须同时满足：照片公开、所属个人空间大板块也公开。 */
-    function publicPhotoUrls(data) {
-      const publicSectionIds = new Set(
-        (data?.sections || []).filter((section) => section.visibility === "public").map((section) => section.id),
-      );
-      return [...new Set((data?.media || [])
-        .filter((photo) => (
-          photo.kind === "photo"
-          && photo.visibility === "public"
-          && publicSectionIds.has(photo.section_id)
-        ))
-        .map((photo) => photo.previewUrl || photo.url)
-        .filter(Boolean))];
+    /* 背景接口已经在服务端筛掉非公开照片，这里只去重并提取预览地址。 */
+    function entryPhotoUrls(data) {
+      return [...new Set((data?.photos || []).map((photo) => photo.url).filter(Boolean))];
+    }
+
+    /*
+     * Turnstile 使用显式渲染：只有 Worker 返回已配置时才加载 Cloudflare 脚本。
+     * 前端 callback 取得的 Token 不能单独视为通过，游客入口还会把它提交给
+     * /api/guest/enter，由 Worker 调用 Siteverify 进行不可绕过的服务端校验。
+     */
+    function loadTurnstileScript() {
+      if (globalThis.turnstile) return Promise.resolve(globalThis.turnstile);
+      if (!state.turnstileScriptPromise) {
+        state.turnstileScriptPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+          script.async = true; script.defer = true;
+          script.onload = () => globalThis.turnstile ? resolve(globalThis.turnstile) : reject(new Error("人机验证组件未正确初始化"));
+          script.onerror = () => reject(new Error("人机验证组件加载失败，请检查网络或拦截扩展"));
+          document.head.append(script);
+        }).catch((error) => {
+          state.turnstileScriptPromise = null;
+          throw error;
+        });
+      }
+      return state.turnstileScriptPromise;
+    }
+
+    async function initializeGuestProtection() {
+      if (state.guestProtectionPromise) return state.guestProtectionPromise;
+      state.guestProtectionPromise = (async () => {
+        const config = await api("/api/guest/config");
+        state.guestProtection = config;
+        if (config.incomplete) throw new Error("网站的人机验证配置不完整，请联系站长");
+        if (!config.enabled) return config;
+        const host = document.getElementById("guest-turnstile");
+        host.hidden = false;
+        const turnstile = await loadTurnstileScript();
+        state.turnstileWidgetId = turnstile.render(host, {
+          sitekey: config.siteKey,
+          action: config.action || "guest_entry",
+          theme: "auto",
+          size: "flexible",
+          callback(token) {
+            state.turnstileToken = token;
+            document.getElementById("entry-notice").textContent = "人机验证已通过，可以进入游客模式。";
+          },
+          "expired-callback"() {
+            state.turnstileToken = "";
+            document.getElementById("entry-notice").textContent = "验证已过期，请重新完成验证。";
+          },
+          "error-callback"() {
+            state.turnstileToken = "";
+            document.getElementById("entry-notice").textContent = "人机验证失败，请刷新或更换网络后重试。";
+          },
+        });
+        return config;
+      })().catch((error) => {
+        state.guestProtectionPromise = null;
+        throw error;
+      });
+      return state.guestProtectionPromise;
+    }
+
+    function resetGuestTurnstile() {
+      state.turnstileToken = "";
+      if (globalThis.turnstile && state.turnstileWidgetId !== null) {
+        globalThis.turnstile.reset(state.turnstileWidgetId);
+      }
     }
 
     /*
@@ -1760,7 +1880,7 @@
     }
 
     async function initializeEntryPhotoBackground() {
-      try { startEntryPhotoBackground(publicPhotoUrls(await loadBootstrap())); }
+      try { startEntryPhotoBackground(entryPhotoUrls(await api("/api/guest/entry-background"))); }
       catch { /* 没有照片或数据服务暂时失败时继续使用 CSS 渐变背景。 */ }
     }
 
@@ -1891,10 +2011,26 @@
       else if (history.state?.xingyuejiSection !== id || location.hash !== `#${id}`) history.pushState(value, "", address);
     }
 
+    /* 同一游客的页面切换合并为短延迟写入，快速连点不会向 D1 产生重复请求。 */
+    function scheduleGuestSectionTrack(section) {
+      if (!state.guestVerified || state.auth.authenticated) return;
+      window.clearTimeout(state.guestTrackTimer);
+      state.guestTrackTimer = window.setTimeout(() => {
+        api("/api/guest/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ section }),
+        }).catch(() => { /* 统计失败不应打断游客浏览。 */ });
+      }, 420);
+    }
+
     function navigateSection(id, { historyMode = "push", animate = true } = {}) {
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
-      if (showSection(id, { animate })) updateSectionHistory(id, historyMode);
+      if (showSection(id, { animate })) {
+        updateSectionHistory(id, historyMode);
+        scheduleGuestSectionTrack(id);
+      }
     }
 
     /* ---------- 04. 首页最新日志 + 下一级完整历史。 ---------- */
@@ -2821,6 +2957,7 @@
         state.publicFeedback = feedbackData.feedback || [];
         state.siteLoaded = true;
         applySettings(); renderChangelogs(); renderPortfolio(); renderResources(); renderFeedback(); renderAccount();
+        if (initialSection.target !== "home") scheduleGuestSectionTrack(initialSection.target);
 
         /*
          * 上面的 initialSection 已在网站主体显示前完成恢复。此处仅处理权限
@@ -3004,6 +3141,7 @@
           }),
         });
         notice.textContent = "登录成功，正在进入网站…";
+        state.guestVerified = false;
         // 登录前缓存的是游客数据；清除后重新读取，才能显示该账号的会员内容。
         state.bootstrapPromise = null;
         state.siteLoaded = false;
@@ -3019,9 +3157,26 @@
       const button = event.currentTarget;
       const notice = document.getElementById("entry-notice");
       button.disabled = true;
-      notice.textContent = "正在以游客身份进入…";
-      try { await boot({ enterAsGuest: true }); }
-      finally { button.disabled = false; }
+      try {
+        const protection = await initializeGuestProtection();
+        if (protection.enabled && !state.turnstileToken) {
+          notice.textContent = "请先完成人机验证。";
+          return;
+        }
+        notice.textContent = protection.enabled ? "正在核验并进入游客模式…" : "正在以游客身份进入…";
+        await api("/api/guest/enter", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitorId, turnstileToken: state.turnstileToken }),
+        });
+        state.guestVerified = true;
+        state.bootstrapPromise = null;
+        state.siteLoaded = false;
+        await boot({ enterAsGuest: true });
+      } catch (error) {
+        notice.textContent = error.message;
+        resetGuestTurnstile();
+      } finally { button.disabled = false; }
     });
 
     document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.section)));

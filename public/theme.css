@@ -283,6 +283,12 @@
 :root[data-theme="dark"] .user-note,
 :root[data-theme="dark"] .feedback-reply-editor,
 :root[data-theme="dark"] .reset-link { background: #102229; }
+:root[data-theme="dark"] .audience-picker {
+  color: var(--ink); border-color: var(--line); background: #102229;
+}
+:root[data-theme="dark"] .audience-option {
+  color: var(--ink); background: rgba(31,58,67,.78);
+}
 
 @media (max-width: 620px) {
   .home-heading-row { align-items: center; }

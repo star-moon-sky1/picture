@@ -123,3 +123,30 @@ https://xingyueji.com.cn/api/qq/events
 - 用户忘记密码时提交预留联系方式；站长核实身份后点击“生成链接”，把链接通过原联系方式发给用户。
 - 重置链接有效期为24小时且只能使用一次；重新生成、成功重置或用户再次申请都会使旧链接失效。
 - Studio 永远不会显示用户原始密码或密码哈希。
+
+## 游客反机器人验证与访问统计
+
+代码已经接好 Cloudflare Turnstile 的前端组件与 Worker 服务端 Siteverify。只有前端出现“验证通过”
+并不算完成，Worker 还会再次向 Cloudflare 校验 Token；验证 Token 过期、重复使用或来源域名不匹配
+都会被拒绝。
+
+1. 在 Cloudflare 控制台打开 **Turnstile**，新建一个 Managed 小组件。
+2. Hostname 只填写网站实际域名，例如 `xingyueji.com.cn`；如果同时使用 `www`，也把该域名加入。
+3. 复制 Site Key 和 Secret Key。
+4. 打开 Worker → **Settings → Variables and Secrets**，新增：
+   - 普通变量 `TURNSTILE_SITE_KEY`：填写 Site Key；
+   - 加密 Secret `TURNSTILE_SECRET_KEY`：填写 Secret Key；
+   - 普通变量 `TURNSTILE_HOSTNAMES`：填写允许的域名，多个域名用英文逗号分隔；
+   - 推荐加密 Secret `SESSION_SECRET`：填写一串独立随机字符，用于签发游客会话。
+5. 保存并重新部署。访问 `/api/health`，确认 `guestProtection.turnstileConfigured` 为 `true`。
+
+如果 Site Key 和 Secret Key 都没有配置，网站不会中断游客访问，但只会启用 IP 频率限制；如果只配置
+其中一个，入口会提示配置不完整，避免出现看似验证、实际上未验证的状态。
+
+游客通过后，D1 的 `guest_visits` 表会按日保存：匿名浏览器编号、脱敏 IP、IP 摘要、国家/省州/城市、
+网络运营组织、浏览器、来源域名、首次/最近访问时间、进入次数、页面浏览数和最后访问板块。后台
+`/studio` →“游客统计”可以查看每日汇总和单个浏览器的明细。完整 IP 和精确住址不会保存；定位信息
+只来自 Cloudflare 的 IP 级大致定位。明细默认保存 90 天，并自动清理更早的数据。
+
+统计日默认按 `Asia/Shanghai` 汇总。如需修改，在 Variables 中添加普通变量 `ANALYTICS_TIMEZONE`，
+值填写 IANA 时区名称。
