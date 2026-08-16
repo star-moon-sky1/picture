@@ -277,13 +277,13 @@
     .status-badge.rejected, .status-badge.disabled { background: #fde9e8; color: #984341; }
     .success-box { padding: 22px; border: 1px solid rgba(215,255,237,.72); border-radius: 16px; background: rgba(240,250,245,.065); line-height: 1.8; backdrop-filter: blur(2px); }
 
-    /* 登录与注册页使用更短的按压、单次回弹，完整过程约 0.28 秒。 */
+    /* 登录与注册页与主页共用“快速按下、较柔和的单次回弹”节奏。 */
     :is(button, a.btn, .home-link) { transform-origin: center; will-change: transform; }
-    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(1px) scale(.95) !important; transition-duration: .055s !important; }
-    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .28s cubic-bezier(.16,.82,.24,1) both !important; }
+    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(1px) scale(.965) !important; transition-duration: .038s !important; }
+    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .38s cubic-bezier(.16,.78,.22,1) both !important; }
     @keyframes auth-control-single-rebound {
-      0% { transform: translateY(1px) scale(.95); }
-      56% { transform: translateY(-1px) scale(1.055); }
+      0% { transform: translateY(1px) scale(.965); }
+      58% { transform: translateY(-1px) scale(1.04); }
       100% { transform: none; }
     }
     /* 松手后短暂加深按钮颜色，随后恢复；步骤指示器会持续保留 active 颜色。 */
@@ -293,11 +293,10 @@
     }
 
     /*
-       点击释放的白光不是描边圆环，而是由三个偏心光团叠成的不规则扩散。
-       它会在约 0.42 秒内散开，保留光感但不再拖慢按钮反馈。
+       白光在按下时立刻出现，而不是等松手；范围较小，不会遮住相邻表单。
     */
     .harmony-light-bloom {
-      --bloom-size: 96px;
+      --bloom-size: 72px;
       position: fixed; z-index: 2147483646; left: 0; top: 0;
       width: var(--bloom-size); height: var(--bloom-size);
       border-radius: 46% 54% 58% 42% / 52% 42% 58% 48%;
@@ -308,7 +307,7 @@
         radial-gradient(ellipse at 66% 35%, rgba(255,255,255,.54), transparent 52%),
         radial-gradient(ellipse at 29% 70%, rgba(229,251,255,.44), transparent 54%);
       filter: blur(1.8px); mix-blend-mode: screen;
-      animation: auth-light-diffuse .42s cubic-bezier(.12,.68,.18,1) both;
+      animation: auth-light-diffuse .36s cubic-bezier(.12,.68,.18,1) both;
     }
     .harmony-light-bloom::before,
     .harmony-light-bloom::after {
@@ -318,9 +317,9 @@
     .harmony-light-bloom::before { inset: 18% -13% 4% 31%; transform: rotate(23deg); }
     .harmony-light-bloom::after { inset: 35% 29% -12% -9%; transform: rotate(-31deg); }
     @keyframes auth-light-diffuse {
-      0% { opacity: .94; transform: translate(-50%, -50%) scale(.16) rotate(-5deg); }
-      46% { opacity: .50; transform: translate(-50%, -50%) scale(1.34) rotate(5deg); }
-      100% { opacity: 0; transform: translate(-50%, -50%) scale(2.55, 2.25) rotate(9deg); filter: blur(6px); }
+      0% { opacity: .78; transform: translate(-50%, -50%) scale(.20) rotate(-5deg); }
+      48% { opacity: .40; transform: translate(-50%, -50%) scale(.92) rotate(4deg); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1.55, 1.42) rotate(7deg); filter: blur(3px); }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -532,7 +531,7 @@
       const hasPointerPoint = Number.isFinite(point?.x) && Number.isFinite(point?.y);
       const x = hasPointerPoint ? point.x : rect.left + rect.width / 2;
       const y = hasPointerPoint ? point.y : rect.top + rect.height / 2;
-      const bloomSize = Math.min(190, Math.max(64, Math.max(rect.width, rect.height) * 1.12));
+      const bloomSize = Math.min(118, Math.max(48, Math.max(rect.width, rect.height) * .82));
       const bloom = document.createElement("span");
       bloom.className = "harmony-light-bloom";
       bloom.style.left = `${x}px`;
@@ -541,7 +540,7 @@
       bloom.setAttribute("aria-hidden", "true");
       document.body.append(bloom);
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 560);
+      window.setTimeout(() => bloom.remove(), 460);
     }
 
     /* 所有静态和后续动态生成的按钮统一播放单次回弹与白光扩散。 */
@@ -556,11 +555,10 @@
         if (!control) return;
         control.classList.remove("is-control-pressed");
         if (reducedMotion.matches || !canAnimate(control)) return;
-        emitHarmonyLightBloom(control, point);
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 320);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 430);
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
@@ -569,6 +567,7 @@
         pressedPoint = { x: event.clientX, y: event.clientY };
         control.classList.remove("control-bounce-release");
         control.classList.add("is-control-pressed");
+        emitHarmonyLightBloom(control, pressedPoint);
       });
       window.addEventListener("pointerup", (event) => {
         const point = Number.isFinite(event.clientX) ? { x: event.clientX, y: event.clientY } : pressedPoint;
@@ -584,7 +583,10 @@
       document.addEventListener("keydown", (event) => {
         if (!['Enter', ' '].includes(event.key) || event.repeat) return;
         const control = findControl(event.target);
-        if (canAnimate(control)) control.classList.add("is-control-pressed");
+        if (canAnimate(control)) {
+          control.classList.add("is-control-pressed");
+          emitHarmonyLightBloom(control);
+        }
       });
       document.addEventListener("keyup", (event) => {
         if (['Enter', ' '].includes(event.key)) release(findControl(event.target));
@@ -596,8 +598,8 @@
         const destination = new URL(link.href, location.href);
         if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
         event.preventDefault();
-        /* 140ms 足够看清按压反馈，同时不会产生“点了却迟迟不跳转”的感觉。 */
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 140);
+        /* 72ms 足够看清按下反馈，同时让登录/返回链接更快响应。 */
+        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 72);
       });
     }
 

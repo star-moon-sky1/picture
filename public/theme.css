@@ -43,7 +43,7 @@
   }
 }
 
-/* =========================== 主页主题选择器 =========================== */
+/* =========================== 侧边栏主题选择器 =========================== */
 .home-heading-row {
   display: flex;
   align-items: flex-start;
@@ -52,6 +52,30 @@
 }
 .home-heading-row > h1 { margin-right: auto; }
 .theme-picker { position: relative; z-index: 12; flex: 0 0 auto; }
+.sidebar-theme-slot {
+  width: 100%; margin-top: auto; padding-top: 18px;
+  display: grid; gap: 7px; opacity: 1; visibility: visible;
+  transition: padding .28s ease, opacity .18s ease, transform .28s cubic-bezier(.22,.72,.18,1);
+}
+.sidebar-theme-title {
+  display: block; max-width: 150px; overflow: hidden;
+  color: var(--muted); font-size: .72rem; font-weight: 800;
+  letter-spacing: .10em; white-space: nowrap; opacity: 1;
+  transition: max-width .27s cubic-bezier(.22,.72,.18,1), opacity .16s ease, transform .27s cubic-bezier(.22,.72,.18,1);
+}
+.sidebar-theme-picker { width: 100%; }
+.sidebar-theme-picker .theme-toggle { width: 100%; }
+/* 侧栏底部空间有限，菜单向上展开，避免被视口底部裁切。 */
+.sidebar-theme-picker .theme-menu { top: auto; right: auto; bottom: calc(100% + 9px); left: 0; }
+.app-shell.sidebar-collapsed .sidebar-theme-slot { padding-top: 14px; justify-items: center; }
+.app-shell.sidebar-collapsed .sidebar-theme-title {
+  max-width: 0; opacity: 0; transform: translateX(-7px);
+}
+.app-shell.sidebar-collapsed .sidebar-theme-picker { width: 44px; }
+.app-shell.sidebar-collapsed .sidebar-theme-picker .theme-toggle { width: 44px; padding-inline: 0; }
+.app-shell.sidebar-collapsed .sidebar-theme-picker [data-theme-label] {
+  display: inline-block; max-width: 0; opacity: 0; overflow: hidden;
+}
 .theme-toggle {
   min-width: 44px;
   min-height: 44px;
@@ -69,7 +93,10 @@
   backdrop-filter: blur(16px) saturate(1.18);
 }
 .theme-toggle [data-theme-icon] { font-size: 1.1rem; line-height: 1; }
-.theme-toggle [data-theme-label] { font-size: .78rem; font-weight: 800; }
+.theme-toggle [data-theme-label] {
+  max-width: 110px; font-size: .78rem; font-weight: 800; opacity: 1; white-space: nowrap;
+  transition: max-width .24s ease, opacity .16s ease;
+}
 .theme-menu {
   position: absolute;
   top: calc(100% + 9px);
@@ -120,6 +147,8 @@
   border-color: rgba(174,221,227,.20);
   background: rgba(72,126,143,.18);
   box-shadow: var(--glass-shadow);
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
 }
 :root[data-theme="dark"] :is(.nav button.active, .tab-button.active) {
   color: #ecfbfd;
@@ -131,6 +160,69 @@
   border-color: var(--line);
   background: var(--paper);
 }
+/*
+ * “本站使用说明”的正文原本在主页样式中固定为深蓝灰色，夜览时不会继承
+ * --ink，因而形成深底深字。这里显式覆盖正文和标题，并去掉文字阴影。
+ */
+:root[data-theme="dark"] .usage-guide {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(91,157,170,.15), transparent 42%),
+    linear-gradient(145deg, rgba(22,43,51,.94), rgba(13,29,36,.90));
+  box-shadow: 0 18px 48px rgba(0,0,0,.28), inset 0 1px 0 rgba(210,245,249,.10);
+}
+:root[data-theme="dark"] .usage-guide h2 {
+  color: #f2f8f9; text-shadow: none; -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="dark"] .usage-guide p {
+  color: #d9e8eb; text-shadow: none; -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * 更新预览及历史记录的内层卡片在原样式中使用固定白色；夜览必须逐层覆盖，
+ * 仅修改外层 .updates 不足以消除里面每一条日志的白色底板。
+ */
+:root[data-theme="dark"] .updates {
+  color: var(--ink);
+  border-color: rgba(166,218,225,.20);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(82,151,165,.16), transparent 40%),
+    linear-gradient(145deg, rgba(21,42,50,.92), rgba(12,28,34,.88));
+  box-shadow: 0 16px 42px rgba(0,0,0,.27), inset 0 1px 0 rgba(207,244,248,.10);
+}
+:root[data-theme="dark"] .timeline-item,
+:root[data-theme="dark"] .updates .timeline-item {
+  color: var(--ink);
+  border-color: rgba(157,210,217,.17);
+  background: rgba(20,39,47,.88);
+  box-shadow: inset 0 1px 0 rgba(207,244,248,.07);
+}
+:root[data-theme="dark"] .timeline-item h3 { color: #edf6f7; text-shadow: none; }
+:root[data-theme="dark"] .timeline-item p { color: var(--muted); text-shadow: none; }
+:root[data-theme="dark"] .updates-more {
+  color: #c7edf1;
+  border-color: rgba(157,215,222,.22);
+  background: rgba(48,104,118,.32);
+  box-shadow: inset 0 1px 0 rgba(211,246,250,.10);
+}
+
+/* 蓝青主按钮在夜览中使用高对比浅色文字，避免深色字与半透明蓝底混在一起。 */
+:root[data-theme="dark"] :is(.app-shell .btn, dialog .btn, .entry-primary) {
+  color: #f2fbfc;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="dark"] :is(.app-shell .btn.ghost, dialog .btn.ghost) { color: var(--ink); }
+:root[data-theme="dark"] :is(.app-shell .btn.light, dialog .btn.light) { color: #c7edf1; }
+:root[data-theme="dark"] :is(.auth-card .btn, .login-card .btn, .workspace .btn, .resource-picker .btn) {
+  color: #f2fbfc;
+  text-shadow: none;
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-theme="dark"] :is(.auth-card .btn.ghost, .login-card .btn.ghost, .workspace .btn.ghost, .workspace .btn.secondary, .resource-picker .btn.ghost) {
+  color: var(--ink);
+}
+:root[data-theme="dark"] :is(.login-card .btn.danger, .workspace .btn.danger) { color: #ffe0dc; }
+:root[data-theme="dark"] :is(.step.active .step-number, .step.done .step-number) { color: #effbfc; }
 :root[data-theme="dark"] :is(.feedback-form input, .feedback-form textarea, .feedback-form select, .account-form input, .comment-form input, .comment-form textarea, .reply-form input) {
   color: var(--ink);
   border-color: var(--line);
@@ -197,4 +289,21 @@
   .theme-toggle [data-theme-label] { display: none; }
   .theme-toggle { width: 44px; padding-inline: 0; }
   .theme-menu { position: fixed; top: auto; right: max(12px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(220px, calc(100vw - 24px)); }
+}
+
+@media (max-width: 760px) {
+  /* 手机端侧栏是顶部玻璃栏，主题按钮固定在其右上角。 */
+  .sidebar-theme-slot {
+    position: absolute; top: max(12px, env(safe-area-inset-top)); right: 13px;
+    width: 44px; margin: 0; padding: 0; display: block;
+  }
+  .sidebar-theme-title,
+  .sidebar-theme-picker [data-theme-label] { display: none; }
+  .sidebar-theme-picker,
+  .sidebar-theme-picker .theme-toggle { width: 44px; }
+  .sidebar-theme-picker .theme-toggle { padding-inline: 0; }
+  .sidebar-theme-picker .theme-menu {
+    position: absolute; top: calc(100% + 8px); left: auto; right: 0; bottom: auto;
+    width: min(220px, calc(100vw - 24px));
+  }
 }
