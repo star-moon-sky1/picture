@@ -3,6 +3,12 @@
   "name": "xingyueji",
   "main": "src/worker.js",
   "compatibility_date": "2026-08-06",
+
+  // 保留在 Cloudflare 控制台中配置的普通环境变量。
+  // 如果不启用该选项，Git 自动部署 Worker 时会用本文件的配置覆盖控制台变量，
+  // 例如 TURNSTILE_SITE_KEY 会在一次部署后消失；Secret 类型变量不受此项影响。
+  "keep_vars": true,
+
   "observability": {
     "enabled": true
   },
