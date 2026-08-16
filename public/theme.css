@@ -32,7 +32,6 @@
 
 @media (prefers-reduced-motion: no-preference) {
   :root[data-theme-ready="true"] body,
-  :root[data-theme-ready="true"] .sidebar,
   :root[data-theme-ready="true"] .panel,
   :root[data-theme-ready="true"] .content-card,
   :root[data-theme-ready="true"] .reader-wrap,
@@ -40,6 +39,23 @@
   :root[data-theme-ready="true"] textarea,
   :root[data-theme-ready="true"] select {
     transition: var(--theme-transition);
+  }
+
+  /*
+   * 侧边栏同时承担主题换色与展开/收起。不能复用上面的 transition 简写，
+   * 否则会把 index.html 中的 width/max-height 动画覆盖掉，造成瞬间跳变。
+   * 桌面端使用 width/flex-basis，手机端使用 max-height；统一为 0.46 秒。
+   */
+  :root[data-theme-ready="true"] .sidebar {
+    transition:
+      width .46s cubic-bezier(.22,.72,.18,1),
+      flex-basis .46s cubic-bezier(.22,.72,.18,1),
+      max-height .46s cubic-bezier(.22,.72,.18,1),
+      padding .46s cubic-bezier(.22,.72,.18,1),
+      background-color .18s ease,
+      color .18s ease,
+      border-color .18s ease,
+      box-shadow .18s ease;
   }
 }
 
