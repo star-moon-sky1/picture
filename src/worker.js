@@ -908,7 +908,7 @@ async function publicBootstrap(request, env) {
     `).all(),
     env.DB.prepare(`
       SELECT id, type, section_id, title, slug, excerpt, cover_media_id, visibility,
-             published_at, like_count, dislike_count
+             published_at, created_at, updated_at, like_count, dislike_count
       FROM content
       WHERE status = 'published'
       ORDER BY published_at DESC, created_at DESC
@@ -995,7 +995,8 @@ async function publicBootstrap(request, env) {
 async function getPublicContent(request, env, id) {
   const item = await env.DB.prepare(`
     SELECT c.id, c.type, c.section_id, c.title, c.slug, c.excerpt, c.body_html,
-           c.cover_media_id, c.published_at, c.like_count, c.dislike_count, c.visibility,
+           c.cover_media_id, c.published_at, c.created_at, c.updated_at,
+           c.like_count, c.dislike_count, c.visibility,
            s.name AS section_name, s.visibility AS section_visibility
     FROM content c LEFT JOIN portfolio_sections s ON s.id = c.section_id
     WHERE c.id = ? AND c.status = 'published'
