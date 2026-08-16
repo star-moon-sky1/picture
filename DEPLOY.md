@@ -12,7 +12,10 @@
 └─ public
    ├─ index.html
    ├─ login.html
-   └─ studio.html
+   ├─ studio.html
+   ├─ document-viewer.html
+   ├─ theme.css
+   └─ theme.js
 ```
 
 `worker.js` 位于 `src` 目录，`wrangler.jsonc` 中的 `main` 必须写成 `src/worker.js`。
@@ -21,7 +24,8 @@
 ## 使用 GitHub 网页更新
 
 1. 进入仓库的 `src` 文件夹，上传并替换 `worker.js`；配置改动时再替换根目录的 `wrangler.jsonc`。
-2. 点击仓库中的 `public` 文件夹，上传并替换 `index.html`、`login.html` 和 `studio.html`。
+2. 点击仓库中的 `public` 文件夹，上传并替换 `index.html`、`login.html`、`studio.html`、
+   `document-viewer.html`、`theme.css` 和 `theme.js`。
 3. 每次上传后点击绿色的 **Commit changes**。
 4. 打开 Cloudflare 的 `xingyueji` Worker，进入 **Deployments**，等待最新部署显示成功。
 
@@ -38,7 +42,7 @@ https://xingyueji.com.cn/api/health
 ```json
 {
   "ok": true,
-  "version": "1.9.0.0",
+  "version": "2.1.0.0",
   "bindings": {
     "DB": true,
     "BUCKET": true,
@@ -48,7 +52,16 @@ https://xingyueji.com.cn/api/health
 }
 ```
 
-如果访问 `/api/health` 得到 404，或者没有显示 `1.9.0.0`，说明 Cloudflare 仍在运行旧部署。
+如果访问 `/api/health` 得到 404，或者没有显示 `2.1.0.0`，说明 Cloudflare 仍在运行旧部署。
+
+## 文件资源库部署检查
+
+- `wrangler.jsonc` 的静态资源配置必须包含 `"/files/*"` 的 `run_worker_first`，否则文件请求会被静态资源层截获。
+- R2 绑定名称仍为 `BUCKET`，不需要再创建第二个存储桶。
+- D1 会自动建立 `asset_folders`、`assets`、`asset_variants` 和 `asset_uploads` 表。
+- 第一次部署后先访问一次 `/api/health`，再打开 Studio；这会先完成数据库升级。
+- 视频自动转码不是 R2 本身的能力。未开通 Cloudflare Stream 时，在 Studio 手动上传各清晰度版本；
+  开通后可给视频填写 Stream HLS 地址以使用自适应画质。各清晰度独立下载仍使用上传到 R2 的版本文件。
 
 ## 留言消息通知（可选）
 

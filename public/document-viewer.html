@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>文档预览 · 星月集</title>
+  <!-- 在首帧绘制前应用用户的白天/夜览选择，避免 iframe 先白后黑。 -->
+  <script src="/theme.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    :root{--ink:#1d3037;--muted:#6e7d83;--line:#dfe7e8;--paper:#fff;--cyan:#31bfc8;--font-ui:ui-rounded,"SF Pro Rounded","HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+    html,body{margin:0;min-height:100%;font-family:var(--font-ui);color:var(--ink);background:#eef3f2}
+    body{padding:clamp(12px,3vw,34px)}
+    .shell{width:min(920px,100%);margin:auto;border:1px solid var(--line);border-radius:20px;background:var(--paper);box-shadow:0 18px 55px rgba(28,59,68,.12);overflow:hidden}
+    header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px clamp(18px,4vw,38px);border-bottom:1px solid var(--line)}
+    h1{margin:0;font-size:clamp(1.25rem,4vw,2rem);overflow-wrap:anywhere}header p{margin:7px 0 0;color:var(--muted);font-size:.8rem}
+    .download{display:none;flex:0 0 auto;padding:9px 13px;border:1px solid rgba(255,255,255,.75);border-radius:12px;color:#183940;background:rgba(49,159,179,.45);text-decoration:none;font-weight:800}
+    #status{padding:36px;color:var(--muted);text-align:center;line-height:1.8}
+    #document{padding:clamp(24px,6vw,64px);font-family:"HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;font-size:1rem;line-height:1.9;overflow-wrap:anywhere}
+    #document:empty{display:none}#document img{display:block;max-width:100%;height:auto;margin:20px auto}#document table{display:block;max-width:100%;overflow:auto;border-collapse:collapse}#document td,#document th{border:1px solid var(--line);padding:8px}#document pre{overflow:auto;padding:14px;border-radius:10px;background:#edf3f2}#document a{color:#217fba}
+    @media(max-width:560px){body{padding:0}.shell{border:0;border-radius:0;min-height:100dvh}header{position:sticky;top:0;z-index:2;background:var(--paper)}}
+  </style>
+  <link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div><h1 id="title">正在读取文档…</h1><p id="meta"></p></div>
+      <a id="download" class="download" download>下载原文件</a>
+    </header>
+    <div id="status">正在加载 Word 文档组件和文件内容…</div>
+    <article id="document"></article>
+  </main>
+  <script>
+    const statusNode=document.getElementById("status");
+    function fail(message){statusNode.hidden=false;statusNode.textContent=message}
+    async function json(path){const response=await fetch(path);const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||`请求失败（${response.status}）`);return data}
+    function loadMammoth(){
+      if(window.mammoth)return Promise.resolve(window.mammoth);
+      return new Promise((resolve,reject)=>{const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/mammoth@1.10.0/mammoth.browser.min.js";script.referrerPolicy="no-referrer";script.onload=()=>window.mammoth?resolve(window.mammoth):reject(new Error("Word 解析组件没有正确加载"));script.onerror=()=>reject(new Error("Word 解析组件加载失败，请检查网络或让站长上传 PDF 预览版本"));document.head.append(script)});
+    }
+    function sanitizedDocument(html){
+      const template=document.createElement("template");template.innerHTML=String(html||"");
+      template.content.querySelectorAll("script,style,iframe,object,embed,form,input,button,textarea,select,svg").forEach(node=>node.remove());
+      template.content.querySelectorAll("*").forEach(node=>{
+        [...node.attributes].forEach(attribute=>{
+          const name=attribute.name.toLowerCase();const value=attribute.value.trim();
+          if(name.startsWith("on")||name==="style")node.removeAttribute(attribute.name);
+          if((name==="href"||name==="src")&&!value.startsWith("data:")&&!value.startsWith("#")&&!/^https:\/\//i.test(value)&&!/^mailto:|^tel:/i.test(value))node.removeAttribute(attribute.name);
+        });
+      });
+      return template.content;
+    }
+    async function start(){
+      const assetId=new URLSearchParams(location.search).get("asset")||"";
+      if(!/^[A-Za-z0-9_-]{1,80}$/.test(assetId)){fail("文档地址无效。");return}
+      try{
+        const bootstrap=await json("/api/bootstrap");const asset=(bootstrap.assets||[]).find(item=>item.id===assetId);
+        if(!asset)throw new Error("文档不存在，或当前账号没有访问权限");
+        document.getElementById("title").textContent=asset.display_name;document.title=`${asset.display_name} · 星月集`;
+        document.getElementById("meta").textContent=`WORD · ${(Number(asset.size_bytes)/1024/1024).toFixed(2)} MiB`;
+        const download=document.getElementById("download");if(asset.downloadUrl){download.href=asset.downloadUrl;download.style.display="inline-flex"}
+        if(!/\.docx$/i.test(asset.filename||""))throw new Error("旧版 .doc 无法在浏览器中安全解析，请下载原件，或让站长在 Studio 上传 PDF 预览版本。");
+        const [mammoth,response]=await Promise.all([loadMammoth(),fetch(asset.url)]);if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.error||`文档读取失败（${response.status}）`)}
+        const result=await mammoth.convertToHtml({arrayBuffer:await response.arrayBuffer()});
+        const documentNode=document.getElementById("document");documentNode.replaceChildren(sanitizedDocument(result.value));statusNode.hidden=true;
+        if(result.messages?.length)console.info("Word preview conversion notes",result.messages);
+      }catch(error){fail(error.message)}
+    }
+    start();
+  </script>
+</body>
+</html>

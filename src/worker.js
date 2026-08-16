@@ -1,10 +1,10 @@
 /*
  * 星月集 Cloudflare Worker
  * ------------------------------------------------------------
- * 负责 D1 数据库、R2 图片、后台登录、评论互动和 AI 转发。
+ * 负责 D1 数据库、R2 图片与大文件、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "1.9.0.0";
+const APP_VERSION = "2.1.0.0";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_COOKIE = "xyj_user";
@@ -22,6 +22,17 @@ const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 // 预览件由站长后台在浏览器中压缩为 WebP；限制体积可避免伪装文件占用 R2。
 const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+/*
+ * 通用文件不再经过 request.formData() 整体读入 Worker，而是使用 R2 multipart
+ * API 逐片写入。每片默认由 Studio 切成 32MiB，并在服务端限制为 95MiB，
+ * 因而低于 Cloudflare Free/Pro 的 100MB 单次请求上限。
+ */
+const MAX_ASSET_BYTES = 4.995 * 1024 * 1024 * 1024 * 1024;
+const MAX_UPLOAD_PART_BYTES = 95 * 1024 * 1024;
+const MAX_UPLOAD_PARTS = 10_000;
+const ASSET_UPLOAD_TTL_SECONDS = 60 * 60 * 24;
+const VIDEO_QUALITY_LABELS = new Set(["360p", "480p", "720p", "1080p"]);
+const ASSET_VARIANT_LABELS = new Set(["preview", ...VIDEO_QUALITY_LABELS]);
 
 /*
  * “本站使用说明”的初始正文只保存在数据层，不再硬编码进 index.html。
@@ -116,6 +127,45 @@ function normalizedVisibility(value) {
   return value === "member" || value === "private" ? value : "public";
 }
 
+function normalizedDownloadPolicy(value) {
+  return value === "public" ? "public" : "member";
+}
+
+function normalizedAssetKind(value, mimeType = "", filename = "") {
+  const explicit = String(value || "").toLowerCase();
+  if (["file", "pdf", "word", "archive", "video", "audio"].includes(explicit)) return explicit;
+  const mime = String(mimeType || "").toLowerCase();
+  const extension = String(filename || "").toLowerCase().match(/\.([a-z0-9]{1,12})$/)?.[1] || "";
+  if (mime === "application/pdf" || extension === "pdf") return "pdf";
+  if (mime.includes("wordprocessingml") || mime === "application/msword" || ["doc", "docx"].includes(extension)) return "word";
+  if (mime.startsWith("video/") || ["mp4", "mov", "mkv", "webm", "avi", "m4v"].includes(extension)) return "video";
+  if (mime.startsWith("audio/") || ["mp3", "m4a", "wav", "flac", "aac", "ogg"].includes(extension)) return "audio";
+  if (["zip", "rar", "7z", "tar", "gz", "bz2", "xz"].includes(extension)
+    || ["application/zip", "application/x-7z-compressed", "application/vnd.rar"].includes(mime)) return "archive";
+  return "file";
+}
+
+function safeAssetFilename(value) {
+  const normalized = String(value || "")
+    .normalize("NFKC")
+    .replace(/[\\/\u0000-\u001f:*?"<>|]+/g, "-")
+    .replace(/^\.+|\.+$/g, "")
+    .trim()
+    .slice(0, 220);
+  return normalized || `file-${Date.now()}`;
+}
+
+function safeRelativePath(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .split(/[\\/]+/)
+    .map((part) => safeAssetFilename(part))
+    .filter((part) => part && part !== "." && part !== "..")
+    .slice(0, 40)
+    .join("/")
+    .slice(0, 900);
+}
+
 function visibleToWebsite(visibility, fullAccess) {
   return visibility === "public" || (visibility === "member" && fullAccess);
 }
@@ -155,6 +205,8 @@ function sanitizeAttributes(tag, rawAttributes) {
   const allowed = {
     a: new Set(["href", "title", "target"]),
     img: new Set(["src", "alt", "title"]),
+    /* 资源嵌入只保存类型和数据库 ID，不允许 Studio 写入任意样式或事件。 */
+    div: new Set(["class", "data-resource-type", "data-resource-id"]),
   };
   if (!allowed[tag]) return "";
 
@@ -168,6 +220,9 @@ function sanitizeAttributes(tag, rawAttributes) {
     value = value.replace(/[\u0000-\u001f"<>]/g, "");
     if ((name === "href" || name === "src") && !isSafeUrl(value, tag === "img")) continue;
     if (name === "target" && value !== "_blank") continue;
+    if (tag === "div" && name === "class" && value !== "resource-embed") continue;
+    if (tag === "div" && name === "data-resource-type" && !["asset", "folder"].includes(value)) continue;
+    if (tag === "div" && name === "data-resource-id" && !validId(value)) continue;
     output.push(`${name}="${value}"`);
   }
 
@@ -450,6 +505,79 @@ async function initializeSchema(env) {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_folders (
+      id TEXT PRIMARY KEY,
+      parent_id TEXT,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      visibility TEXT NOT NULL DEFAULT 'public'
+        CHECK(visibility IN ('public', 'member', 'private')),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      archive_asset_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(parent_id) REFERENCES asset_folders(id) ON DELETE RESTRICT
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS assets (
+      id TEXT PRIMARY KEY,
+      folder_id TEXT,
+      filename TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      object_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      kind TEXT NOT NULL DEFAULT 'file'
+        CHECK(kind IN ('file', 'pdf', 'word', 'archive', 'video', 'audio')),
+      visibility TEXT NOT NULL DEFAULT 'public'
+        CHECK(visibility IN ('public', 'member', 'private')),
+      download_policy TEXT NOT NULL DEFAULT 'member'
+        CHECK(download_policy IN ('public', 'member')),
+      relative_path TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'uploading'
+        CHECK(status IN ('uploading', 'ready', 'failed')),
+      stream_uid TEXT NOT NULL DEFAULT '',
+      stream_hls_url TEXT NOT NULL DEFAULT '',
+      stream_dash_url TEXT NOT NULL DEFAULT '',
+      poster_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(folder_id) REFERENCES asset_folders(id) ON DELETE RESTRICT
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_variants (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      label TEXT NOT NULL CHECK(label IN ('preview', '360p', '480p', '720p', '1080p')),
+      object_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'uploading'
+        CHECK(status IN ('uploading', 'ready', 'failed')),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(asset_id, label),
+      FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_uploads (
+      id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      variant_label TEXT NOT NULL DEFAULT '',
+      upload_id TEXT NOT NULL,
+      object_key TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      expected_size INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(asset_id, variant_label),
+      FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+    )
+    `,
     "CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at)",
     "CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
@@ -460,6 +588,11 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_reset_requests(user_id, requested_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_status ON password_reset_requests(status, requested_at)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_folders_parent ON asset_folders(parent_id, sort_order, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_assets_folder ON assets(folder_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_assets_visibility ON assets(visibility, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_variants_asset ON asset_variants(asset_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_uploads_expiry ON asset_uploads(expires_at)",
   ];
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
 
@@ -601,6 +734,38 @@ async function initializeSchema(env) {
     "新增版本更新说明、作品集专栏、游客评论与反应功能，并为后续后台发布系统做好准备。",
   ).run();
 
+  /*
+   * 本次文件存储与夜览升级只追加一次独立日志。标记写入 settings 后，Worker
+   * 冷启动或多次部署都不会重复创建；站长仍可在 Studio 中编辑或删除这条记录。
+   */
+  const mediaThemeMarker = await env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'media_theme_upgrade_initialized'",
+  ).first();
+  if (!mediaThemeMarker) {
+    // 全新数据库中默认日志与升级日志会在同一毫秒创建；稍后 1ms 保证排序稳定。
+    const mediaThemePublishedAt = new Date(Date.now() + 1).toISOString();
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO changelogs (id, version, title, body, published_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        APP_VERSION,
+        "文件资源库与白天/夜览模式",
+        "新增 R2 大文件与文件夹分片上传、PDF/Word 在线预览、视频播放与清晰度版本、文章资源内嵌；新增白天、夜览和跟随系统三种全站主题。",
+        mediaThemePublishedAt,
+        timestamp,
+        timestamp,
+      ),
+      env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('media_theme_upgrade_initialized', '1', ?)")
+        .bind(timestamp),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value, updated_at) VALUES ('site_version', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).bind(APP_VERSION, timestamp),
+    ]);
+  }
+
   // 把旧数据映射到新的动态板块，已设置过 section_id 的记录不会被覆盖。
   await env.DB.batch([
     env.DB.prepare("UPDATE content SET section_id = 'section-guides' WHERE section_id IS NULL AND type = 'guide'"),
@@ -653,6 +818,75 @@ function mediaDto(row, { includeOriginal = true } = {}) {
   };
 }
 
+function assetVariantDto(row, { includeDownload = false } = {}) {
+  const safe = {
+    id: row.id,
+    asset_id: row.asset_id,
+    label: row.label,
+    mime_type: row.mime_type,
+    size_bytes: Number(row.size_bytes || 0),
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    url: `/files/${row.asset_id}?variant=${encodeURIComponent(row.label)}`,
+  };
+  if (includeDownload) safe.downloadUrl = `${safe.url}&download=1`;
+  return safe;
+}
+
+function assetDto(row, variants = [], { includeDownload = false } = {}) {
+  const safe = {
+    id: row.id,
+    folder_id: row.folder_id || null,
+    filename: row.filename,
+    display_name: row.display_name,
+    mime_type: row.mime_type,
+    size_bytes: Number(row.size_bytes || 0),
+    kind: row.kind,
+    visibility: normalizedVisibility(row.visibility),
+    download_policy: normalizedDownloadPolicy(row.download_policy),
+    relative_path: row.relative_path || "",
+    status: row.status,
+    stream_uid: row.stream_uid || "",
+    stream_hls_url: row.stream_hls_url || "",
+    stream_dash_url: row.stream_dash_url || "",
+    poster_url: row.poster_url || "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    url: `/files/${row.id}`,
+    variants: variants.map((item) => assetVariantDto(item, { includeDownload })),
+    canDownload: includeDownload,
+  };
+  if (includeDownload) safe.downloadUrl = `/files/${row.id}?download=1`;
+  return safe;
+}
+
+/*
+ * 文件夹的权限会沿父级向下继承：即使子文件夹误设为 public，只要任意父级为
+ * member/private，游客也看不到它。这里一次构建 Map 并带循环保护，避免每条
+ * 文件记录额外查询 D1，也避免错误的 parent_id 导致死循环。
+ */
+function visibleAssetFolderIds(folderRows, fullAccess, adminAccess = false) {
+  const folderMap = new Map(folderRows.map((item) => [item.id, item]));
+  const memo = new Map();
+  const canSee = (id, trail = new Set()) => {
+    if (!id) return true;
+    if (memo.has(id)) return memo.get(id);
+    const folder = folderMap.get(id);
+    if (!folder || trail.has(id)) return false;
+    if (!adminAccess && !visibleToWebsite(normalizedVisibility(folder.visibility), fullAccess)) {
+      memo.set(id, false);
+      return false;
+    }
+    trail.add(id);
+    const result = canSee(folder.parent_id, trail);
+    trail.delete(id);
+    memo.set(id, result);
+    return result;
+  };
+  return new Set(folderRows.filter((item) => canSee(item.id)).map((item) => item.id));
+}
+
 async function settingsObject(env) {
   // *_initialized 仅用于数据库迁移，不属于网站公开设置，也不需要显示在后台表单。
   const result = await env.DB.prepare(
@@ -664,7 +898,7 @@ async function settingsObject(env) {
 async function publicBootstrap(request, env) {
   const sessionUser = await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
-  const [changelogs, sections, content, albums, media, settings] = await Promise.all([
+  const [changelogs, sections, content, albums, media, assetFolders, assets, assetVariants, settings] = await Promise.all([
     env.DB.prepare(
       "SELECT id, version, title, body, published_at FROM changelogs ORDER BY published_at DESC, created_at DESC",
     ).all(),
@@ -690,6 +924,21 @@ async function publicBootstrap(request, env) {
       WHERE kind = 'photo'
       ORDER BY created_at DESC
     `).all(),
+    env.DB.prepare(`
+      SELECT id, parent_id, name, description, visibility, sort_order, archive_asset_id,
+             created_at, updated_at
+      FROM asset_folders ORDER BY sort_order ASC, created_at ASC
+    `).all(),
+    env.DB.prepare(`
+      SELECT id, folder_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+             download_policy, relative_path, status, stream_uid, stream_hls_url,
+             stream_dash_url, poster_url, created_at, updated_at
+      FROM assets WHERE status = 'ready' ORDER BY created_at DESC
+    `).all(),
+    env.DB.prepare(`
+      SELECT id, asset_id, label, mime_type, size_bytes, status, created_at, updated_at
+      FROM asset_variants WHERE status = 'ready' ORDER BY created_at ASC
+    `).all(),
     settingsObject(env),
   ]);
 
@@ -703,6 +952,19 @@ async function publicBootstrap(request, env) {
   const visibleMedia = rows(media).filter((item) => (
     visibleSectionIds.has(item.section_id) && visibleToWebsite(item.visibility, fullAccess)
   ));
+  const folderRows = rows(assetFolders);
+  const visibleFolderIds = visibleAssetFolderIds(folderRows, fullAccess);
+  const visibleFolders = folderRows.filter((item) => visibleFolderIds.has(item.id));
+  const variantsByAsset = new Map();
+  for (const variant of rows(assetVariants)) {
+    if (!variantsByAsset.has(variant.asset_id)) variantsByAsset.set(variant.asset_id, []);
+    variantsByAsset.get(variant.asset_id).push(variant);
+  }
+  const visibleAssets = rows(assets).filter((item) => (
+    (!item.folder_id || visibleFolderIds.has(item.folder_id))
+    && visibleToWebsite(normalizedVisibility(item.visibility), fullAccess)
+  ));
+  const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
   return {
     settings,
@@ -716,6 +978,17 @@ async function publicBootstrap(request, env) {
     albums: visibleAlbums,
     // 未通过审核的会话只能取得压缩预览地址，不能从接口响应中发现原片地址。
     media: visibleMedia.map((item) => mediaDto(item, { includeOriginal: fullAccess })),
+    assetFolders: visibleFolders.map((folder) => ({
+      ...folder,
+      archive_asset_id: visibleAssetIds.has(folder.archive_asset_id) ? folder.archive_asset_id : null,
+    })),
+    /*
+     * 下载权限在服务端再次核对；这里的 canDownload 只负责让前端正确显示按钮。
+     * 公开下载的文件游客可下载，其余文件仅审核通过的登录用户可下载。
+     */
+    assets: visibleAssets.map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
+      includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+    })),
   };
 }
 
@@ -2070,6 +2343,116 @@ async function serveMedia(request, env, id) {
   return new Response(object.body, { headers });
 }
 
+function parseByteRange(header, totalSize) {
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(String(header || "").trim());
+  if (!match || !Number.isFinite(totalSize) || totalSize <= 0) return null;
+  let start;
+  let end;
+  if (!match[1] && match[2]) {
+    const suffix = Math.min(totalSize, Number(match[2]));
+    if (!Number.isFinite(suffix) || suffix <= 0) return null;
+    start = totalSize - suffix;
+    end = totalSize - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : totalSize - 1;
+  }
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= totalSize || end < start) return null;
+  end = Math.min(end, totalSize - 1);
+  return { offset: start, length: end - start + 1, start, end };
+}
+
+async function assetAccessContext(request, env, asset) {
+  const folderResult = await env.DB.prepare(`
+    SELECT id, parent_id, visibility FROM asset_folders
+  `).all();
+  const folderMap = new Map(rows(folderResult).map((item) => [item.id, item]));
+  let folder = asset.folder_id ? folderMap.get(asset.folder_id) : null;
+  let inheritedVisibility = normalizedVisibility(asset.visibility);
+  const visited = new Set();
+  while (folder) {
+    if (visited.has(folder.id)) throw new HttpError(500, "文件夹层级存在循环，请在后台修复");
+    visited.add(folder.id);
+    const folderVisibility = normalizedVisibility(folder.visibility);
+    if (folderVisibility === "private") inheritedVisibility = "private";
+    else if (folderVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
+    folder = folder.parent_id ? folderMap.get(folder.parent_id) : null;
+  }
+
+  const wantsDownload = new URL(request.url).searchParams.get("download") === "1" || asset.kind === "archive";
+  const needsAdminCheck = inheritedVisibility !== "public" || wantsDownload;
+  const adminAccess = needsAdminCheck ? await isAdmin(request, env) : false;
+  if (inheritedVisibility === "private" && !adminAccess) throw new HttpError(404, "文件不存在");
+  if (inheritedVisibility === "member" && !adminAccess) await requireApprovedUser(request, env);
+  if (wantsDownload && normalizedDownloadPolicy(asset.download_policy) !== "public" && !adminAccess) {
+    await requireApprovedUser(request, env);
+  }
+  return { inheritedVisibility, adminAccess, wantsDownload };
+}
+
+/*
+ * R2 文件统一通过 Worker 读取，避免公开存储桶地址绕过会员与私密权限。
+ * Range 请求对大视频拖动进度条至关重要；HEAD 则让浏览器在播放前取得大小。
+ */
+async function serveAsset(request, env, id) {
+  if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
+  if (!["GET", "HEAD"].includes(request.method)) throw new HttpError(405, "不支持的请求方法");
+  const asset = await env.DB.prepare("SELECT * FROM assets WHERE id = ? AND status = 'ready'").bind(id).first();
+  if (!asset) throw new HttpError(404, "文件不存在或尚未上传完成");
+  const params = new URL(request.url).searchParams;
+  const variantLabel = params.get("variant") || "";
+  let objectKey = asset.object_key;
+  let mimeType = asset.mime_type || "application/octet-stream";
+  let filename = asset.filename;
+  if (variantLabel) {
+    if (!ASSET_VARIANT_LABELS.has(variantLabel)) throw new HttpError(400, "文件版本参数错误");
+    const variant = await env.DB.prepare(`
+      SELECT object_key, mime_type, size_bytes FROM asset_variants
+      WHERE asset_id = ? AND label = ? AND status = 'ready'
+    `).bind(id, variantLabel).first();
+    if (!variant) throw new HttpError(404, "该预览或清晰度版本尚不存在");
+    objectKey = variant.object_key;
+    mimeType = variant.mime_type || mimeType;
+    const extension = mimeType === "application/pdf"
+      ? ".pdf"
+      : (mimeType === "video/mp4" ? ".mp4" : (String(asset.filename).match(/\.[^.]+$/)?.[0] || ""));
+    filename = `${asset.display_name || asset.filename}-${variantLabel}${extension}`;
+  }
+
+  const access = await assetAccessContext(request, env, asset);
+  const head = await env.BUCKET.head(objectKey);
+  if (!head) throw new HttpError(404, "R2 中的文件对象不存在");
+  const rangeHeader = request.headers.get("Range");
+  const range = rangeHeader ? parseByteRange(rangeHeader, head.size) : null;
+  if (rangeHeader && !range) {
+    return new Response(null, {
+      status: 416,
+      headers: { ...SECURITY_HEADERS, "Accept-Ranges": "bytes", "Content-Range": `bytes */${head.size}` },
+    });
+  }
+
+  const object = request.method === "HEAD"
+    ? null
+    : await env.BUCKET.get(objectKey, range ? { range: { offset: range.offset, length: range.length } } : undefined);
+  if (request.method !== "HEAD" && !object) throw new HttpError(404, "R2 中的文件对象不存在");
+  const headers = new Headers(SECURITY_HEADERS);
+  head.writeHttpMetadata(headers);
+  headers.set("Content-Type", mimeType);
+  headers.set("ETag", head.httpEtag);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Length", String(range ? range.length : head.size));
+  if (range) headers.set("Content-Range", `bytes ${range.start}-${range.end}/${head.size}`);
+  headers.set(
+    "Cache-Control",
+    access.inheritedVisibility === "public" && normalizedDownloadPolicy(asset.download_policy) === "public"
+      ? "public, max-age=3600"
+      : "private, no-store",
+  );
+  const disposition = access.wantsDownload ? "attachment" : "inline";
+  headers.set("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  return new Response(object?.body || null, { status: range ? 206 : 200, headers });
+}
+
 async function contentSectionId(env, requestedId, legacyType = "article") {
   const fallback = legacyType === "guide" ? "section-guides" : "section-essays";
   const sectionId = validId(requestedId) ? String(requestedId) : fallback;
@@ -2359,6 +2742,387 @@ async function adminAlbums(request, env, id) {
     return { ok: true };
   }
   throw new HttpError(405, "不支持的请求方法");
+}
+
+async function adminAssetFolders(request, env, id) {
+  if (request.method === "GET") {
+    return rows(await env.DB.prepare(`
+      SELECT f.*,
+        (SELECT COUNT(*) FROM asset_folders child WHERE child.parent_id = f.id) AS folder_count,
+        (SELECT COUNT(*) FROM assets a WHERE a.folder_id = f.id) AS asset_count
+      FROM asset_folders f ORDER BY f.sort_order ASC, f.created_at ASC
+    `).all());
+  }
+
+  if (request.method === "POST" || request.method === "PUT") {
+    const body = await readJson(request);
+    const name = clampText(body.name, 120);
+    const description = clampText(body.description, 800);
+    const parentId = validId(body.parentId) ? String(body.parentId) : null;
+    const visibility = normalizedVisibility(body.visibility);
+    const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
+    const archiveAssetId = validId(body.archiveAssetId) ? String(body.archiveAssetId) : null;
+    if (!name) throw new HttpError(400, "文件夹名称不能为空");
+    if (parentId) {
+      const parent = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(parentId).first();
+      if (!parent) throw new HttpError(400, "上级文件夹不存在");
+    }
+    if (archiveAssetId) {
+      const archive = await env.DB.prepare("SELECT id, kind FROM assets WHERE id = ?").bind(archiveAssetId).first();
+      if (!archive || archive.kind !== "archive") throw new HttpError(400, "整包下载文件必须是已经上传的压缩包");
+    }
+    const timestamp = nowIso();
+    if (request.method === "POST") {
+      const newId = crypto.randomUUID();
+      await env.DB.prepare(`
+        INSERT INTO asset_folders
+          (id, parent_id, name, description, visibility, sort_order, archive_asset_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, parentId, name, description, visibility, sortOrder, archiveAssetId, timestamp, timestamp).run();
+      return { id: newId };
+    }
+
+    if (!validId(id)) throw new HttpError(400, "文件夹 ID 错误");
+    const existing = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "文件夹不存在");
+    if (parentId === id) throw new HttpError(400, "文件夹不能作为自己的上级");
+    let cursor = parentId;
+    const visited = new Set();
+    while (cursor) {
+      if (cursor === id) throw new HttpError(400, "不能把文件夹移动到自己的下级");
+      if (visited.has(cursor)) throw new HttpError(400, "目标文件夹层级存在循环");
+      visited.add(cursor);
+      const parent = await env.DB.prepare("SELECT parent_id FROM asset_folders WHERE id = ?").bind(cursor).first();
+      cursor = parent?.parent_id || null;
+    }
+    await env.DB.prepare(`
+      UPDATE asset_folders SET parent_id = ?, name = ?, description = ?, visibility = ?,
+        sort_order = ?, archive_asset_id = ?, updated_at = ? WHERE id = ?
+    `).bind(parentId, name, description, visibility, sortOrder, archiveAssetId, timestamp, id).run();
+    return { id };
+  }
+
+  if (request.method === "DELETE") {
+    if (!validId(id)) throw new HttpError(400, "文件夹 ID 错误");
+    const counts = await env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM asset_folders WHERE parent_id = ?) AS folders,
+        (SELECT COUNT(*) FROM assets WHERE folder_id = ?) AS assets
+    `).bind(id, id).first();
+    if (Number(counts?.folders) || Number(counts?.assets)) {
+      throw new HttpError(409, "文件夹中仍有文件或子文件夹，请先移走或删除它们");
+    }
+    await env.DB.prepare("DELETE FROM asset_folders WHERE id = ?").bind(id).run();
+    return { ok: true };
+  }
+  throw new HttpError(405, "不支持的请求方法");
+}
+
+async function listAdminAssets(env) {
+  const [assetResult, variantResult, uploadResult] = await Promise.all([
+    env.DB.prepare(`
+      SELECT id, folder_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+             download_policy, relative_path, status, stream_uid, stream_hls_url,
+             stream_dash_url, poster_url, created_at, updated_at
+      FROM assets ORDER BY created_at DESC
+    `).all(),
+    env.DB.prepare(`
+      SELECT id, asset_id, label, mime_type, size_bytes, status, created_at, updated_at
+      FROM asset_variants ORDER BY created_at ASC
+    `).all(),
+    env.DB.prepare("SELECT id, asset_id, variant_label, expected_size, expires_at, created_at FROM asset_uploads").all(),
+  ]);
+  const variants = new Map();
+  const uploads = new Map();
+  for (const row of rows(variantResult)) {
+    if (!variants.has(row.asset_id)) variants.set(row.asset_id, []);
+    variants.get(row.asset_id).push(row);
+  }
+  for (const row of rows(uploadResult)) {
+    if (!uploads.has(row.asset_id)) uploads.set(row.asset_id, []);
+    uploads.get(row.asset_id).push(row);
+  }
+  return rows(assetResult).map((row) => ({
+    ...assetDto(row, variants.get(row.id) || [], { includeDownload: true }),
+    uploads: uploads.get(row.id) || [],
+  }));
+}
+
+async function cleanupExpiredAssetUploads(env) {
+  const expired = rows(await env.DB.prepare(`
+    SELECT id, asset_id, variant_label, upload_id, object_key
+    FROM asset_uploads WHERE expires_at <= ?
+  `).bind(nowIso()).all());
+  for (const upload of expired) {
+    if (env.BUCKET) {
+      try { await env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id).abort(); }
+      catch (error) { console.warn("Ignoring expired multipart abort", error); }
+    }
+    if (upload.variant_label) {
+      await env.DB.prepare("UPDATE asset_variants SET status = 'failed', updated_at = ? WHERE asset_id = ? AND label = ?")
+        .bind(nowIso(), upload.asset_id, upload.variant_label).run();
+    } else {
+      await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
+        .bind(nowIso(), upload.asset_id).run();
+    }
+    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+  }
+}
+
+async function deleteAssetObjects(env, assetId) {
+  const asset = await env.DB.prepare("SELECT object_key FROM assets WHERE id = ?").bind(assetId).first();
+  if (!asset) throw new HttpError(404, "文件不存在");
+  const [variants, uploads] = await Promise.all([
+    env.DB.prepare("SELECT object_key FROM asset_variants WHERE asset_id = ?").bind(assetId).all(),
+    env.DB.prepare("SELECT upload_id, object_key FROM asset_uploads WHERE asset_id = ?").bind(assetId).all(),
+  ]);
+  if (env.BUCKET) {
+    for (const upload of rows(uploads)) {
+      try { await env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id).abort(); }
+      catch (error) { console.warn("Ignoring multipart abort during asset deletion", error); }
+    }
+    await env.BUCKET.delete([asset.object_key, ...rows(variants).map((item) => item.object_key)]);
+  }
+  await env.DB.batch([
+    env.DB.prepare("UPDATE asset_folders SET archive_asset_id = NULL WHERE archive_asset_id = ?").bind(assetId),
+    env.DB.prepare("DELETE FROM asset_uploads WHERE asset_id = ?").bind(assetId),
+    env.DB.prepare("DELETE FROM asset_variants WHERE asset_id = ?").bind(assetId),
+    env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId),
+  ]);
+}
+
+async function adminAssets(request, env, id) {
+  if (request.method === "GET") {
+    await cleanupExpiredAssetUploads(env);
+    return listAdminAssets(env);
+  }
+  if (request.method === "PUT") {
+    if (!validId(id)) throw new HttpError(400, "文件 ID 错误");
+    const existing = await env.DB.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "文件不存在");
+    const body = await readJson(request);
+    const displayName = clampText(body.displayName ?? existing.display_name, 220) || existing.filename;
+    const folderId = body.folderId === null || body.folderId === ""
+      ? null
+      : (validId(body.folderId) ? String(body.folderId) : existing.folder_id);
+    if (folderId) {
+      const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
+      if (!folder) throw new HttpError(400, "目标文件夹不存在");
+    }
+    const visibility = normalizedVisibility(body.visibility ?? existing.visibility);
+    const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy ?? existing.download_policy);
+    const streamUid = clampText(body.streamUid ?? existing.stream_uid, 240);
+    const streamHlsUrl = clampText(body.streamHlsUrl ?? existing.stream_hls_url, 1200);
+    const streamDashUrl = clampText(body.streamDashUrl ?? existing.stream_dash_url, 1200);
+    const posterUrl = clampText(body.posterUrl ?? existing.poster_url, 1200);
+    for (const candidate of [streamHlsUrl, streamDashUrl, posterUrl]) {
+      if (candidate && !/^https:\/\//i.test(candidate)) throw new HttpError(400, "播放或封面地址必须使用 HTTPS");
+    }
+    await env.DB.prepare(`
+      UPDATE assets SET folder_id = ?, display_name = ?, visibility = ?, download_policy = ?,
+        stream_uid = ?, stream_hls_url = ?, stream_dash_url = ?, poster_url = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(
+      folderId, displayName, visibility, downloadPolicy, streamUid, streamHlsUrl,
+      streamDashUrl, posterUrl, nowIso(), id,
+    ).run();
+    return { id };
+  }
+  if (request.method === "DELETE") {
+    if (!validId(id)) throw new HttpError(400, "文件 ID 错误");
+    await deleteAssetObjects(env, id);
+    return { ok: true };
+  }
+  throw new HttpError(405, "不支持的请求方法");
+}
+
+async function abortExistingAssetUpload(env, assetId, variantLabel) {
+  const existing = await env.DB.prepare(`
+    SELECT id, upload_id, object_key FROM asset_uploads WHERE asset_id = ? AND variant_label = ?
+  `).bind(assetId, variantLabel).first();
+  if (!existing) return;
+  try { await env.BUCKET.resumeMultipartUpload(existing.object_key, existing.upload_id).abort(); }
+  catch (error) { console.warn("Ignoring stale multipart upload abort", error); }
+  await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(existing.id).run();
+}
+
+async function createAssetUpload(request, env) {
+  if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
+  const body = await readJson(request);
+  const filename = safeAssetFilename(body.filename);
+  const mimeType = clampText(body.mimeType, 180) || "application/octet-stream";
+  const expectedSize = Number(body.sizeBytes);
+  if (!Number.isFinite(expectedSize) || expectedSize <= 0 || expectedSize > MAX_ASSET_BYTES) {
+    throw new HttpError(413, "文件大小无效或超过 R2 单个对象上限");
+  }
+  const variantLabel = body.variantLabel ? String(body.variantLabel) : "";
+  if (variantLabel && !ASSET_VARIANT_LABELS.has(variantLabel)) throw new HttpError(400, "预览或清晰度标签无效");
+  const timestamp = nowIso();
+  const datePrefix = timestamp.slice(0, 10);
+  let assetId;
+  let objectKey;
+
+  if (variantLabel) {
+    assetId = String(body.assetId || "");
+    if (!validId(assetId)) throw new HttpError(400, "请选择要添加版本的视频或文档");
+    const asset = await env.DB.prepare("SELECT id, kind FROM assets WHERE id = ?").bind(assetId).first();
+    if (!asset) throw new HttpError(404, "原始文件不存在");
+    if (variantLabel === "preview" && !["word", "pdf"].includes(asset.kind)) {
+      throw new HttpError(400, "PDF 预览版本只用于 Word/PDF 文档");
+    }
+    if (variantLabel === "preview" && mimeType !== "application/pdf" && !/\.pdf$/i.test(filename)) {
+      throw new HttpError(400, "文档预览版本必须上传 PDF 文件");
+    }
+    if (VIDEO_QUALITY_LABELS.has(variantLabel) && asset.kind !== "video") {
+      throw new HttpError(400, "清晰度版本只用于视频");
+    }
+    if (VIDEO_QUALITY_LABELS.has(variantLabel) && !mimeType.startsWith("video/")) {
+      throw new HttpError(400, "清晰度版本必须上传视频文件");
+    }
+    objectKey = `assets/${datePrefix}/${assetId}/variants/${variantLabel}-${crypto.randomUUID()}-${filename}`;
+    await abortExistingAssetUpload(env, assetId, variantLabel);
+    const oldVariant = await env.DB.prepare("SELECT object_key FROM asset_variants WHERE asset_id = ? AND label = ?")
+      .bind(assetId, variantLabel).first();
+    if (oldVariant?.object_key) await env.BUCKET.delete(oldVariant.object_key);
+    await env.DB.prepare(`
+      INSERT INTO asset_variants
+        (id, asset_id, label, object_key, mime_type, size_bytes, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, 'uploading', ?, ?)
+      ON CONFLICT(asset_id, label) DO UPDATE SET object_key = excluded.object_key,
+        mime_type = excluded.mime_type, size_bytes = 0, status = 'uploading', updated_at = excluded.updated_at
+    `).bind(crypto.randomUUID(), assetId, variantLabel, objectKey, mimeType, timestamp, timestamp).run();
+  } else {
+    const folderId = validId(body.folderId) ? String(body.folderId) : null;
+    if (folderId) {
+      const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
+      if (!folder) throw new HttpError(400, "目标文件夹不存在");
+    }
+    assetId = crypto.randomUUID();
+    objectKey = `assets/${datePrefix}/${assetId}/original-${filename}`;
+    const displayName = clampText(body.displayName, 220) || filename;
+    const kind = normalizedAssetKind(body.kind, mimeType, filename);
+    const visibility = normalizedVisibility(body.visibility);
+    const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy);
+    const relativePath = safeRelativePath(body.relativePath);
+    await env.DB.prepare(`
+      INSERT INTO assets
+        (id, folder_id, filename, display_name, object_key, mime_type, size_bytes, kind,
+         visibility, download_policy, relative_path, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'uploading', ?, ?)
+    `).bind(
+      assetId, folderId, filename, displayName, objectKey, mimeType, kind,
+      visibility, downloadPolicy, relativePath, timestamp, timestamp,
+    ).run();
+  }
+
+  let multipart;
+  try {
+    multipart = await env.BUCKET.createMultipartUpload(objectKey, {
+      httpMetadata: { contentType: mimeType },
+      customMetadata: { assetId, variantLabel, originalName: filename },
+    });
+    const sessionId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + ASSET_UPLOAD_TTL_SECONDS * 1000).toISOString();
+    await env.DB.prepare(`
+      INSERT INTO asset_uploads
+        (id, asset_id, variant_label, upload_id, object_key, mime_type, expected_size, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      sessionId, assetId, variantLabel, multipart.uploadId, objectKey, mimeType,
+      Math.floor(expectedSize), expiresAt, timestamp,
+    ).run();
+    return {
+      sessionId,
+      assetId,
+      variantLabel,
+      partSize: 32 * 1024 * 1024,
+      maxParts: MAX_UPLOAD_PARTS,
+      expiresAt,
+    };
+  } catch (error) {
+    if (multipart) await multipart.abort().catch(() => null);
+    if (!variantLabel) await env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId).run().catch(() => null);
+    else await env.DB.prepare("UPDATE asset_variants SET status = 'failed' WHERE asset_id = ? AND label = ?")
+      .bind(assetId, variantLabel).run().catch(() => null);
+    throw error;
+  }
+}
+
+async function getAssetUpload(env, id) {
+  if (!validId(id)) throw new HttpError(400, "上传会话 ID 错误");
+  const upload = await env.DB.prepare("SELECT * FROM asset_uploads WHERE id = ?").bind(id).first();
+  if (!upload) throw new HttpError(404, "上传会话不存在或已经结束");
+  if (new Date(upload.expires_at).getTime() <= Date.now()) throw new HttpError(410, "上传会话已过期，请重新开始");
+  return upload;
+}
+
+async function adminAssetUploads(request, env, id, action, detail) {
+  if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
+  if (request.method === "POST" && !id) return createAssetUpload(request, env);
+  const upload = await getAssetUpload(env, id);
+  const multipart = env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id);
+
+  if (request.method === "PUT" && action === "part") {
+    const partNumber = Number(detail);
+    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > MAX_UPLOAD_PARTS) {
+      throw new HttpError(400, "分片编号无效");
+    }
+    const contentLength = Number(request.headers.get("Content-Length"));
+    if (Number.isFinite(contentLength) && (contentLength <= 0 || contentLength > MAX_UPLOAD_PART_BYTES)) {
+      throw new HttpError(413, "单个上传分片不能超过 95MB");
+    }
+    if (!request.body) throw new HttpError(400, "上传分片为空");
+    const uploadedPart = await multipart.uploadPart(partNumber, request.body);
+    return { partNumber: uploadedPart.partNumber, etag: uploadedPart.etag };
+  }
+
+  if (request.method === "POST" && action === "complete") {
+    const body = await readJson(request);
+    const completedParts = Array.isArray(body.parts) ? body.parts.map((part) => ({
+      partNumber: Number(part.partNumber),
+      etag: String(part.etag || ""),
+    })).sort((a, b) => a.partNumber - b.partNumber) : [];
+    if (!completedParts.length || completedParts.length > MAX_UPLOAD_PARTS
+      || completedParts.some((part, index) => !Number.isInteger(part.partNumber)
+        || part.partNumber !== index + 1 || !part.etag)) {
+      throw new HttpError(400, "上传分片清单不完整");
+    }
+    await multipart.complete(completedParts);
+    const object = await env.BUCKET.head(upload.object_key);
+    if (!object) throw new HttpError(500, "R2 合并完成后未找到文件");
+    if (Number(upload.expected_size) && Number(object.size) !== Number(upload.expected_size)) {
+      await env.BUCKET.delete(upload.object_key);
+      throw new HttpError(400, "上传后的文件大小与原文件不一致，请重试");
+    }
+    const timestamp = nowIso();
+    if (upload.variant_label) {
+      await env.DB.prepare(`
+        UPDATE asset_variants SET size_bytes = ?, status = 'ready', updated_at = ?
+        WHERE asset_id = ? AND label = ?
+      `).bind(object.size, timestamp, upload.asset_id, upload.variant_label).run();
+    } else {
+      await env.DB.prepare(`
+        UPDATE assets SET size_bytes = ?, status = 'ready', updated_at = ? WHERE id = ?
+      `).bind(object.size, timestamp, upload.asset_id).run();
+    }
+    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+    return { ok: true, assetId: upload.asset_id, variantLabel: upload.variant_label, sizeBytes: object.size };
+  }
+
+  if (request.method === "DELETE" && !action) {
+    await multipart.abort().catch(() => null);
+    const timestamp = nowIso();
+    if (upload.variant_label) {
+      await env.DB.prepare("UPDATE asset_variants SET status = 'failed', updated_at = ? WHERE asset_id = ? AND label = ?")
+        .bind(timestamp, upload.asset_id, upload.variant_label).run();
+    } else {
+      await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
+        .bind(timestamp, upload.asset_id).run();
+    }
+    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+    return { ok: true };
+  }
+  throw new HttpError(405, "不支持的上传操作");
 }
 
 async function uploadMedia(request, env) {
@@ -2748,11 +3512,12 @@ async function adminPasswordResets(request, env, id) {
 }
 
 async function adminDashboard(env) {
-  const [content, published, comments, media, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests] = await Promise.all([
+  const [content, published, comments, media, assets, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS count FROM content").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM content WHERE status = 'published'").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM comments").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM media").first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM assets WHERE status = 'ready'").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM changelogs").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM portfolio_sections").first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM feedback").first(),
@@ -2770,6 +3535,7 @@ async function adminDashboard(env) {
     published: Number(published?.count || 0),
     comments: Number(comments?.count || 0),
     media: Number(media?.count || 0),
+    assets: Number(assets?.count || 0),
     changelogs: Number(logs?.count || 0),
     sections: Number(sections?.count || 0),
     feedback: Number(feedback?.count || 0),
@@ -2787,6 +3553,7 @@ async function handleAdmin(request, env, url) {
   const resource = parts[2] || "";
   const id = parts[3] || "";
   const action = parts[4] || "";
+  const detail = parts[5] || "";
 
   if (resource === "session" && request.method === "GET") return { authenticated: true };
   if (resource === "logout" && request.method === "POST") {
@@ -2798,6 +3565,9 @@ async function handleAdmin(request, env, url) {
   if (resource === "changelogs") return adminChangelogs(request, env, id);
   if (resource === "albums") return adminAlbums(request, env, id);
   if (resource === "media") return adminMedia(request, env, id, action);
+  if (resource === "asset-folders") return adminAssetFolders(request, env, id);
+  if (resource === "assets") return adminAssets(request, env, id);
+  if (resource === "asset-uploads") return adminAssetUploads(request, env, id, action, detail);
   if (resource === "comments") return adminComments(request, env, id);
   if (resource === "feedback") return adminFeedback(request, env, id);
   if (resource === "users") return adminUsers(request, env, id);
@@ -2968,6 +3738,12 @@ export default {
         const id = url.pathname.split("/").filter(Boolean)[1];
         if (!validId(id)) throw new HttpError(404, "图片不存在");
         return await serveMedia(request, env, id);
+      }
+      if (url.pathname.startsWith("/files/")) {
+        await ensureSchema(env);
+        const id = url.pathname.split("/").filter(Boolean)[1];
+        if (!validId(id)) throw new HttpError(404, "文件不存在");
+        return await serveAsset(request, env, id);
       }
       return env.ASSETS.fetch(request);
     } catch (error) {

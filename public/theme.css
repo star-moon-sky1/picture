@@ -1,0 +1,200 @@
+/*
+ * 星月集白天 / 夜览主题补丁
+ * ------------------------------------------------------------------
+ * 原页面仍保留自己的布局与毛玻璃细节；本文件只统一主题变量和需要覆盖的
+ * 固定浅色值。夜览使用深蓝灰而不是纯黑，避免长时间阅读时对比过硬。
+ */
+:root {
+  color-scheme: light;
+  --theme-transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --cream: #0d171c;
+  --paper: #142229;
+  --paper-deep: #0f1c22;
+  --ink: #edf4f5;
+  --muted: #a8b8bd;
+  --line: #2c4149;
+  --soft: #142b31;
+  --sand: #223238;
+  --cyan-soft: #16383d;
+  --white: #17272e;
+  --danger: #ff9b91;
+  --success: #86d5b3;
+  --shadow: 0 18px 52px rgba(0, 0, 0, .34);
+  --glass-fill: rgba(21, 39, 47, .50);
+  --glass-fill-hover: rgba(40, 67, 77, .58);
+  --glass-line: rgba(170, 219, 226, .24);
+  --glass-shadow: 0 10px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(215,249,252,.18), inset 0 -1px 0 rgba(0,0,0,.28);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-ready="true"] body,
+  :root[data-theme-ready="true"] .sidebar,
+  :root[data-theme-ready="true"] .panel,
+  :root[data-theme-ready="true"] .content-card,
+  :root[data-theme-ready="true"] .reader-wrap,
+  :root[data-theme-ready="true"] input,
+  :root[data-theme-ready="true"] textarea,
+  :root[data-theme-ready="true"] select {
+    transition: var(--theme-transition);
+  }
+}
+
+/* =========================== 主页主题选择器 =========================== */
+.home-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.home-heading-row > h1 { margin-right: auto; }
+.theme-picker { position: relative; z-index: 12; flex: 0 0 auto; }
+.theme-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--glass-line, rgba(255,255,255,.7));
+  border-radius: 15px;
+  color: var(--ink);
+  background: rgba(91, 156, 181, .20);
+  box-shadow: var(--glass-shadow, 0 9px 24px rgba(32,48,55,.11));
+  -webkit-backdrop-filter: blur(16px) saturate(1.18);
+  backdrop-filter: blur(16px) saturate(1.18);
+}
+.theme-toggle [data-theme-icon] { font-size: 1.1rem; line-height: 1; }
+.theme-toggle [data-theme-label] { font-size: .78rem; font-weight: 800; }
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 174px;
+  padding: 7px;
+  border: 1px solid var(--glass-line, rgba(255,255,255,.7));
+  border-radius: 16px;
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  box-shadow: 0 18px 48px rgba(13,35,43,.22), inset 0 1px 0 rgba(255,255,255,.28);
+  -webkit-backdrop-filter: blur(25px) saturate(1.24);
+  backdrop-filter: blur(25px) saturate(1.24);
+}
+.theme-menu[hidden] { display: none !important; }
+.theme-menu button {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+.theme-menu button:hover { background: rgba(70, 153, 176, .16); }
+.theme-menu button.active {
+  border-color: rgba(73, 180, 199, .32);
+  color: var(--ink);
+  background: rgba(49, 175, 191, .26);
+}
+.theme-menu button.active::after { content: "✓"; margin-left: auto; color: var(--cyan); font-weight: 900; }
+
+/* ============================== 夜览：首页 ============================== */
+:root[data-theme="dark"] body {
+  background: radial-gradient(circle at 80% 5%, rgba(49,191,200,.10), transparent 34%), var(--cream);
+}
+:root[data-theme="dark"] .sidebar {
+  border-color: rgba(143,207,216,.16);
+  background: radial-gradient(circle at 4% 0%, rgba(99,164,176,.13), transparent 38%), linear-gradient(155deg, rgba(18,36,44,.91), rgba(12,25,31,.84));
+  box-shadow: inset -1px 0 0 rgba(196,239,244,.09), 10px 0 34px rgba(0,0,0,.22);
+}
+:root[data-theme="dark"] :is(.nav button, .sidebar-toggle, .studio-link, .tab-button, .updates, .theme-toggle) {
+  color: var(--ink);
+  border-color: rgba(174,221,227,.20);
+  background: rgba(72,126,143,.18);
+  box-shadow: var(--glass-shadow);
+}
+:root[data-theme="dark"] :is(.nav button.active, .tab-button.active) {
+  color: #ecfbfd;
+  border-color: rgba(103,207,219,.38);
+  background: rgba(31,137,153,.46);
+}
+:root[data-theme="dark"] :is(.content-card, .info-card, .feedback-form, .feedback-board, .feedback-item, .account-card, .reader-wrap, .usage-guide, .resource-card, .resource-view) {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--paper);
+}
+:root[data-theme="dark"] :is(.feedback-form input, .feedback-form textarea, .feedback-form select, .account-form input, .comment-form input, .comment-form textarea, .reply-form input) {
+  color: var(--ink);
+  border-color: var(--line);
+  background: #0f1d23;
+}
+:root[data-theme="dark"] .feedback-item { background: #112127; }
+:root[data-theme="dark"] .feedback-owner-reply { background: rgba(31,111,122,.20); }
+:root[data-theme="dark"] .chat-shell {
+  border-color: rgba(155,214,221,.18);
+  background: radial-gradient(circle at 10% 0%, rgba(76,139,151,.13), transparent 38%), linear-gradient(145deg, rgba(18,39,47,.88), rgba(12,27,33,.78));
+  box-shadow: 0 22px 58px rgba(0,0,0,.30), inset 0 1px 0 rgba(213,247,250,.09);
+}
+:root[data-theme="dark"] .chat-messages { background: linear-gradient(155deg, rgba(16,34,41,.62), rgba(9,21,27,.40)); }
+:root[data-theme="dark"] .bubble.ai { color: var(--ink); border-color: rgba(164,216,222,.18); background: rgba(30,53,62,.72); box-shadow: 0 8px 22px rgba(0,0,0,.19); }
+:root[data-theme="dark"] .chat-form input { color: var(--ink); border-color: rgba(162,216,223,.20); background: rgba(12,28,34,.72); }
+:root[data-theme="dark"] .auth-lock-card { color: var(--ink); background: radial-gradient(circle at 12% 0%, rgba(76,139,151,.18), transparent 40%), linear-gradient(145deg, rgba(20,41,49,.92), rgba(12,28,34,.88)); }
+:root[data-theme="dark"] dialog::backdrop { background: rgba(1,8,12,.78); }
+:root[data-theme="dark"] .empty { border-color: #3a5058; }
+:root[data-theme="dark"] .resource-viewer-message { color: var(--muted); background: var(--paper); }
+:root[data-theme="dark"] .resource-badge { color: #b7e5ea; background: rgba(61,151,169,.22); }
+:root[data-theme="dark"] pre,
+:root[data-theme="dark"] code { background: #0b171c; color: #d9f3f5; }
+
+/* =========================== 夜览：登录/注册页 =========================== */
+:root[data-theme="dark"] .auth-page { color: var(--ink); }
+:root[data-theme="dark"] .auth-photo-background::after { background: rgba(3,10,14,.24); }
+:root[data-theme="dark"] .auth-card {
+  color: var(--ink);
+  border-color: rgba(178,225,231,.24);
+  background: linear-gradient(125deg, rgba(25,49,58,.60), rgba(9,23,29,.50) 45%, rgba(25,93,104,.22));
+  box-shadow: 0 32px 90px rgba(0,0,0,.46), inset 0 1px 0 rgba(214,247,250,.18), inset 0 -1px 0 rgba(0,0,0,.33);
+}
+:root[data-theme="dark"] .auth-card :is(input, textarea, select) { color: var(--ink); border-color: rgba(170,218,224,.22); background: rgba(8,22,28,.64); }
+:root[data-theme="dark"] .summary-row,
+:root[data-theme="dark"] .success-box { border-color: var(--line); background: rgba(13,32,39,.70); }
+:root[data-theme="dark"] .home-link { color: var(--ink); background: rgba(27,82,98,.58); }
+
+/* ============================== 夜览：Studio ============================== */
+:root[data-theme="dark"] html,
+:root[data-theme="dark"] body { background-color: var(--cream); }
+:root[data-theme="dark"] .login-shell { background: radial-gradient(circle at 15% 10%,rgba(49,191,200,.13),transparent 35%),radial-gradient(circle at 87% 82%,rgba(33,127,186,.13),transparent 38%),#0d181d; }
+:root[data-theme="dark"] .login-card { color: var(--ink); border-color: rgba(170,219,226,.22); background: linear-gradient(125deg,rgba(24,49,58,.72),rgba(8,23,29,.62)); }
+:root[data-theme="dark"] .workspace { background: var(--cream); }
+:root[data-theme="dark"] :is(.panel, .stat, .list-item, .media-card, .album-chip, .feedback-admin-row, .user-card, .reset-card, .asset-row, .resource-picker-item) {
+  color: var(--ink);
+  border-color: var(--line);
+  background: var(--paper);
+}
+:root[data-theme="dark"] :is(.workspace input, .workspace textarea, .workspace select, .toolbar, .toolbar button, .editor) {
+  color: var(--ink);
+  border-color: var(--line);
+  background: #0f1d23;
+}
+:root[data-theme="dark"] .list-item.active { background: #153138; }
+:root[data-theme="dark"] .asset-row.folder,
+:root[data-theme="dark"] .upload-job,
+:root[data-theme="dark"] .resource-picker { color: var(--ink); border-color: var(--line); background: #11242b; }
+:root[data-theme="dark"] .user-note,
+:root[data-theme="dark"] .feedback-reply-editor,
+:root[data-theme="dark"] .reset-link { background: #102229; }
+
+@media (max-width: 620px) {
+  .home-heading-row { align-items: center; }
+  .theme-toggle [data-theme-label] { display: none; }
+  .theme-toggle { width: 44px; padding-inline: 0; }
+  .theme-menu { position: fixed; top: auto; right: max(12px, env(safe-area-inset-right)); bottom: max(18px, env(safe-area-inset-bottom)); width: min(220px, calc(100vw - 24px)); }
+}
