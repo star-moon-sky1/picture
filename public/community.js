@@ -35,7 +35,7 @@
         <button class="tab-button" type="button" data-community-tab="preferences">提醒设置</button>
       </nav>
       <section data-community-panel="notifications">
-        <div class="notification-toolbar"><p class="section-desc">账号、回复和文章上新提醒都会集中在这里。</p><button id="notifications-read-all" class="btn small ghost" type="button">全部已读</button></div>
+        <div class="notification-toolbar notification-actions"><button id="notifications-read-all" class="btn small ghost" type="button">全部已读</button></div>
         <div id="notification-list" class="notification-list"></div>
       </section>
       <section data-community-panel="messages" hidden>

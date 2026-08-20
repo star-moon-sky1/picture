@@ -300,11 +300,11 @@
 
     /* 登录与注册页与主页共用“快速按下、较柔和的单次回弹”节奏。 */
     :is(button, a.btn, .home-link) { transform-origin: center; will-change: transform; }
-    :is(button, a.btn, .home-link).is-control-pressed { transform: translateY(1px) scale(.965) !important; transition-duration: .038s !important; }
-    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .38s cubic-bezier(.16,.78,.22,1) both !important; }
+    :is(button, a.btn, .home-link).control-bounce-release { animation: auth-control-single-rebound .30s cubic-bezier(.16,.78,.22,1) both !important; }
     @keyframes auth-control-single-rebound {
-      0% { transform: translateY(1px) scale(.965); }
-      58% { transform: translateY(-1px) scale(1.04); }
+      0% { transform: translateZ(0) scale(1); }
+      16% { transform: translate3d(0,1px,0) scale(.965); }
+      58% { transform: translate3d(0,-3px,0) scale(1.045); }
       100% { transform: none; }
     }
     /* 松手后短暂加深按钮颜色，随后恢复；步骤指示器会持续保留 active 颜色。 */
@@ -413,7 +413,7 @@
           <form id="register-form">
             <!-- 第一步没有用户协议或隐私勾选项。 -->
             <div class="register-step" data-register-step="1">
-              <div class="field"><label for="register-username">登录用户名</label><input id="register-username" required minlength="4" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{3,31}" autocomplete="username" placeholder="4—32位字母、数字或 _ . -"><small>用户名用于登录；昵称以后可以自行修改。</small></div>
+              <div class="field"><label for="register-username">登录用户名</label><input id="register-username" required minlength="4" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{3,31}" autocomplete="username" placeholder="4—32位字母、数字或 _ . -"></div>
               <div class="field"><label for="register-nickname">昵称</label><input id="register-nickname" required maxlength="30" autocomplete="nickname" placeholder="在网站中显示的名称"></div>
               <div class="field"><label for="register-password">设置密码</label><input id="register-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="至少8位，包含字母和数字"></div>
               <div class="field"><label for="register-password-confirm">确认密码</label><input id="register-password-confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password" placeholder="再次输入密码"></div>
@@ -428,8 +428,6 @@
               </div>
               <div class="field"><label for="register-note">备注（选填）</label><textarea id="register-note" maxlength="800" placeholder="主要面向与站长不认识的申请人，可简单说明身份、认识途径或注册原因"></textarea></div>
               <div class="field"><label for="register-invite">邀请码（选填）</label><input id="register-invite" maxlength="80" placeholder="没有邀请码可以留空"></div>
-              <!-- 按用户要求，信息用途说明只在第二步出现。 -->
-              <p class="privacy-note">真实姓名和联系方式仅用于账户审核、联系用户及找回密码。</p>
               <div class="button-row"><button class="btn ghost" type="button" data-register-back>上一步</button><button class="btn" type="button" data-register-next>下一步</button></div>
             </div>
 
@@ -443,7 +441,7 @@
 
         <!-- 忘记密码：提交后由站长通过预留联系方式核实。 -->
         <section id="panel-forgot" class="panel" hidden>
-          <header class="card-head"><p class="eyebrow">PASSWORD HELP</p><h2>申请重置密码</h2><p>填写注册时使用的信息。为保护账号，无论信息是否匹配，页面都会显示相同结果。</p></header>
+          <header class="card-head"><p class="eyebrow">PASSWORD HELP</p><h2>申请重置密码</h2></header>
           <form id="forgot-form">
             <div class="field"><label for="forgot-username">登录用户名</label><input id="forgot-username" required maxlength="32" autocomplete="username"></div>
             <div class="two-fields">
@@ -471,7 +469,7 @@
 
         <!-- 浏览器已有有效账号会话时显示，避免重复登录。 -->
         <section id="panel-signed" class="panel" hidden>
-          <header class="card-head"><p class="eyebrow">ACCOUNT STATUS</p><h2>你已经登录</h2><p>当前账号状态如下。</p></header>
+          <header class="card-head"><p class="eyebrow">ACCOUNT STATUS</p><h2>你已经登录</h2></header>
           <div class="success-box">
             <strong id="signed-nickname"></strong>
             <p>登录用户名：<span id="signed-username"></span></p>
@@ -623,24 +621,24 @@
       let pressedBloom = null;
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       const canAnimate = (control) => control && !control.matches(":disabled");
-      const release = (control, point = null) => {
-        if (!control) return;
-        control.classList.remove("is-control-pressed");
-        releaseHarmonyLightBloom(pressedBloom);
-        pressedBloom = null;
+      const playBounce = (control) => {
         if (reducedMotion.matches || !canAnimate(control)) return;
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 430);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 340);
+      };
+      const release = (control) => {
+        if (!control) return;
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = null;
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
         if (!canAnimate(control)) return;
         pressedControl = control;
         pressedPoint = { x: event.clientX, y: event.clientY };
-        control.classList.remove("control-bounce-release");
-        control.classList.add("is-control-pressed");
+        playBounce(control);
         releaseHarmonyLightBloom(pressedBloom);
         pressedBloom = emitHarmonyLightBloom(control, pressedPoint);
       });
@@ -651,7 +649,6 @@
         pressedPoint = null;
       });
       window.addEventListener("pointercancel", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
@@ -662,7 +659,7 @@
         const control = findControl(event.target);
         if (canAnimate(control)) {
           pressedControl = control;
-          control.classList.add("is-control-pressed");
+          playBounce(control);
           releaseHarmonyLightBloom(pressedBloom);
           pressedBloom = emitHarmonyLightBloom(control);
         }
@@ -674,21 +671,10 @@
         pressedPoint = null;
       });
       window.addEventListener("blur", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
         pressedBloom = null;
-      });
-      document.addEventListener("click", (event) => {
-        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const link = findControl(event.target)?.closest("a[href]");
-        if (!link || link.hasAttribute("download") || link.target === "_blank") return;
-        const destination = new URL(link.href, location.href);
-        if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
-        event.preventDefault();
-        /* 72ms 足够看清按下反馈，同时让登录/返回链接更快响应。 */
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 72);
       });
     }
 

@@ -250,11 +250,11 @@
       transform:translateZ(0) scale(1); transform-origin:center;
       transition:transform .16s cubic-bezier(.2,.75,.25,1),filter .2s ease,box-shadow .2s ease;
     }
-    .is-control-pressed { transform:translateY(1px) scale(.965) !important; filter:brightness(.97); transition-duration:.038s !important; }
-    .control-bounce-release { animation:control-single-rebound .38s cubic-bezier(.16,.78,.22,1) both; }
+    .control-bounce-release { animation:control-single-rebound .30s cubic-bezier(.16,.78,.22,1) both; }
     @keyframes control-single-rebound {
-      0% { transform:translateY(1px) scale(.965); }
-      58% { transform:translateY(-1px) scale(1.04); }
+      0% { transform:translateZ(0) scale(1); }
+      16% { transform:translate3d(0,1px,0) scale(.965); }
+      58% { transform:translate3d(0,-3px,0) scale(1.045); }
       100% { transform:scale(1); }
     }
     /* 松手时短暂加深蓝青底；导航与列表的 active 状态则持续保留颜色。 */
@@ -737,24 +737,24 @@
       let pressedBloom = null;
       const findControl = (target) => target instanceof Element ? target.closest(selector) : null;
       const canAnimate = (control) => control && !control.matches(":disabled");
-      const release = (control, point = null) => {
-        if (!control) return;
-        control.classList.remove("is-control-pressed");
-        releaseHarmonyLightBloom(pressedBloom);
-        pressedBloom = null;
+      const playBounce = (control) => {
         if (reducedMotion.matches || !canAnimate(control)) return;
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 430);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 340);
+      };
+      const release = (control) => {
+        if (!control) return;
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = null;
       };
       document.addEventListener("pointerdown", (event) => {
         const control = findControl(event.target);
         if (!canAnimate(control)) return;
         pressedControl = control;
         pressedPoint = { x: event.clientX, y: event.clientY };
-        control.classList.remove("control-bounce-release");
-        control.classList.add("is-control-pressed");
+        playBounce(control);
         releaseHarmonyLightBloom(pressedBloom);
         pressedBloom = emitHarmonyLightBloom(control, pressedPoint);
       });
@@ -765,7 +765,6 @@
         pressedPoint = null;
       });
       window.addEventListener("pointercancel", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
@@ -776,7 +775,7 @@
         const control = findControl(event.target);
         if (canAnimate(control)) {
           pressedControl = control;
-          control.classList.add("is-control-pressed");
+          playBounce(control);
           releaseHarmonyLightBloom(pressedBloom);
           pressedBloom = emitHarmonyLightBloom(control);
         }
@@ -788,7 +787,6 @@
         pressedPoint = null;
       });
       window.addEventListener("blur", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;

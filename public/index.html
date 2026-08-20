@@ -580,16 +580,13 @@
       transform-origin: center;
       will-change: transform;
     }
-    :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card):not(.image-nav).is-control-pressed {
-      transform: translateY(1px) scale(.965) !important;
-      transition-duration: .038s !important;
-    }
     :is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card):not(.image-nav).control-bounce-release {
-      animation: control-single-rebound .38s cubic-bezier(.16,.78,.22,1) both !important;
+      animation: control-single-rebound .30s cubic-bezier(.16,.78,.22,1) both !important;
     }
     @keyframes control-single-rebound {
-      0%   { transform: translateY(1px) scale(.965); }
-      58%  { transform: translateY(-1px) scale(1.04); }
+      0%   { transform: translateZ(0) scale(1); }
+      16%  { transform: translate3d(0,1px,0) scale(.965); }
+      58%  { transform: translate3d(0,-3px,0) scale(1.045); }
       100% { transform: none; }
     }
     /* 普通按钮松手后的短暂蓝青反馈；选中型按钮则由 .active 长久保留颜色。 */
@@ -1574,10 +1571,12 @@
     <!-- 左侧栏：头像、站名、页面导航和后台入口。 -->
     <aside class="sidebar">
       <!-- 左上角收起/展开按钮；状态会保存在当前浏览器的 localStorage。 -->
-      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">☰</button>
-      <button id="notification-bell" class="notification-bell" type="button" aria-label="打开通知信箱" title="通知信箱" hidden>
-        🔔<span id="notification-badge" class="notification-badge" hidden>0</span>
-      </button>
+      <div class="sidebar-controls">
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">◀</button>
+        <button id="notification-bell" class="notification-bell" type="button" aria-label="打开通知信箱" title="通知信箱" hidden>
+          🔔<span id="notification-badge" class="notification-badge" hidden>0</span>
+        </button>
+      </div>
       <div class="brand">
         <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
           <img class="avatar" src="/assets/avatar-glass.png?v=312c1e75" alt="星月集渐变毛玻璃头像">
@@ -1593,34 +1592,6 @@
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
         <button id="account-nav-button" data-section="settings" title="设置"><span class="nav-icon">⚙</span><span id="account-nav-label" class="nav-label">设置</span></button>
       </nav>
-      <!--
-        全站主题入口固定在侧边栏：白天、夜览与跟随系统共用 /theme.js。
-        侧栏收起时只保留主题图标；点击它会先平滑展开侧栏，再显示三项菜单。
-      -->
-      <div class="sidebar-theme-slot">
-        <span class="sidebar-theme-title">外观</span>
-        <div class="theme-picker sidebar-theme-picker" data-theme-picker>
-          <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
-            <span data-theme-icon aria-hidden="true">◐</span>
-            <span data-theme-label>跟随系统</span>
-          </button>
-          <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="网页主题" hidden>
-            <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
-            <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
-            <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
-          </div>
-        </div>
-      </div>
-      <!--
-        安装入口是浏览器工具而不是网站专栏，必须单独位于“外观”下方。
-        Chromium 会打开原生安装确认框；iOS、鸿蒙及内置浏览器会显示逐步说明。
-      -->
-      <div class="sidebar-install-slot" data-install-app-container hidden>
-        <button id="install-app-button" class="sidebar-install-button" type="button" title="安装桌面应用" data-install-app hidden>
-          <span class="sidebar-install-icon" aria-hidden="true">⇩</span>
-          <span class="sidebar-install-label" data-install-app-label>安装桌面应用</span>
-        </button>
-      </div>
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
         <!-- #site-version 会读取后台设置；新增/修改最新更新日志时会自动同步。 -->
@@ -1788,18 +1759,22 @@
       <section id="settings" class="content-section">
         <div class="section-inner">
           <h1>设置</h1>
-          <p class="section-desc">集中管理显示语言、夜览模式和已登录账号。</p>
           <div class="settings-grid">
             <article class="settings-card">
               <h2>显示与语言</h2>
-              <p class="section-desc">外观模式与侧边栏主题按钮保持同步。</p>
-              <div class="theme-picker" data-theme-picker style="margin:16px 0">
+              <div class="theme-picker settings-theme-picker" data-theme-picker>
                 <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false"><span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span></button>
                 <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="设置页面主题" hidden>
                   <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
                   <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
                   <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
                 </div>
+              </div>
+              <div class="settings-install-slot" data-install-app-container hidden>
+                <button id="install-app-button" class="sidebar-install-button" type="button" title="创建桌面访问" data-install-app hidden>
+                  <span class="sidebar-install-icon" aria-hidden="true">⇩</span>
+                  <span class="sidebar-install-label" data-install-app-label>创建桌面访问</span>
+                </button>
               </div>
               <label for="site-language">界面语言</label>
               <select id="site-language" class="language-select">
@@ -3758,16 +3733,17 @@
       const canAnimate = (control) => control
         && !control.matches(":disabled, .image-nav")
         && control.id !== "avatar-refresh";
-      const release = (control, point = null) => {
-        if (!control) return;
-        control.classList.remove("is-control-pressed");
-        releaseHarmonyLightBloom(pressedBloom);
-        pressedBloom = null;
+      const playBounce = (control) => {
         if (reducedMotion.matches || !canAnimate(control)) return;
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
-        window.setTimeout(() => control.classList.remove("control-bounce-release"), 430);
+        window.setTimeout(() => control.classList.remove("control-bounce-release"), 340);
+      };
+      const release = (control) => {
+        if (!control) return;
+        releaseHarmonyLightBloom(pressedBloom);
+        pressedBloom = null;
       };
 
       document.addEventListener("pointerdown", (event) => {
@@ -3775,8 +3751,7 @@
         if (!canAnimate(control)) return;
         pressedControl = control;
         pressedPoint = { x: event.clientX, y: event.clientY };
-        control.classList.remove("control-bounce-release");
-        control.classList.add("is-control-pressed");
+        playBounce(control);
         releaseHarmonyLightBloom(pressedBloom);
         pressedBloom = emitHarmonyLightBloom(control, pressedPoint);
       });
@@ -3787,7 +3762,6 @@
         pressedPoint = null;
       });
       window.addEventListener("pointercancel", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
@@ -3798,7 +3772,7 @@
         const control = findControl(event.target);
         if (canAnimate(control)) {
           pressedControl = control;
-          control.classList.add("is-control-pressed");
+          playBounce(control);
           releaseHarmonyLightBloom(pressedBloom);
           pressedBloom = emitHarmonyLightBloom(control);
         }
@@ -3810,27 +3784,12 @@
         pressedPoint = null;
       });
       window.addEventListener("blur", () => {
-        pressedControl?.classList.remove("is-control-pressed");
         releaseHarmonyLightBloom(pressedBloom);
         pressedControl = null;
         pressedPoint = null;
         pressedBloom = null;
       });
 
-      /*
-       * 站内链接只延迟 72ms：足够显示按下反馈，又不会让页面响应显得迟钝。
-       * 动画剩余部分可与页面切换自然重叠。
-       * 下载链接、外部链接、组合键新开窗口以及已被业务逻辑阻止的点击不延迟。
-       */
-      document.addEventListener("click", (event) => {
-        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const link = findControl(event.target)?.closest("a[href]");
-        if (!link || link.hasAttribute("download") || link.target === "_blank") return;
-        const destination = new URL(link.href, location.href);
-        if (destination.origin !== location.origin || !["http:", "https:"].includes(destination.protocol)) return;
-        event.preventDefault();
-        window.setTimeout(() => location.assign(destination.href), reducedMotion.matches ? 0 : 72);
-      });
     }
 
     /*
@@ -3971,12 +3930,18 @@
     });
 
     const sidebarToggle = document.getElementById("sidebar-toggle");
+    const mobileSidebarLayout = matchMedia("(max-width: 760px) and (hover: none), (max-width: 760px) and (pointer: coarse)");
+    function updateSidebarToggleIcon(collapsed) {
+      sidebarToggle.textContent = mobileSidebarLayout.matches
+        ? (collapsed ? "▼" : "▲")
+        : (collapsed ? "☰" : "◀");
+    }
     function setSidebarCollapsed(collapsed) {
       appShell.classList.toggle("sidebar-collapsed", collapsed);
       sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
       sidebarToggle.setAttribute("aria-label", collapsed ? "展开侧边栏" : "收起侧边栏");
       sidebarToggle.title = collapsed ? "展开侧边栏" : "收起侧边栏";
-      sidebarToggle.textContent = collapsed ? "☰" : "◀";
+      updateSidebarToggleIcon(collapsed);
       if (collapsed) {
         document.querySelectorAll(".sidebar [data-theme-menu]").forEach((menu) => { menu.hidden = true; });
         document.querySelectorAll(".sidebar [data-theme-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
@@ -3984,6 +3949,7 @@
       localStorage.setItem("xyj_sidebar_collapsed", collapsed ? "1" : "0");
     }
     setSidebarCollapsed(localStorage.getItem("xyj_sidebar_collapsed") === "1");
+    mobileSidebarLayout.addEventListener?.("change", () => updateSidebarToggleIcon(appShell.classList.contains("sidebar-collapsed")));
     sidebarToggle.addEventListener("click", () => setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed")));
     /* 收起状态点击主题图标时先展开侧栏，随后 /theme.js 会正常打开主题菜单。 */
     document.querySelector(".sidebar [data-theme-toggle]")?.addEventListener("click", (event) => {
@@ -4049,7 +4015,7 @@
       if (result?.status === "installed") {
         installAppMessage.textContent = "星月集已经作为应用运行，无需重复安装。";
       } else if (result?.status === "dismissed") {
-        installAppMessage.textContent = "本次安装已取消。以后仍可再次点击侧边栏的“安装桌面应用”。";
+        installAppMessage.textContent = "本次安装已取消。以后仍可在“设置”中再次选择“创建桌面访问”。";
       } else {
         installAppMessage.textContent = result?.instructions
           || "请打开浏览器菜单，选择“安装应用”“创建快捷方式”或“添加到主屏幕”。";

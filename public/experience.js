@@ -90,9 +90,8 @@
     host.style.gridColumn = "1 / -1";
     const title = document.createElement("h2"); title.textContent = "账号管理";
     const guest = document.createElement("div"); guest.className = "account-guest-state";
-    const guestText = document.createElement("p"); guestText.className = "section-desc"; guestText.textContent = "登录后可在这里修改昵称、密码和查看账号状态。";
     const login = document.createElement("a"); login.className = "btn"; login.href = "/?login=1"; login.textContent = "登录账号";
-    guest.append(guestText, login);
+    guest.append(login);
     host.append(title, guest, grid);
 
     const refresh = async () => {
