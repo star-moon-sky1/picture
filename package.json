@@ -1,6 +1,6 @@
 {
   "name": "xingyueji",
-  "version": "1.9.0",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

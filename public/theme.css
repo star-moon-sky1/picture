@@ -234,14 +234,7 @@
   .auth-card,
   .usage-guide,
   .updates,
-  .chat-shell,
-  .nav button,
-  .sidebar-toggle,
-  .theme-toggle,
-  .sidebar-install-button,
-  .entry-primary,
-  .entry-actions .btn,
-  .auth-card .btn
+  .chat-shell
 ) {
   position: relative;
   isolation: isolate;
@@ -252,14 +245,7 @@
     .auth-card,
     .usage-guide,
     .updates,
-    .chat-shell,
-    .nav button,
-    .sidebar-toggle,
-    .theme-toggle,
-    .sidebar-install-button,
-    .entry-primary,
-    .entry-actions .btn,
-    .auth-card .btn
+    .chat-shell
   )::after {
     content: "";
     position: absolute;
@@ -539,14 +525,7 @@
   .auth-card,
   .usage-guide,
   .updates,
-  .chat-shell,
-  .nav button,
-  .sidebar-toggle,
-  .theme-toggle,
-  .sidebar-install-button,
-  .entry-primary,
-  .entry-actions .btn,
-  .auth-card .btn
+  .chat-shell
 )::after {
   opacity: .72;
 }

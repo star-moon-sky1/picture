@@ -36,7 +36,7 @@
     {
       "name": "文件资源",
       "short_name": "文件资源",
-      "url": "/#resources",
+      "url": "/#portfolio",
       "icons": [{ "src": "/assets/avatar-glass-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]

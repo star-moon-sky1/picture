@@ -35,6 +35,9 @@
 
   function updateInstallControls() {
     const installed = isStandalone();
+    document.querySelectorAll("[data-install-app-container]").forEach((container) => {
+      container.hidden = installed;
+    });
     document.querySelectorAll("[data-install-app]").forEach((button) => {
       button.hidden = installed;
       button.disabled = false;

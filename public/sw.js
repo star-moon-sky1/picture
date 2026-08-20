@@ -6,12 +6,15 @@
  */
 const CACHE_PREFIX = "xyj-static-shell-";
 // 修改此名称会让已安装的桌面/PWA 版本立即替换旧的离线首页外壳。
-const STATIC_CACHE = `${CACHE_PREFIX}liquid-glass-refraction-1`;
+const STATIC_CACHE = `${CACHE_PREFIX}community-ui-2-2`;
 const APP_SHELL = [
   "/",
   "/theme.css",
+  "/vnext.css",
   "/theme.js",
   "/liquid-glass.js",
+  "/experience.js",
+  "/community.js",
   "/pwa.js",
   "/manifest.webmanifest",
   "/assets/avatar-glass-192.png",

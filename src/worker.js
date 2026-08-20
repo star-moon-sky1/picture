@@ -4,7 +4,7 @@
  * 负责 D1 数据库、R2 图片与大文件、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
-const APP_VERSION = "2.1.0.0";
+const APP_VERSION = "2.2.0.0";
 const SESSION_COOKIE = "xyj_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_COOKIE = "xyj_user";
@@ -378,6 +378,18 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS portfolio_subsections (
+      id TEXT PRIMARY KEY,
+      section_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(section_id) REFERENCES portfolio_sections(id) ON DELETE CASCADE
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS media (
       id TEXT PRIMARY KEY,
       object_key TEXT NOT NULL UNIQUE,
@@ -581,6 +593,43 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS notification_preferences (
+      user_id TEXT PRIMARY KEY,
+      article_updates INTEGER NOT NULL DEFAULT 0,
+      auto_open_on_login INTEGER NOT NULL DEFAULT 0,
+      show_badge INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      target_url TEXT NOT NULL DEFAULT '',
+      actor_user_id TEXT,
+      read_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS private_messages (
+      id TEXT PRIMARY KEY,
+      sender_user_id TEXT NOT NULL,
+      recipient_user_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      read_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(sender_user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS asset_folders (
       id TEXT PRIMARY KEY,
       parent_id TEXT,
@@ -667,6 +716,10 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_guest_visits_ip ON guest_visits(ip_hash, last_seen_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_reset_requests(user_id, requested_at)",
     "CREATE INDEX IF NOT EXISTS idx_password_resets_status ON password_reset_requests(status, requested_at)",
+    "CREATE INDEX IF NOT EXISTS idx_subsections_section ON portfolio_subsections(section_id, sort_order, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_private_messages_sender ON private_messages(sender_user_id, recipient_user_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_private_messages_recipient ON private_messages(recipient_user_id, sender_user_id, read_at, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_asset_folders_parent ON asset_folders(parent_id, sort_order, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_assets_folder ON assets(folder_id, status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_assets_visibility ON assets(visibility, status, created_at)",
@@ -683,6 +736,12 @@ async function initializeSchema(env) {
   await ensureColumn(env, "media", "preview_object_key", "TEXT");
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "content", "subsection_id", "TEXT");
+  await ensureColumn(env, "comments", "author_user_id", "TEXT");
+  await ensureColumn(env, "comments", "is_admin", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env, "changelogs", "sort_order", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env, "assets", "section_id", "TEXT");
+  await ensureColumn(env, "assets", "album_id", "TEXT");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
   await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "feedback", "admin_replied_at", "TEXT");
@@ -693,6 +752,9 @@ async function initializeSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_sections_visibility ON portfolio_sections(visibility, sort_order)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_visibility ON content(visibility, status, published_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_subsection ON content(subsection_id, published_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author_user_id, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_assets_gallery ON assets(section_id, album_id, status, created_at)"),
   ]);
 
   /*
@@ -726,6 +788,8 @@ async function initializeSchema(env) {
       .bind("usage_guide", DEFAULT_USAGE_GUIDE, timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("contact_email", "1598116329@qq.com", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("owner_user_id", "", timestamp),
   ]);
 
   /*
@@ -847,6 +911,31 @@ async function initializeSchema(env) {
     ]);
   }
 
+  /* 2.2 社区与界面升级只登记一次，并把页脚版本同步到本次发布。 */
+  const communityUiMarker = await env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'community_ui_2_2_initialized'",
+  ).first();
+  if (!communityUiMarker) {
+    const publishedAt = new Date(Date.now() + 2).toISOString();
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO changelogs
+          (id, version, title, body, published_at, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 220, ?, ?)
+      `).bind(
+        crypto.randomUUID(), APP_VERSION, "多彩界面、通知私信与个人空间升级",
+        "统一登录与注册液态玻璃，优化移动顶栏和侧栏回弹；新增个人空间小板块、图片板块视频、通知信箱、用户私信、站长评论回复及精确更新日志排序。",
+        publishedAt, timestamp, timestamp,
+      ),
+      env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('community_ui_2_2_initialized', '1', ?)")
+        .bind(timestamp),
+      env.DB.prepare(`
+        INSERT INTO settings (key, value, updated_at) VALUES ('site_version', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).bind(APP_VERSION, timestamp),
+    ]);
+  }
+
   // 把旧数据映射到新的动态板块，已设置过 section_id 的记录不会被覆盖。
   await env.DB.batch([
     env.DB.prepare("UPDATE content SET section_id = 'section-guides' WHERE section_id IS NULL AND type = 'guide'"),
@@ -857,7 +946,7 @@ async function initializeSchema(env) {
 
   // 页脚版本号默认跟随最新一条更新记录，以后每次后台保存日志都会同步更新。
   const latestLog = await env.DB.prepare(
-    "SELECT version FROM changelogs ORDER BY published_at DESC, created_at DESC LIMIT 1",
+    "SELECT version FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC LIMIT 1",
   ).first();
   await env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('site_version', ?, ?)")
     .bind(latestLog?.version || APP_VERSION, timestamp).run();
@@ -987,6 +1076,8 @@ function assetDto(row, variants = [], { includeDownload = false } = {}) {
   const safe = {
     id: row.id,
     folder_id: row.folder_id || null,
+    section_id: row.section_id || null,
+    album_id: row.album_id || null,
     filename: row.filename,
     display_name: row.display_name,
     mime_type: row.mime_type,
@@ -1048,18 +1139,22 @@ async function publicBootstrap(request, env) {
   const sessionUser = await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
   const [
-    changelogs, sections, content, albums, media, assetFolders, assets, assetVariants, settings,
+    changelogs, sections, subsections, content, albums, media, assetFolders, assets, assetVariants, settings,
     contentAccess, mediaAccess,
   ] = await Promise.all([
     env.DB.prepare(
-      "SELECT id, version, title, body, published_at FROM changelogs ORDER BY published_at DESC, created_at DESC",
+      "SELECT id, version, title, body, published_at, sort_order FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC",
     ).all(),
     env.DB.prepare(`
       SELECT id, name, kind, description, sort_order, show_all, visibility
       FROM portfolio_sections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, type, section_id, title, slug, excerpt, cover_media_id, visibility,
+      SELECT id, section_id, name, description, sort_order
+      FROM portfolio_subsections ORDER BY sort_order ASC, created_at ASC
+    `).all(),
+    env.DB.prepare(`
+      SELECT id, type, section_id, subsection_id, title, slug, excerpt, cover_media_id, visibility,
              published_at, created_at, updated_at, like_count, dislike_count
       FROM content
       WHERE status = 'published'
@@ -1082,7 +1177,7 @@ async function publicBootstrap(request, env) {
       FROM asset_folders ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, folder_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+      SELECT id, folder_id, section_id, album_id, filename, display_name, mime_type, size_bytes, kind, visibility,
              download_policy, relative_path, status, stream_uid, stream_hls_url,
              stream_dash_url, poster_url, created_at, updated_at
       FROM assets WHERE status = 'ready' ORDER BY created_at DESC
@@ -1107,6 +1202,7 @@ async function publicBootstrap(request, env) {
     && visibleToWebsite(item.visibility, fullAccess, allowedContentIds.has(item.id))
   ));
   const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
+  const visibleSubsections = rows(subsections).filter((item) => visibleSectionIds.has(item.section_id));
   // 照片自身和所属大板块都必须对当前身份可见；private 永远不进入普通网站数据。
   const visibleMedia = rows(media).filter((item) => (
     visibleSectionIds.has(item.section_id)
@@ -1122,6 +1218,7 @@ async function publicBootstrap(request, env) {
   }
   const visibleAssets = rows(assets).filter((item) => (
     (!item.folder_id || visibleFolderIds.has(item.folder_id))
+    && (!item.section_id || visibleSectionIds.has(item.section_id))
     && visibleToWebsite(normalizedAssetVisibility(item.visibility), fullAccess)
   ));
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
@@ -1131,6 +1228,7 @@ async function publicBootstrap(request, env) {
     access: { authenticated: Boolean(sessionUser), fullAccess },
     changelogs: rows(changelogs),
     sections: visibleSections,
+    subsections: visibleSubsections,
     content: visibleContent.map((item) => ({
       ...item,
       coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}?preview=1` : null,
@@ -1154,7 +1252,7 @@ async function publicBootstrap(request, env) {
 
 /*
  * 登录入口的轮播背景在完成人机验证前也必须能够显示，因此使用一个最小接口：
- * 它只返回公开照片的压缩预览地址，不返回标题、说明、文章或原片地址。
+ * 它只返回公开照片的背景展示地址，不返回标题、说明、文章或下载地址。
  */
 async function publicEntryBackground(env) {
   const result = await env.DB.prepare(`
@@ -1166,7 +1264,8 @@ async function publicEntryBackground(env) {
   `).all();
   return {
     photos: rows(result).map((item) => ({
-      url: `/media/${item.id}?preview=1&v=${encodeURIComponent(String(item.updated_at || item.created_at || "1"))}`,
+      // 登录背景直接读取公开原片，避免 2K/4K 屏幕把压缩预览再次放大。
+      url: `/media/${item.id}?background=1&v=${encodeURIComponent(String(item.updated_at || item.created_at || "1"))}`,
     })),
   };
 }
@@ -1204,7 +1303,8 @@ async function listPublicComments(request, env, contentId) {
   // 评论跟随文章权限；会员文章的评论不能通过直接调用 API 被游客读取。
   await getPublicContent(request, env, contentId);
   const result = await env.DB.prepare(`
-    SELECT id, content_id, parent_id, guest_name, body, like_count, dislike_count, created_at
+    SELECT id, content_id, parent_id, guest_name, body, like_count, dislike_count,
+           author_user_id, is_admin, created_at
     FROM comments
     WHERE content_id = ? AND status = 'active'
     ORDER BY created_at ASC
@@ -1244,8 +1344,10 @@ async function createComment(request, env) {
   const body = await readJson(request);
   const contentId = clampText(body.contentId, 80);
   const parentId = clampText(body.parentId, 80) || null;
-  const guestName = clampText(body.guestName, 30);
   const commentBody = clampText(body.body, 1000);
+  const authorUser = await getUserSession(request, env, false);
+  const guestName = authorUser?.nickname || clampText(body.guestName, 30);
+  let replyNotification = null;
 
   if (!validId(contentId) || !guestName || commentBody.length < 2) {
     throw new HttpError(400, "请填写游客署名和评论内容");
@@ -1254,20 +1356,37 @@ async function createComment(request, env) {
 
   if (parentId) {
     const parent = await env.DB.prepare(
-      "SELECT id FROM comments WHERE id = ? AND content_id = ? AND status = 'active'",
+      "SELECT id, author_user_id, guest_name FROM comments WHERE id = ? AND content_id = ? AND status = 'active'",
     ).bind(parentId, contentId).first();
     if (!parent) throw new HttpError(400, "要回复的评论不存在");
+    if (parent.author_user_id && parent.author_user_id !== authorUser?.id) {
+      const article = await env.DB.prepare("SELECT title FROM content WHERE id = ?").bind(contentId).first();
+      replyNotification = { userId: parent.author_user_id, payload: {
+        type: "comment_reply", title: `${guestName} 回复了你的评论`,
+        body: `${article?.title || "文章"}：${commentBody}`,
+        targetUrl: `/#article-${contentId}`, actorUserId: authorUser?.id || null,
+      } };
+    }
   }
 
   const id = crypto.randomUUID();
   const timestamp = nowIso();
   await env.DB.prepare(`
     INSERT INTO comments
-      (id, content_id, parent_id, guest_name, body, status, like_count, dislike_count, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 'active', 0, 0, ?, ?)
-  `).bind(id, contentId, parentId, guestName, commentBody, timestamp, timestamp).run();
+      (id, content_id, parent_id, guest_name, body, status, like_count, dislike_count,
+       author_user_id, is_admin, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'active', 0, 0, ?, 0, ?, ?)
+  `).bind(id, contentId, parentId, guestName, commentBody, authorUser?.id || null, timestamp, timestamp).run();
 
-  return { id, contentId, parentId, guestName, body: commentBody, like_count: 0, dislike_count: 0, created_at: timestamp };
+  if (replyNotification) {
+    await createNotification(env, replyNotification.userId, replyNotification.payload)
+      .catch((error) => console.error("Comment reply notification failed", error));
+  }
+
+  return {
+    id, contentId, parentId, guestName, body: commentBody, like_count: 0, dislike_count: 0,
+    author_user_id: authorUser?.id || null, is_admin: 0, created_at: timestamp,
+  };
 }
 
 async function listPublicFeedback(env) {
@@ -2252,6 +2371,204 @@ async function requireApprovedUser(request, env) {
   return user;
 }
 
+async function requireAuthenticatedUser(request, env) {
+  const user = await getUserSession(request, env);
+  if (!user) throw new HttpError(401, "请先登录账号");
+  return user;
+}
+
+async function ensureNotificationPreferences(env, userId) {
+  const timestamp = nowIso();
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO notification_preferences
+      (user_id, article_updates, auto_open_on_login, show_badge, updated_at)
+    VALUES (?, 0, 0, 1, ?)
+  `).bind(userId, timestamp).run();
+  return env.DB.prepare(`
+    SELECT article_updates, auto_open_on_login, show_badge, updated_at
+    FROM notification_preferences WHERE user_id = ?
+  `).bind(userId).first();
+}
+
+async function createNotification(env, userId, {
+  type = "system", title, body = "", targetUrl = "", actorUserId = null,
+} = {}) {
+  if (!validId(userId) || !clampText(title, 120)) return null;
+  const id = crypto.randomUUID();
+  await env.DB.prepare(`
+    INSERT INTO notifications
+      (id, user_id, type, title, body, target_url, actor_user_id, read_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+  `).bind(
+    id, userId, clampText(type, 40), clampText(title, 120), clampText(body, 1200),
+    clampText(targetUrl, 500), validId(actorUserId) ? actorUserId : null, nowIso(),
+  ).run();
+  return id;
+}
+
+async function notifyArticlePublished(env, contentId, title) {
+  const subscribers = rows(await env.DB.prepare(`
+    SELECT u.id FROM users u
+    JOIN notification_preferences p ON p.user_id = u.id
+    WHERE u.status = 'approved' AND p.article_updates = 1
+  `).all());
+  for (const subscriber of subscribers.slice(0, 1000)) {
+    await createNotification(env, subscriber.id, {
+      type: "article", title: "星月集发布了新文章", body: title,
+      targetUrl: `/#article-${contentId}`,
+    });
+  }
+}
+
+async function notificationInbox(request, env) {
+  const user = await requireAuthenticatedUser(request, env);
+  const preferences = await ensureNotificationPreferences(env, user.id);
+  const result = await env.DB.prepare(`
+    SELECT n.id, n.type, n.title, n.body, n.target_url, n.read_at, n.created_at,
+           n.actor_user_id, u.nickname AS actor_nickname
+    FROM notifications n LEFT JOIN users u ON u.id = n.actor_user_id
+    WHERE n.user_id = ?
+    ORDER BY n.created_at DESC LIMIT 120
+  `).bind(user.id).all();
+  const items = rows(result);
+  return {
+    notifications: items,
+    unreadCount: items.filter((item) => !item.read_at).length,
+    preferences: {
+      articleUpdates: Boolean(preferences?.article_updates),
+      autoOpenOnLogin: Boolean(preferences?.auto_open_on_login),
+      showBadge: preferences?.show_badge !== 0,
+    },
+  };
+}
+
+async function updateNotification(request, env, id, action) {
+  const user = await requireAuthenticatedUser(request, env);
+  const timestamp = nowIso();
+  if (action === "read-all" && request.method === "POST") {
+    await env.DB.prepare("UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE user_id = ?")
+      .bind(timestamp, user.id).run();
+    return { ok: true };
+  }
+  if (!validId(id)) throw new HttpError(400, "通知 ID 错误");
+  if (request.method === "PUT") {
+    await env.DB.prepare("UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE id = ? AND user_id = ?")
+      .bind(timestamp, id, user.id).run();
+    return { id, readAt: timestamp };
+  }
+  if (request.method === "DELETE") {
+    await env.DB.prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+    return { ok: true };
+  }
+  throw new HttpError(405, "不支持的请求方法");
+}
+
+async function notificationPreferences(request, env) {
+  const user = await requireAuthenticatedUser(request, env);
+  if (request.method === "GET") return ensureNotificationPreferences(env, user.id);
+  if (request.method !== "PUT") throw new HttpError(405, "不支持的请求方法");
+  const input = await readJson(request);
+  const timestamp = nowIso();
+  await env.DB.prepare(`
+    INSERT INTO notification_preferences
+      (user_id, article_updates, auto_open_on_login, show_badge, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      article_updates = excluded.article_updates,
+      auto_open_on_login = excluded.auto_open_on_login,
+      show_badge = excluded.show_badge,
+      updated_at = excluded.updated_at
+  `).bind(
+    user.id, input.articleUpdates === true ? 1 : 0,
+    input.autoOpenOnLogin === true ? 1 : 0, input.showBadge === false ? 0 : 1, timestamp,
+  ).run();
+  return { ok: true };
+}
+
+async function messagePeer(env, userId) {
+  if (!validId(userId)) return null;
+  return env.DB.prepare("SELECT id, username, nickname FROM users WHERE id = ? AND status = 'approved'")
+    .bind(userId).first();
+}
+
+async function messageContactsFor(env, userId) {
+  const result = await env.DB.prepare(`
+    SELECT u.id, u.username, u.nickname,
+      (SELECT body FROM private_messages m
+       WHERE (m.sender_user_id = ? AND m.recipient_user_id = u.id)
+          OR (m.sender_user_id = u.id AND m.recipient_user_id = ?)
+       ORDER BY m.created_at DESC LIMIT 1) AS last_body,
+      (SELECT created_at FROM private_messages m
+       WHERE (m.sender_user_id = ? AND m.recipient_user_id = u.id)
+          OR (m.sender_user_id = u.id AND m.recipient_user_id = ?)
+       ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
+      (SELECT COUNT(*) FROM private_messages m
+       WHERE m.sender_user_id = u.id AND m.recipient_user_id = ? AND m.read_at IS NULL) AS unread_count
+    FROM users u
+    WHERE u.id <> ? AND u.status = 'approved'
+      AND EXISTS (
+        SELECT 1 FROM private_messages m
+        WHERE (m.sender_user_id = ? AND m.recipient_user_id = u.id)
+           OR (m.sender_user_id = u.id AND m.recipient_user_id = ?)
+      )
+    ORDER BY last_message_at DESC
+  `).bind(userId, userId, userId, userId, userId, userId, userId, userId).all();
+  return rows(result).map((item) => ({ ...item, unread_count: Number(item.unread_count || 0) }));
+}
+
+async function messageThreadFor(env, userId, peerId, markRead = true) {
+  const peer = await messagePeer(env, peerId);
+  if (!peer || peer.id === userId) throw new HttpError(404, "私信用户不存在");
+  const result = await env.DB.prepare(`
+    SELECT id, sender_user_id, recipient_user_id, body, read_at, created_at
+    FROM private_messages
+    WHERE (sender_user_id = ? AND recipient_user_id = ?)
+       OR (sender_user_id = ? AND recipient_user_id = ?)
+    ORDER BY created_at ASC LIMIT 300
+  `).bind(userId, peerId, peerId, userId).all();
+  if (markRead) {
+    await env.DB.prepare(`
+      UPDATE private_messages SET read_at = COALESCE(read_at, ?)
+      WHERE sender_user_id = ? AND recipient_user_id = ?
+    `).bind(nowIso(), peerId, userId).run();
+  }
+  return { peer, messages: rows(result) };
+}
+
+async function sendPrivateMessageFor(env, sender, recipientId, rawBody) {
+  if (sender.status !== "approved") throw new HttpError(403, "账号通过审核后才能使用私信");
+  const recipient = await messagePeer(env, recipientId);
+  if (!recipient || recipient.id === sender.id) throw new HttpError(400, "请选择其他已审核用户");
+  const body = clampText(rawBody, 2000);
+  if (body.length < 1) throw new HttpError(400, "私信内容不能为空");
+  const id = crypto.randomUUID();
+  const timestamp = nowIso();
+  await env.DB.prepare(`
+    INSERT INTO private_messages (id, sender_user_id, recipient_user_id, body, read_at, created_at)
+    VALUES (?, ?, ?, ?, NULL, ?)
+  `).bind(id, sender.id, recipient.id, body, timestamp).run();
+  await createNotification(env, recipient.id, {
+    type: "message", title: `${sender.nickname} 发来一条私信`, body,
+    targetUrl: `/#messages-${sender.id}`, actorUserId: sender.id,
+  });
+  return { id, sender_user_id: sender.id, recipient_user_id: recipient.id, body, created_at: timestamp };
+}
+
+async function privateMessages(request, env, url) {
+  const user = await requireApprovedUser(request, env);
+  if (request.method === "GET" && !url.searchParams.get("userId")) {
+    return { contacts: await messageContactsFor(env, user.id) };
+  }
+  if (request.method === "GET") {
+    return messageThreadFor(env, user.id, url.searchParams.get("userId") || "");
+  }
+  if (request.method === "POST") {
+    const input = await readJson(request);
+    return sendPrivateMessageFor(env, user, clampText(input.recipientUserId, 80), input.body);
+  }
+  throw new HttpError(405, "不支持的请求方法");
+}
+
 async function registerUser(request, env, ctx) {
   await consumeRateLimit(env, await clientRateKey(request, "user-register"), 5, 60 * 60);
   const input = await readJson(request);
@@ -2327,6 +2644,8 @@ async function registerUser(request, env, ctx) {
 async function loginUser(request, env) {
   await consumeRateLimit(env, await clientRateKey(request, "user-login"), 10, 15 * 60);
   const input = await readJson(request);
+  // 与游客入口共用同一个可见验证组件；已配置 Turnstile 时登录也必须验证。
+  await verifyGuestTurnstile(request, env, input.turnstileToken);
   const username = normalizeUsername(input.username);
   const user = username
     ? await env.DB.prepare("SELECT * FROM users WHERE username_normalized = ?").bind(username).first()
@@ -2382,9 +2701,16 @@ async function updateUserProfile(request, env) {
   const input = await readJson(request);
   const nickname = clampText(input.nickname, 30);
   if (!nickname) throw new HttpError(400, "昵称不能为空");
+  const previousNickname = user.nickname;
   await env.DB.prepare("UPDATE users SET nickname = ?, updated_at = ? WHERE id = ?")
     .bind(nickname, nowIso(), user.id).run();
   user.nickname = nickname;
+  if (nickname !== previousNickname) {
+    await createNotification(env, user.id, {
+      type: "account", title: "昵称修改成功",
+      body: `昵称已由“${previousNickname}”修改为“${nickname}”。`, targetUrl: "/#settings",
+    });
+  }
   return { user: publicUser(user) };
 }
 
@@ -2406,6 +2732,10 @@ async function changeUserPassword(request, env) {
   ]);
   const session = await createUserSession(request, env, user.id, false);
   await recordLoginEvent(env, request, "password_change", user.id, user.username_normalized);
+  await createNotification(env, user.id, {
+    type: "account", title: "密码修改成功",
+    body: "你的登录密码刚刚完成修改。如非本人操作，请立即联系站长。", targetUrl: "/#settings",
+  });
   return json({ ok: true }, 200, {
     "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
     "Cache-Control": "no-store",
@@ -2498,6 +2828,10 @@ async function resetUserPassword(request, env) {
     `).bind(reset.user_id, reset.id),
   ]);
   await recordLoginEvent(env, request, "password_reset", reset.user_id, reset.username_normalized);
+  await createNotification(env, reset.user_id, {
+    type: "account", title: "账号密码已通过重置流程更新",
+    body: "如果这不是你的操作，请尽快联系站长。", targetUrl: "/#settings",
+  });
   return { ok: true, message: "密码已重置，请使用新密码登录。" };
 }
 
@@ -2800,11 +3134,13 @@ async function serveMedia(request, env, id) {
    * 或使用 download=1 都是在请求原片，必须是审核通过的账号或 Studio 管理员。
    * 这样即使游客手工修改地址，也不能绕过前端隐藏的下载按钮。
    */
-  const requestsOriginal = wantsDownload || params.get("preview") !== "1";
+  const isPublicBackground = params.get("background") === "1";
+  const requestsOriginal = wantsDownload || (params.get("preview") !== "1" && !isPublicBackground);
   const isPrivate = media.section_visibility === "private" || media.media_visibility === "private";
   const isSelected = media.media_visibility === "selected";
   const isProtected = isPrivate || isSelected
     || media.section_visibility === "member" || media.media_visibility === "member";
+  if (isPublicBackground && isProtected) throw new HttpError(404, "图片不存在");
   // 受保护图片或原片请求只验证一次 Studio 会话，避免重复读取/校验 Cookie。
   const adminAccess = (isProtected || requestsOriginal) ? await isAdmin(request, env) : false;
   // 私密图片只允许带有效 Studio 管理会话的请求读取。
@@ -2881,6 +3217,13 @@ async function assetAccessContext(request, env, asset) {
     if (folderVisibility === "private") inheritedVisibility = "private";
     else if (folderVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
     folder = folder.parent_id ? folderMap.get(folder.parent_id) : null;
+  }
+  if (asset.section_id) {
+    const section = await env.DB.prepare("SELECT visibility FROM portfolio_sections WHERE id = ?")
+      .bind(asset.section_id).first();
+    const sectionVisibility = normalizedVisibility(section?.visibility);
+    if (sectionVisibility === "private") inheritedVisibility = "private";
+    else if (sectionVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
   }
 
   const wantsDownload = new URL(request.url).searchParams.get("download") === "1" || asset.kind === "archive";
@@ -3093,14 +3436,68 @@ async function adminSections(request, env, id) {
       statements.push(env.DB.prepare("DELETE FROM media_access_users WHERE media_id = ?").bind(item.id));
     }
     statements.push(
+      env.DB.prepare("UPDATE assets SET section_id = NULL, album_id = NULL WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM media WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM albums WHERE section_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM portfolio_subsections WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM portfolio_sections WHERE id = ?").bind(id),
     );
     await env.DB.batch(statements);
     return { ok: true };
   }
 
+  throw new HttpError(405, "不支持的请求方法");
+}
+
+async function adminSubsections(request, env, id) {
+  if (request.method === "GET") {
+    return rows(await env.DB.prepare(`
+      SELECT ss.*,
+        (SELECT COUNT(*) FROM content c WHERE c.subsection_id = ss.id) AS content_count
+      FROM portfolio_subsections ss
+      ORDER BY ss.sort_order ASC, ss.created_at ASC
+    `).all());
+  }
+  if (request.method === "POST" || request.method === "PUT") {
+    const input = await readJson(request);
+    const sectionId = await contentSectionId(env, input.sectionId, "article");
+    const name = clampText(input.name, 80);
+    const description = clampText(input.description, 500);
+    const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
+    if (!name) throw new HttpError(400, "小板块名称不能为空");
+    const timestamp = nowIso();
+    if (request.method === "POST") {
+      const newId = crypto.randomUUID();
+      await env.DB.prepare(`
+        INSERT INTO portfolio_subsections
+          (id, section_id, name, description, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, sectionId, name, description, sortOrder, timestamp, timestamp).run();
+      return { id: newId };
+    }
+    if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
+    const existing = await env.DB.prepare("SELECT id FROM portfolio_subsections WHERE id = ?").bind(id).first();
+    if (!existing) throw new HttpError(404, "小板块不存在");
+    await env.DB.batch([
+      env.DB.prepare(`
+        UPDATE portfolio_subsections
+        SET section_id = ?, name = ?, description = ?, sort_order = ?, updated_at = ?
+        WHERE id = ?
+      `).bind(sectionId, name, description, sortOrder, timestamp, id),
+      // 小板块换到另一文章板块时，其下文章必须一起移动，避免产生跨板块孤儿分类。
+      env.DB.prepare("UPDATE content SET section_id = ?, updated_at = ? WHERE subsection_id = ?")
+        .bind(sectionId, timestamp, id),
+    ]);
+    return { id };
+  }
+  if (request.method === "DELETE") {
+    if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
+    await env.DB.batch([
+      env.DB.prepare("UPDATE content SET subsection_id = NULL WHERE subsection_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM portfolio_subsections WHERE id = ?").bind(id),
+    ]);
+    return { ok: true };
+  }
   throw new HttpError(405, "不支持的请求方法");
 }
 
@@ -3119,6 +3516,13 @@ async function adminContent(request, env, id) {
     const body = await readJson(request);
     const type = body.type === "guide" ? "guide" : "article";
     const sectionId = await contentSectionId(env, body.sectionId, type);
+    let subsectionId = validId(body.subsectionId) ? String(body.subsectionId) : null;
+    if (subsectionId) {
+      const subsection = await env.DB.prepare(
+        "SELECT id FROM portfolio_subsections WHERE id = ? AND section_id = ?",
+      ).bind(subsectionId, sectionId).first();
+      if (!subsection) throw new HttpError(400, "请选择当前大板块下的有效小板块");
+    }
     const title = clampText(body.title, 120);
     const excerpt = clampText(body.excerpt, 500);
     const bodyHtml = sanitizeRichHtml(body.bodyHtml);
@@ -3134,30 +3538,34 @@ async function adminContent(request, env, id) {
       let slug = `${slugify(title)}-${newId.slice(0, 8)}`;
       await env.DB.prepare(`
         INSERT INTO content
-          (id, type, section_id, title, slug, excerpt, body_html, cover_media_id, status, published_at,
+          (id, type, section_id, subsection_id, title, slug, excerpt, body_html, cover_media_id, status, published_at,
            like_count, dislike_count, visibility, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
       `).bind(
-        newId, type, sectionId, title, slug, excerpt, bodyHtml, coverMediaId, status,
+        newId, type, sectionId, subsectionId, title, slug, excerpt, bodyHtml, coverMediaId, status,
         status === "published" ? timestamp : null, visibility, timestamp, timestamp,
       ).run();
       await replaceAllowedUsers(env, "content", newId, allowedUserIds, timestamp);
       await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
+      if (status === "published") await notifyArticlePublished(env, newId, title);
       return { id: newId };
     }
 
     if (!validId(id)) throw new HttpError(400, "内容 ID 错误");
-    const existing = await env.DB.prepare("SELECT id, published_at FROM content WHERE id = ?").bind(id).first();
+    const existing = await env.DB.prepare("SELECT id, status, published_at FROM content WHERE id = ?").bind(id).first();
     if (!existing) throw new HttpError(404, "内容不存在");
     const publishedAt = status === "published" ? (existing.published_at || timestamp) : null;
     await env.DB.prepare(`
       UPDATE content
-      SET type = ?, section_id = ?, title = ?, excerpt = ?, body_html = ?, cover_media_id = ?,
+      SET type = ?, section_id = ?, subsection_id = ?, title = ?, excerpt = ?, body_html = ?, cover_media_id = ?,
           status = ?, visibility = ?, published_at = ?, updated_at = ?
       WHERE id = ?
-    `).bind(type, sectionId, title, excerpt, bodyHtml, coverMediaId, status, visibility, publishedAt, timestamp, id).run();
+    `).bind(type, sectionId, subsectionId, title, excerpt, bodyHtml, coverMediaId, status, visibility, publishedAt, timestamp, id).run();
     await replaceAllowedUsers(env, "content", id, allowedUserIds, timestamp);
     await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
+    if (status === "published" && existing.status !== "published") {
+      await notifyArticlePublished(env, id, title);
+    }
     return { id };
   }
 
@@ -3174,7 +3582,7 @@ async function syncSiteVersion(env, preferredVersion = "") {
   let version = clampText(preferredVersion, 30);
   if (!version) {
     const latest = await env.DB.prepare(
-      "SELECT version FROM changelogs ORDER BY published_at DESC, created_at DESC LIMIT 1",
+      "SELECT version FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC LIMIT 1",
     ).first();
     version = latest?.version || APP_VERSION;
   }
@@ -3187,29 +3595,32 @@ async function syncSiteVersion(env, preferredVersion = "") {
 
 async function adminChangelogs(request, env, id) {
   if (request.method === "GET") {
-    return rows(await env.DB.prepare("SELECT * FROM changelogs ORDER BY published_at DESC").all());
+    return rows(await env.DB.prepare("SELECT * FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC").all());
   }
   if (request.method === "POST" || request.method === "PUT") {
     const body = await readJson(request);
     const version = clampText(body.version, 30);
     const title = clampText(body.title, 120);
     const logBody = clampText(body.body, 4000);
-    const publishedAt = body.publishedAt ? new Date(body.publishedAt).toISOString() : nowIso();
+    const publishedDate = body.publishedAt ? new Date(body.publishedAt) : new Date();
+    if (Number.isNaN(publishedDate.getTime())) throw new HttpError(400, "更新时间格式无效");
+    const publishedAt = publishedDate.toISOString();
+    const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
     if (!version || !title || !logBody) throw new HttpError(400, "版本号、标题和更新内容不能为空");
     const timestamp = nowIso();
     if (request.method === "POST") {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
-        INSERT INTO changelogs (id, version, title, body, published_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, version, title, logBody, publishedAt, timestamp, timestamp).run();
+        INSERT INTO changelogs (id, version, title, body, published_at, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, version, title, logBody, publishedAt, sortOrder, timestamp, timestamp).run();
       await syncSiteVersion(env);
       return { id: newId };
     }
     if (!validId(id)) throw new HttpError(400, "更新记录 ID 错误");
     await env.DB.prepare(`
-      UPDATE changelogs SET version = ?, title = ?, body = ?, published_at = ?, updated_at = ? WHERE id = ?
-    `).bind(version, title, logBody, publishedAt, timestamp, id).run();
+      UPDATE changelogs SET version = ?, title = ?, body = ?, published_at = ?, sort_order = ?, updated_at = ? WHERE id = ?
+    `).bind(version, title, logBody, publishedAt, sortOrder, timestamp, id).run();
     // 编辑历史记录后以时间排序重新判断“当前版本”，避免旧日志误改页脚。
     await syncSiteVersion(env);
     return { id };
@@ -3252,12 +3663,15 @@ async function adminAlbums(request, env, id) {
       `).bind(name, description, sortOrder, sectionId, timestamp, id),
       env.DB.prepare("UPDATE media SET section_id = ?, updated_at = ? WHERE album_id = ?")
         .bind(sectionId, timestamp, id),
+      env.DB.prepare("UPDATE assets SET section_id = ?, updated_at = ? WHERE album_id = ?")
+        .bind(sectionId, timestamp, id),
     ]);
     return { id };
   }
   if (request.method === "DELETE") {
     await env.DB.batch([
       env.DB.prepare("UPDATE media SET album_id = NULL WHERE album_id = ?").bind(id),
+      env.DB.prepare("UPDATE assets SET album_id = NULL WHERE album_id = ?").bind(id),
       env.DB.prepare("DELETE FROM albums WHERE id = ?").bind(id),
     ]);
     return { ok: true };
@@ -3342,7 +3756,7 @@ async function adminAssetFolders(request, env, id) {
 async function listAdminAssets(env) {
   const [assetResult, variantResult, uploadResult] = await Promise.all([
     env.DB.prepare(`
-      SELECT id, folder_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+      SELECT id, folder_id, section_id, album_id, filename, display_name, mime_type, size_bytes, kind, visibility,
              download_policy, relative_path, status, stream_uid, stream_hls_url,
              stream_dash_url, poster_url, created_at, updated_at
       FROM assets ORDER BY created_at DESC
@@ -3525,13 +3939,24 @@ async function createAssetUpload(request, env) {
     const visibility = normalizedAssetVisibility(body.visibility);
     const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy);
     const relativePath = safeRelativePath(body.relativePath);
+    let sectionId = null;
+    let albumId = null;
+    if (kind === "video" && validId(body.sectionId)) {
+      sectionId = await gallerySectionId(env, body.sectionId);
+      if (validId(body.albumId)) {
+        const album = await env.DB.prepare("SELECT id FROM albums WHERE id = ? AND section_id = ?")
+          .bind(body.albumId, sectionId).first();
+        if (!album) throw new HttpError(400, "视频所选相册不属于当前图片板块");
+        albumId = String(body.albumId);
+      }
+    }
     await env.DB.prepare(`
       INSERT INTO assets
-        (id, folder_id, filename, display_name, object_key, mime_type, size_bytes, kind,
+        (id, folder_id, section_id, album_id, filename, display_name, object_key, mime_type, size_bytes, kind,
          visibility, download_policy, relative_path, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'uploading', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'uploading', ?, ?)
     `).bind(
-      assetId, folderId, filename, displayName, objectKey, mimeType, kind,
+      assetId, folderId, sectionId, albumId, filename, displayName, objectKey, mimeType, kind,
       visibility, downloadPolicy, relativePath, timestamp, timestamp,
     ).run();
   }
@@ -3819,6 +4244,41 @@ async function adminComments(request, env, id) {
   }
   if (request.method === "PUT") {
     const body = await readJson(request);
+    if (body.action === "reply") {
+      if (!validId(id)) throw new HttpError(400, "评论 ID 错误");
+      const parent = await env.DB.prepare(`
+        SELECT c.id, c.content_id, c.author_user_id, p.title AS content_title
+        FROM comments c LEFT JOIN content p ON p.id = c.content_id
+        WHERE c.id = ?
+      `).bind(id).first();
+      if (!parent) throw new HttpError(404, "评论不存在");
+      const replyBody = clampText(body.body, 1000);
+      if (!replyBody) throw new HttpError(400, "回复内容不能为空");
+      const settings = await settingsObject(env);
+      const owner = validId(settings.owner_user_id)
+        ? await env.DB.prepare("SELECT id, nickname FROM users WHERE id = ? AND status = 'approved'")
+          .bind(settings.owner_user_id).first()
+        : null;
+      const replyId = crypto.randomUUID();
+      const timestamp = nowIso();
+      await env.DB.prepare(`
+        INSERT INTO comments
+          (id, content_id, parent_id, guest_name, body, status, like_count, dislike_count,
+           author_user_id, is_admin, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'active', 0, 0, ?, 1, ?, ?)
+      `).bind(
+        replyId, parent.content_id, parent.id, owner?.nickname || settings.owner_name || "星月集",
+        replyBody, owner?.id || null, timestamp, timestamp,
+      ).run();
+      if (parent.author_user_id && parent.author_user_id !== owner?.id) {
+        await createNotification(env, parent.author_user_id, {
+          type: "comment_reply", title: "站长回复了你的评论",
+          body: `${parent.content_title || "文章"}：${replyBody}`,
+          targetUrl: `/#article-${parent.content_id}`, actorUserId: owner?.id || null,
+        });
+      }
+      return { id: replyId, parentId: parent.id };
+    }
     const status = body.status === "hidden" ? "hidden" : "active";
     await env.DB.prepare("UPDATE comments SET status = ?, updated_at = ? WHERE id = ?")
       .bind(status, nowIso(), id).run();
@@ -3890,10 +4350,16 @@ async function adminSettings(request, env) {
   if (request.method === "GET") return settingsObject(env);
   if (request.method === "PUT") {
     const body = await readJson(request);
+    if ("owner_user_id" in body && clampText(body.owner_user_id, 80)) {
+      const ownerUserId = clampText(body.owner_user_id, 80);
+      const owner = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND status = 'approved'")
+        .bind(ownerUserId).first();
+      if (!owner) throw new HttpError(400, "站长绑定账号必须是已审核账号");
+    }
     const allowed = new Map([
       ["site_title", 80], ["owner_name", 80], ["school", 160],
       ["intro", 1000], ["usage_guide", 6000],
-      ["contact_email", 240], ["site_version", 30],
+      ["contact_email", 240], ["site_version", 30], ["owner_user_id", 80],
     ]);
     const statements = [];
     for (const [key, max] of allowed) {
@@ -3958,6 +4424,13 @@ async function adminUsers(request, env, id) {
       env.DB.prepare("UPDATE user_profiles SET review_note = ?, updated_at = ? WHERE user_id = ?")
         .bind(reviewNote, timestamp, id),
     ]);
+    if (status !== existing.status) {
+      const statusText = { approved: "账号审核已通过", rejected: "账号审核未通过", disabled: "账号已停用", pending: "账号状态已改为待审核" }[status];
+      await createNotification(env, id, {
+        type: "account", title: statusText || "账号状态已更新",
+        body: reviewNote || "你可以在账户设置中查看当前状态。", targetUrl: "/#settings",
+      });
+    }
     if (status === "disabled") {
       await env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
         .bind(timestamp, id).run();
@@ -4110,6 +4583,27 @@ async function adminGuestAnalytics(request, env, url) {
   };
 }
 
+async function ownerAccount(env) {
+  const settings = await settingsObject(env);
+  if (!validId(settings.owner_user_id)) return null;
+  return env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'approved'")
+    .bind(settings.owner_user_id).first();
+}
+
+async function adminMessages(request, env, id) {
+  const owner = await ownerAccount(env);
+  if (!owner) throw new HttpError(409, "请先在网站设置中绑定一个已审核账号作为站长账号");
+  if (request.method === "GET" && !id) {
+    return { owner: publicUser(owner), contacts: await messageContactsFor(env, owner.id) };
+  }
+  if (request.method === "GET") return messageThreadFor(env, owner.id, id);
+  if (request.method === "POST") {
+    const input = await readJson(request);
+    return sendPrivateMessageFor(env, owner, clampText(input.recipientUserId || id, 80), input.body);
+  }
+  throw new HttpError(405, "不支持的请求方法");
+}
+
 async function adminDashboard(env) {
   const today = analyticsDay(env);
   const [content, published, comments, media, assets, logs, sections, feedback, unreadFeedback, users, pendingUsers, onlineUsers, resetRequests, guestVisitors, guestPageViews] = await Promise.all([
@@ -4165,6 +4659,7 @@ async function handleAdmin(request, env, url) {
   }
   if (resource === "dashboard" && request.method === "GET") return adminDashboard(env);
   if (resource === "sections") return adminSections(request, env, id);
+  if (resource === "subsections") return adminSubsections(request, env, id);
   if (resource === "content") return adminContent(request, env, id);
   if (resource === "changelogs") return adminChangelogs(request, env, id);
   if (resource === "albums") return adminAlbums(request, env, id);
@@ -4178,6 +4673,7 @@ async function handleAdmin(request, env, url) {
   if (resource === "user-events") return adminUserEvents(request, env, id, url);
   if (resource === "password-resets") return adminPasswordResets(request, env, id);
   if (resource === "guest-analytics") return adminGuestAnalytics(request, env, url);
+  if (resource === "messages") return adminMessages(request, env, id);
   if (resource === "settings") return adminSettings(request, env);
   throw new HttpError(404, "后台接口不存在");
 }
@@ -4324,6 +4820,24 @@ async function handleApi(request, env, url, ctx) {
   }
   if (url.pathname === "/api/auth/reset-password" && request.method === "POST") {
     return json(await resetUserPassword(request, env));
+  }
+
+  /* 已注册用户的通知信箱、提醒偏好与私信会话。 */
+  if (url.pathname === "/api/notifications" && request.method === "GET") {
+    return json(await notificationInbox(request, env));
+  }
+  if (url.pathname === "/api/notifications/read-all" && request.method === "POST") {
+    return json(await updateNotification(request, env, "", "read-all"));
+  }
+  if (url.pathname.startsWith("/api/notifications/")) {
+    const id = url.pathname.split("/").filter(Boolean)[2] || "";
+    return json(await updateNotification(request, env, id, ""));
+  }
+  if (url.pathname === "/api/notification-preferences") {
+    return json(await notificationPreferences(request, env));
+  }
+  if (url.pathname === "/api/messages") {
+    return json(await privateMessages(request, env, url), request.method === "POST" ? 201 : 200);
   }
 
   /* AI 的前端按钮和后端接口都要求审核通过，不能只靠 CSS 隐藏。 */

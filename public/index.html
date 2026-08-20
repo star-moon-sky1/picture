@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="星月集个人网站">
-  <meta name="xingyueji-version" content="2.1.0.0">
+  <meta name="xingyueji-version" content="2.2.0.0">
   <title>星月集 - 个人主页</title>
   <!-- 网站头像和浏览器图标统一使用本地处理后的渐变毛玻璃头像。 -->
   <link rel="icon" href="/assets/avatar-glass.png?v=312c1e75" type="image/png">
@@ -1515,6 +1515,7 @@
   </style>
   <!-- 三个页面共用的白天/夜览覆盖样式放在原页面样式之后。 -->
   <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/vnext.css">
 </head>
 <body>
   <!-- ========================================================
@@ -1540,7 +1541,6 @@
     </div>
     <div class="entry-card">
       <h1 id="entry-title">欢迎来到星月集</h1>
-      <p class="entry-subtitle">登录账号以使用完整功能，或者选择游客身份浏览公开内容。</p>
 
       <form id="entry-login-form" class="entry-form">
         <label class="entry-field" for="entry-username">登录用户名
@@ -1553,17 +1553,15 @@
           <label><input id="entry-remember" type="checkbox">保持登录30天</label>
           <a class="entry-link" href="/login?mode=forgot&amp;next=/">忘记密码？</a>
         </div>
+        <!-- 登录与游客进入复用同一次服务端 Turnstile 校验。 -->
+        <div id="guest-turnstile" class="guest-turnstile-wrap" hidden aria-label="登录与游客人机验证"></div>
         <button class="btn entry-primary" type="submit">登录并进入网站</button>
+        <div class="entry-actions">
+          <button id="entry-guest" class="btn ghost" type="button">以游客身份浏览</button>
+          <a class="btn ghost" href="/login?mode=register&amp;next=/">注册账号</a>
+        </div>
         <p id="entry-notice" class="notice" aria-live="polite"></p>
       </form>
-
-      <div class="entry-divider">或者</div>
-      <!-- 仅配置 TURNSTILE_SITE_KEY + Secret 后显示；Token 仍会在 Worker 端二次校验。 -->
-      <div id="guest-turnstile" class="guest-turnstile-wrap" hidden aria-label="游客人机验证"></div>
-      <div class="entry-actions">
-        <button id="entry-guest" class="btn ghost" type="button">以游客身份浏览</button>
-        <a class="btn ghost" href="/login?mode=register&amp;next=/">注册账号</a>
-      </div>
       <p class="entry-note">游客可以浏览公开页面；AI 助手和个人空间完整内容仅向审核通过的账号开放。</p>
       <p class="entry-note guest-privacy-note">游客进入后会记录脱敏 IP、大致城市/地区、浏览器和访问时间，用于安全与按日统计；记录最多保留 90 天。</p>
     </div>
@@ -1577,6 +1575,9 @@
     <aside class="sidebar">
       <!-- 左上角收起/展开按钮；状态会保存在当前浏览器的 localStorage。 -->
       <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏">☰</button>
+      <button id="notification-bell" class="notification-bell" type="button" aria-label="打开通知信箱" title="通知信箱" hidden>
+        🔔<span id="notification-badge" class="notification-badge" hidden>0</span>
+      </button>
       <div class="brand">
         <button id="avatar-refresh" class="avatar-refresh" type="button" title="刷新页面" aria-label="刷新页面">
           <img class="avatar" src="/assets/avatar-glass.png?v=312c1e75" alt="星月集渐变毛玻璃头像">
@@ -1587,13 +1588,10 @@
       <nav class="nav" aria-label="主要导航">
         <button data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
         <button data-section="portfolio" title="个人空间"><span class="nav-icon">▦</span><span class="nav-label">个人空间</span></button>
-        <button data-section="resources" title="文件资源"><span class="nav-icon">▤</span><span class="nav-label">文件资源</span></button>
         <button data-section="about" title="关于我"><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
-        <button data-section="contact" title="联系方式"><span class="nav-icon">✉</span><span class="nav-label">联系方式</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
-        <!-- 游客不显示账户入口；renderAccount() 只在检测到登录会话后取消 hidden。 -->
-        <button id="account-nav-button" data-section="account" title="账户中心" hidden><span class="nav-icon">◉</span><span id="account-nav-label" class="nav-label">账户中心</span></button>
+        <button id="account-nav-button" data-section="settings" title="设置"><span class="nav-icon">⚙</span><span id="account-nav-label" class="nav-label">设置</span></button>
       </nav>
       <!--
         全站主题入口固定在侧边栏：白天、夜览与跟随系统共用 /theme.js。
@@ -1626,7 +1624,7 @@
       <div class="sidebar-note">
         <a class="studio-link" href="/studio">站长后台</a>
         <!-- #site-version 会读取后台设置；新增/修改最新更新日志时会自动同步。 -->
-        <br><small id="site-version">网站版本 v2.1.0.0</small>
+        <br><small id="site-version">网站版本 v2.2.0.0</small>
       </div>
     </aside>
 
@@ -1640,7 +1638,7 @@
           </div>
           <!-- 默认不显示副标题；只有站长以后在后台填写主页介绍时才会出现。 -->
           <p class="lead" id="home-intro" hidden></p>
-          <div id="usage-guide" class="usage-guide" hidden>
+          <div id="usage-guide" class="usage-guide" role="button" tabindex="0" aria-label="查看完整本站使用说明" hidden>
             <h2>本站使用说明</h2>
             <!-- 正文由 Studio → 网站设置 → 本站使用说明读取，HTML 不再保存具体内容。 -->
             <div id="usage-guide-content"></div>
@@ -1699,13 +1697,7 @@
           </div>
           <h2>目前学习方向</h2>
           <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony开发</span></div>
-        </div>
-      </section>
-
-      <!-- ==================== 联系方式 ==================== -->
-      <section id="contact" class="content-section">
-        <div class="section-inner">
-          <h1>联系方式</h1>
+          <h2>联系方式</h2>
           <div class="profile-grid">
             <div class="info-card"><span>国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
             <div class="info-card"><span>国际邮箱</span><a href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
@@ -1788,6 +1780,35 @@
                 <p id="password-notice" class="notice"></p>
               </form>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 设置：外观、语言与账户管理 ==================== -->
+      <section id="settings" class="content-section">
+        <div class="section-inner">
+          <h1>设置</h1>
+          <p class="section-desc">集中管理显示语言、夜览模式和已登录账号。</p>
+          <div class="settings-grid">
+            <article class="settings-card">
+              <h2>显示与语言</h2>
+              <p class="section-desc">外观模式与侧边栏主题按钮保持同步。</p>
+              <div class="theme-picker" data-theme-picker style="margin:16px 0">
+                <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false"><span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span></button>
+                <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="设置页面主题" hidden>
+                  <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
+                  <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
+                  <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+                </div>
+              </div>
+              <label for="site-language">界面语言</label>
+              <select id="site-language" class="language-select">
+                <option value="zh-CN">简体中文</option>
+                <option value="zh-TW">繁體中文</option>
+                <option value="en">English</option>
+              </select>
+            </article>
+            <div id="settings-account-host"></div>
           </div>
         </div>
       </section>
@@ -1938,6 +1959,8 @@
       comments: [],
       activePortfolioSection: null,
       activeAlbums: {},
+      activeSubsections: {},
+      resourcePanelNode: null,
       imageSequence: [],
       currentImageIndex: -1,
       // 记录已经预加载过的预览地址，避免每次来回切换都重复创建请求。
@@ -2335,8 +2358,8 @@
 
     /*
      * 只创建两个 frame 并轮换，避免一次性加载全部公开照片。电脑和手机都由
-     * complete 清晰主图 cover 铺满；登录卡片的 lens 使用同一张压缩预览，浏览器
-     * 会直接命中缓存，不会重新请求或泄露 R2 中的照片原片。
+     * complete 清晰公开原图 cover 铺满；登录卡片的 lens 复用同一地址，浏览器
+     * 会直接命中缓存。接口只允许公开图片作为背景，不会泄露受保护的 R2 原片。
      */
     function startEntryPhotoBackground(urls) {
       const host = document.getElementById("entry-photo-background");
@@ -2504,6 +2527,9 @@
 
     function requestedSectionFromLocation() {
       const requested = location.hash.slice(1);
+      if (requested === "account") return "settings";
+      if (requested === "resources") { state.activePortfolioSection = "section-resources"; return "portfolio"; }
+      if (requested === "contact") return "about";
       return document.getElementById(requested)?.classList.contains("content-section") ? requested : "home";
     }
 
@@ -2538,6 +2564,9 @@
     }
 
     function navigateSection(id, { historyMode = "push", animate = true } = {}) {
+      if (id === "account") id = "settings";
+      if (id === "resources") { state.activePortfolioSection = "section-resources"; renderPortfolio(); id = "portfolio"; }
+      if (id === "contact") id = "about";
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
       if (showSection(id, { animate })) {
@@ -2578,13 +2607,16 @@
     /* ---------- 05. 动态个人空间：大板块、文章、相册与图片。 ---------- */
     function portfolioSections() {
       const configured = state.data?.sections;
-      if (Array.isArray(configured)) return configured;
       // 仅用于兼容浏览器中尚未失效的旧 bootstrap 缓存。
-      return [
+      const sections = Array.isArray(configured) ? [...configured] : [
         { id: "section-essays", name: "随笔", kind: "content", show_all: 1 },
         { id: "section-photos", name: "拍摄照片", kind: "gallery", show_all: 1 },
         { id: "section-guides", name: "北京旅行指南", kind: "content", show_all: 1 },
       ];
+      if (!sections.some((item) => item.id === "section-resources")) {
+        sections.push({ id: "section-resources", name: "文件资源", kind: "resources", description: "文件、文档与视频", show_all: 1 });
+      }
+      return sections;
     }
 
     function contentBelongsToSection(item, section) {
@@ -2640,7 +2672,9 @@
         const belongs = item.section_id ? item.section_id === section.id : section.id === "section-photos";
         return belongs && (activeAlbum === "all" || item.album_id === activeAlbum);
       });
-      if (!photos.length) { gallery.append(empty("这个图片板块还没有上传图片。")); return; }
+      const videos = (state.data?.assets || []).filter((item) => item.kind === "video"
+        && item.section_id === section.id && (activeAlbum === "all" || item.album_id === activeAlbum));
+      if (!photos.length && !videos.length) { gallery.append(empty("这个图片板块还没有上传图片或视频。")); return; }
       photos.forEach((photo) => {
         const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
         card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
@@ -2648,6 +2682,15 @@
         // 图片网格只展示照片本身，不显示上传文件名、文件编号或说明文字。
         card.append(image); card.addEventListener("click", () => openImage(photo, photos));
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo, photos); }); gallery.append(card);
+      });
+      videos.forEach((asset) => {
+        const card = document.createElement("div"); card.className = "photo-card gallery-video-card"; card.tabIndex = 0;
+        card.setAttribute("role", "button"); card.setAttribute("aria-label", `播放视频：${asset.display_name}`);
+        const video = document.createElement("video"); video.preload = "metadata"; video.muted = true; video.playsInline = true;
+        video.src = asset.url; if (asset.poster_url) video.poster = asset.poster_url;
+        const open = () => openResourceAsset(asset);
+        card.append(video); card.addEventListener("click", open);
+        card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
       });
     }
 
@@ -2658,9 +2701,35 @@
       if (!section) { host.append(empty("还没有个人空间板块，请在站长后台新建。")); return; }
       state.activePortfolioSection = section.id;
       if (section.kind === "gallery") { renderGallerySection(host, section); return; }
+      if (section.kind === "resources") {
+        state.resourcePanelNode ||= document.querySelector("#resources .section-inner");
+        if (state.resourcePanelNode) host.append(state.resourcePanelNode);
+        renderResources();
+        return;
+      }
+
+      const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
+      let activeSubsection = state.activeSubsections[section.id] || "all";
+      if (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection)) activeSubsection = "all";
+      state.activeSubsections[section.id] = activeSubsection;
+      if (subsections.length) {
+        const subTabs = document.createElement("div"); subTabs.className = "portfolio-subtabs";
+        const selectSubsection = (subsectionId) => { state.activeSubsections[section.id] = subsectionId; renderPortfolioPanel(); };
+        const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
+        all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
+        all.addEventListener("click", () => selectSubsection("all")); subTabs.append(all);
+        subsections.forEach((subsection) => {
+          const control = document.createElement("button"); control.type = "button"; control.textContent = subsection.name;
+          control.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
+          control.title = subsection.description || subsection.name;
+          control.addEventListener("click", () => selectSubsection(subsection.id)); subTabs.append(control);
+        });
+        host.append(subTabs);
+      }
 
       const grid = document.createElement("div"); grid.className = "content-grid"; host.append(grid);
-      const items = (state.data?.content || []).filter((item) => contentBelongsToSection(item, section));
+      const items = (state.data?.content || []).filter((item) => contentBelongsToSection(item, section)
+        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
       if (!items.length) grid.append(empty(`“${section.name}”尚未发布内容。`));
       else items.forEach((item) => grid.append(contentCard(item, section)));
     }
@@ -2716,7 +2785,9 @@
       const open = () => {
         state.currentResourceFolder = folder.id; renderResources();
         const reader = document.getElementById("reader-dialog"); if (reader.open) reader.close();
-        if (state.activeSection !== "resources") navigateSection("resources");
+        state.activePortfolioSection = "section-resources";
+        if (state.activeSection !== "portfolio") navigateSection("portfolio");
+        renderPortfolio();
       };
       card.addEventListener("click", open);
       card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } });
@@ -3164,7 +3235,7 @@
       introNode.textContent = intro;
       introNode.hidden = !intro;
       renderUsageGuide(settings.usage_guide);
-      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "2.1.0.0"}`;
+      document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "2.2.0.0"}`;
 
       // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
       const school = settings.school || "北京理工大学 计算机学院";
@@ -3179,11 +3250,17 @@
       const user = state.auth.user;
       const navButton = document.getElementById("account-nav-button");
       const navLabel = document.getElementById("account-nav-label");
-      // 游客不需要“登录 / 账户”导航；登录后才显示以昵称命名的账户入口。
-      navButton.hidden = !user;
-      navLabel.textContent = user ? user.nickname : "账户中心";
+      // “设置”对游客也可见，登录后在同一板块内增加账号管理。
+      navButton.hidden = false;
+      navLabel.textContent = document.documentElement.lang === "en" ? "Settings"
+        : (document.documentElement.lang === "zh-TW" ? "設定" : "设置");
       const accessNote = document.getElementById("portfolio-access-note");
       accessNote.textContent = hasFullAccess() ? "已显示个人空间完整内容" : "游客或待审核账号仅显示公开内容";
+      const commentName = document.getElementById("guest-name");
+      if (commentName) {
+        commentName.readOnly = Boolean(user);
+        if (user) commentName.value = user.nickname;
+      }
       // 登录状态可能由定时心跳更新，下载入口也要立即跟随权限变化。
       syncProtectedDownloadControls();
       if (!user) return;
@@ -3263,10 +3340,19 @@
     function commentNode(comment, isReply = false) {
       const wrap = document.createElement("article"); wrap.className = `comment${isReply ? " reply" : ""}`;
       const head = document.createElement("div"); head.className = "comment-head";
+      const author = document.createElement("button"); author.type = "button"; author.className = "comment-author-button";
+      author.dataset.userId = comment.author_user_id || "";
+      author.disabled = !comment.author_user_id;
+      author.title = comment.author_user_id ? `与 ${comment.guest_name} 私信` : "游客评论";
+      const avatar = document.createElement("span"); avatar.className = "comment-avatar"; avatar.textContent = String(comment.guest_name || "访").slice(0, 1);
       const name = document.createElement("span"); name.className = "comment-name"; name.textContent = comment.guest_name;
+      author.append(avatar, name);
+      if (Number(comment.is_admin)) {
+        const badge = document.createElement("span"); badge.className = "admin-badge"; badge.textContent = "站长"; author.append(badge);
+      }
       const date = document.createElement("span"); date.className = "comment-date";
       date.textContent = `${isReply ? "回复于" : "评论于"} ${formatDateTime(comment.created_at) || "时间未知"}`;
-      head.append(name, date);
+      head.append(author, date);
       const body = document.createElement("div"); body.className = "comment-body"; body.textContent = comment.body;
       const actions = document.createElement("div"); actions.className = "comment-actions";
       const like = document.createElement("button"); like.className = "text-button"; like.textContent = `👍 ${comment.like_count}`;
@@ -3294,7 +3380,7 @@
     function showReplyForm(parentNode, parentId) {
       document.querySelectorAll(".reply-form").forEach((form) => form.remove());
       const form = document.createElement("form"); form.className = "reply-form";
-      const name = document.createElement("input"); name.required = true; name.maxLength = 30; name.placeholder = "游客署名"; name.value = localStorage.getItem("xyj_guest_name") || "";
+      const name = document.createElement("input"); name.required = true; name.maxLength = 30; name.placeholder = "游客署名"; name.value = state.auth.user?.nickname || localStorage.getItem("xyj_guest_name") || ""; name.readOnly = Boolean(state.auth.user);
       const body = document.createElement("input"); body.required = true; body.maxLength = 1000; body.placeholder = "回复内容";
       const submit = document.createElement("button"); submit.className = "btn small"; submit.type = "submit"; submit.textContent = "回复";
       form.append(name, body, submit);
@@ -3758,11 +3844,17 @@
       if (!sidebar) return;
       let touchStartY = null;
       let edgeLocked = false;
+      let topArmed = true;
+      let bottomArmed = true;
 
       const atTop = () => sidebar.scrollTop <= 1;
       const atBottom = () => sidebar.scrollTop + sidebar.clientHeight >= sidebar.scrollHeight - 1;
       const bounce = (edge) => {
         if (edgeLocked || reducedMotion.matches) return;
+        if (edge === "top" && !topArmed) return;
+        if (edge === "bottom" && !bottomArmed) return;
+        if (edge === "top") topArmed = false;
+        if (edge === "bottom") bottomArmed = false;
         edgeLocked = true;
         const className = edge === "top" ? "sidebar-edge-bounce-top" : "sidebar-edge-bounce-bottom";
         sidebar.classList.remove("sidebar-edge-bounce-top", "sidebar-edge-bounce-bottom");
@@ -3775,8 +3867,14 @@
       };
 
       sidebar.addEventListener("wheel", (event) => {
+        if (event.deltaY > 0 && !atTop()) topArmed = true;
+        if (event.deltaY < 0 && !atBottom()) bottomArmed = true;
         if (event.deltaY < 0 && atTop()) bounce("top");
         if (event.deltaY > 0 && atBottom()) bounce("bottom");
+      }, { passive: true });
+      sidebar.addEventListener("scroll", () => {
+        if (!atTop()) topArmed = true;
+        if (!atBottom()) bottomArmed = true;
       }, { passive: true });
       sidebar.addEventListener("touchstart", (event) => {
         touchStartY = event.touches[0]?.clientY ?? null;
@@ -3801,6 +3899,11 @@
       submit.disabled = true;
       notice.textContent = "正在登录…";
       try {
+        const protection = await initializeGuestProtection();
+        if (protection.enabled && !state.turnstileToken) {
+          notice.textContent = "请先完成人机验证。";
+          return;
+        }
         await api("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -3808,6 +3911,7 @@
             username: document.getElementById("entry-username").value,
             password: document.getElementById("entry-password").value,
             remember: document.getElementById("entry-remember").checked,
+            turnstileToken: state.turnstileToken,
           }),
         });
         notice.textContent = "登录成功，正在进入网站…";
@@ -3816,8 +3920,10 @@
         state.bootstrapPromise = null;
         state.siteLoaded = false;
         await boot();
+        window.dispatchEvent(new CustomEvent("xyj-auth-changed"));
       } catch (error) {
         notice.textContent = error.message;
+        resetGuestTurnstile();
       } finally {
         submit.disabled = false;
       }
@@ -4042,7 +4148,7 @@
 
     document.getElementById("auth-login-link").addEventListener("click", (event) => {
       if (!state.auth.authenticated) return;
-      event.preventDefault(); document.getElementById("auth-lock-dialog").close(); navigateSection("account");
+      event.preventDefault(); document.getElementById("auth-lock-dialog").close(); navigateSection("settings");
     });
 
     /* hashchange 兼容手工修改地址；入口层不应被地址中的旧 hash 切回网站主体。 */
@@ -4184,5 +4290,7 @@
       boot();
     }
   </script>
+  <script src="/experience.js"></script>
+  <script src="/community.js"></script>
 </body>
 </html>
