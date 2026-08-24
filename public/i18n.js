@@ -2,17 +2,27 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "xyj_language";
+  /* Studio 是站长工作台，始终使用简体中文，不继承前台访客的语言偏好。 */
+  if (/^\/studio(?:\/|$)/.test(location.pathname)
+    || document.documentElement.dataset.i18nScope === "admin") return;
+
+  const STORAGE_KEY = "xyj_front_language";
+  const LEGACY_STORAGE_KEY = "xyj_language";
+  const CACHE_KEY = "xyj_front_translation_cache_v3";
   const VALID = new Set(["zh-CN", "zh-TW", "en"]);
   const ATTRIBUTES = ["placeholder", "title", "aria-label", "alt"];
   const nodeSources = new WeakMap();
   const attributeSources = new WeakMap();
-  const memoryCache = new Map();
+  const renderedText = new WeakMap();
+  const renderedAttributes = new WeakMap();
+  const memoryCache = loadMemoryCache();
+  const inflightBatches = new Map();
   let language = readLanguage();
   let mutationTimer = 0;
-  let applying = false;
-  let rescanAfterApply = false;
+  let prefetchTimer = 0;
   let languageRevision = 0;
+  let renderEpoch = 0;
+  let observer = null;
 
   const fallback = {
     "zh-TW": new Map(Object.entries({
@@ -44,7 +54,193 @@
   }));
 
   const englishPhrases = new Map(Object.entries({
-    "个人空间板块":"Personal space sections","大板块与小板块":"Sections and subsections","图片、相册与视频":"Images, albums and videos","文章内容与文件":"Articles and files","独立文件资源":"Independent files","留言与反馈":"Feedback","用户与审核":"Users and review","网站设置":"Site settings","游客统计":"Guest analytics","评论管理":"Comment management","用户私信":"Messages","更新日志":"Changelog","查看网站目前的内容状态":"View the current site status","新建大板块":"New section","新建小板块":"New subsection","所属大板块":"Section","所属小板块":"Subsection","板块名称":"Section name","板块类型":"Section type","板块说明":"Description","文章类":"Articles","图片类":"Images","文件资源类":"Files","访问权限":"Visibility","仅审核用户":"Approved users only","仅指定用户":"Selected users only","不给指定用户看":"Exclude selected users","仅本人可见":"Private","保存板块":"Save section","保存小板块":"Save subsection","未分类":"Uncategorized","上传图片":"Upload image","上传文件":"Upload file","上传文件/视频":"Upload file/video","文件资源":"Files","在线预览":"Preview online","直接下载":"Download","登录后下载":"Sign in to download","公开":"Public","草稿":"Draft","已发布":"Published","状态":"Status","标题":"Title","摘要":"Summary","正文":"Article body","保存内容":"Save content","删除":"Delete","刷新":"Refresh","返回登录":"Back to sign in","下一步":"Next","上一步":"Back","创建账号":"Create account","验证信息":"Verify details","确认提交":"Review and submit","申请注册":"Create an account","登录用户名":"Username","昵称":"Nickname","设置密码":"Set password","确认密码":"Confirm password","联系方式":"Contact","联系方式类型":"Contact type","备注":"Note","选填":"optional","提交注册申请":"Submit registration","申请重置密码":"Request password reset","设置新密码":"Set a new password","返回网站首页":"Back to home","正在登录":"Signing in","上传成功":"Upload complete","上传完成":"Upload complete","保存权限":"Save permissions","预览":"Preview","下载":"Download","根目录":"Root","全部":"All","主页":"Home","个人空间":"Personal Space","关于我":"About Me","设置":"Settings","登录账号":"Sign in","注册账号":"Create account","修改密码":"Change password","白天模式":"Light mode","夜览模式":"Dark mode","跟随系统":"Follow system","定时夜览":"Scheduled dark mode","简体中文":"Simplified Chinese","繁體中文":"Traditional Chinese","英语":"English","发送":"Send","关闭":"Close"
+    "欢迎来到星月集": "Welcome to Xingyueji",
+    "主要导航": "Main navigation",
+    "主页": "Home",
+    "个人空间": "Personal Space",
+    "关于我": "About Me",
+    "留言与反馈": "Feedback",
+    "AI 助手": "AI Assistant",
+    "设置": "Settings",
+    "展开侧边栏": "Expand sidebar",
+    "收起侧边栏": "Collapse sidebar",
+    "打开通知信箱": "Open notifications",
+    "通知信箱": "Notifications",
+    "通知与私信": "Notifications & Messages",
+    "通知信箱还是空的。": "Your notification inbox is empty.",
+    "还没有私信会话。你可以点击评论头像发起交流。": "No conversations yet. Select a comment avatar to start one.",
+    "私信内容": "Message",
+    "输入私信…": "Write a message…",
+    "发送": "Send",
+    "关闭": "Close",
+    "界面语言": "Interface language",
+    "账号管理": "Account",
+    "查看账户状态": "View account status",
+    "创建桌面访问": "Install app",
+    "登录页面主题": "Sign-in theme",
+    "登录与注册页面主题": "Sign-in and registration theme",
+    "设置页面主题": "Settings theme",
+    "跟随系统": "Follow system",
+    "白天模式": "Light mode",
+    "夜览模式": "Dark mode",
+    "定时夜览": "Scheduled dark mode",
+    "简体中文": "Simplified Chinese",
+    "繁體中文": "Traditional Chinese",
+    "英语": "English",
+    "站长后台": "Admin Studio",
+    "网站版本": "Site version",
+    "本站使用说明": "Site Guide",
+    "查看完整本站使用说明": "View the full site guide",
+    "查看往期版本更新说明": "View earlier versions",
+    "登录账号": "Sign in",
+    "登录": "Sign in",
+    "登录用户名": "Username",
+    "输入登录用户名": "Enter your username",
+    "密码": "Password",
+    "输入密码": "Enter your password",
+    "保持登录30天": "Keep me signed in for 30 days",
+    "忘记密码？": "Forgot password?",
+    "登录并进入网站": "Sign in",
+    "以游客身份浏览": "Browse as guest",
+    "请先完成人机验证。": "Complete the human verification first.",
+    "登录与游客人机验证": "Sign-in and guest verification",
+    "正在登录…": "Signing in…",
+    "登录成功，正在进入网站…": "Signed in. Opening the site…",
+    "正在以游客身份进入…": "Entering as a guest…",
+    "正在核验并进入游客模式…": "Verifying and entering guest mode…",
+    "人机验证已通过，可以进入游客模式。": "Verification complete. Guest access is ready.",
+    "人机验证失败，请刷新或更换网络后重试。": "Verification failed. Refresh the page or try another network.",
+    "注册账号": "Create account",
+    "申请注册": "Create an account",
+    "创建账号": "Create account",
+    "注册进度": "Registration progress",
+    "昵称": "Nickname",
+    "在网站中显示的名称": "Name shown on the site",
+    "设置密码": "Set password",
+    "确认密码": "Confirm password",
+    "再次输入密码": "Enter the password again",
+    "下一步": "Next",
+    "上一步": "Back",
+    "验证信息": "Verify details",
+    "确认提交": "Review and submit",
+    "真实姓名或常用昵称（写社交平台昵称亦可）": "Real name or familiar nickname (social profile names are also accepted)",
+    "联系方式类型": "Contact type",
+    "联系方式类型（选填）": "Contact type (optional)",
+    "联系方式（选填）": "Contact (optional)",
+    "邀请码（选填）": "Invitation code (optional)",
+    "备注（选填）": "Note (optional)",
+    "提交注册申请": "Submit registration",
+    "正在提交注册申请…": "Submitting registration…",
+    "注册申请已经提交。审核完成前仍可浏览公开内容。": "Your application has been submitted. Public content remains available during review.",
+    "申请重置密码": "Request password reset",
+    "设置新密码": "Set a new password",
+    "新密码": "New password",
+    "确认新密码": "Confirm new password",
+    "正在重置密码…": "Resetting password…",
+    "修改密码": "Change password",
+    "正在修改密码…": "Changing password…",
+    "密码已修改，其他设备上的登录已经失效。": "Password changed. Sessions on other devices have been signed out.",
+    "返回登录": "Back to sign in",
+    "返回网站首页": "Back to home",
+    "进入网站": "Enter site",
+    "已通过审核": "Approved",
+    "等待审核": "Pending review",
+    "审核未通过": "Not approved",
+    "账号已停用": "Account disabled",
+    "账号正在等待审核": "Your account is awaiting review",
+    "账号已获得完整权限，可以使用 AI 助手并查看会员内容。": "Your account has full access to the AI assistant and member content.",
+    "登录后可以查看账户状态、修改昵称和密码。": "Sign in to view your account status and update your nickname or password.",
+    "个人空间板块": "Personal space sections",
+    "大板块与小板块": "Sections and subsections",
+    "全部": "All",
+    "文章": "Articles",
+    "照片": "Photos",
+    "文件资源": "Files",
+    "文件夹": "Folder",
+    "根目录": "Root",
+    "未分类": "Uncategorized",
+    "未命名文章": "Untitled article",
+    "未填写": "Not provided",
+    "未标注": "Not specified",
+    "时间未知": "Unknown time",
+    "点击阅读全文": "Read full article",
+    "点击放大查看": "Open full view",
+    "打开文件夹查看内容": "Open folder",
+    "这个文件夹暂时没有可见资源。": "This folder has no visible files yet.",
+    "这个图片板块还没有上传图片或文件。": "No images or files have been uploaded to this section yet.",
+    "还没有个人空间板块，请在站长后台新建。": "No personal-space sections yet. Create one in Admin Studio.",
+    "在线预览": "Preview online",
+    "预览": "Preview",
+    "下载": "Download",
+    "直接下载": "Download",
+    "登录后下载": "Sign in to download",
+    "下载原文件": "Download original file",
+    "下载原始视频": "Download original video",
+    "下载音频": "Download audio",
+    "原始文件": "Original file",
+    "自动画质": "Auto quality",
+    "当前浏览器不支持 HLS 自动画质": "This browser does not support automatic HLS quality.",
+    "文件预览": "File preview",
+    "图片预览": "Image preview",
+    "照片预览": "Photo preview",
+    "上一张照片": "Previous photo",
+    "下一张照片": "Next photo",
+    "正在读取文档…": "Loading document…",
+    "正在读取…": "Loading…",
+    "无法读取内容": "Unable to load content",
+    "文档不存在，或当前账号没有访问权限": "The document does not exist or your account cannot access it.",
+    "浏览器不能直接预览这种文件格式，你可以使用下方下载按钮保存原件。": "This file type cannot be previewed in the browser. Use the download button below.",
+    "留言": "Message",
+    "公开留言板": "Public messages",
+    "游客署名": "Guest name",
+    "姓名或称呼": "Name",
+    "写下想说的话…": "Write your message…",
+    "提交给站长": "Send to owner",
+    "正在提交…": "Submitting…",
+    "已提交，站长后台会显示这条信息。": "Submitted. The site owner will see your message in Admin Studio.",
+    "还没有公开留言。": "No public messages yet.",
+    "回复": "Reply",
+    "回复内容": "Reply",
+    "站长回复": "Owner reply",
+    "站长": "Owner",
+    "评论于": "Commented",
+    "回复于": "Replied",
+    "写下评论…": "Write a comment…",
+    "正在发表…": "Posting…",
+    "评论已发表。": "Comment posted.",
+    "还没有评论，欢迎留下第一条留言。": "No comments yet. Be the first to respond.",
+    "作者已赞": "Liked by the author",
+    "置顶": "Pin",
+    "请登录以使用完整功能": "Sign in to use all features",
+    "AI 助手仅向审核通过的账号开放。你可以立即登录或提交注册申请。": "The AI assistant is available to approved accounts. Sign in or submit a registration request.",
+    "AI 正在生成回答…": "The AI assistant is responding…",
+    "AI 暂时没有返回内容。": "The AI assistant did not return a response.",
+    "输入问题": "Ask a question",
+    "输入问题…": "Ask a question…",
+    "生成中…": "Generating…",
+    "外部链接": "External link",
+    "确认后访问": "Continue",
+    "刷新页面": "Refresh page",
+    "关闭页面": "Close page",
+    "数据服务尚未完成部署。": "The data service is not ready yet.",
+    "文件服务暂时不可用。": "The file service is temporarily unavailable.",
+    "留言服务暂时不可用。": "The message service is temporarily unavailable.",
+    "未知错误": "Unknown error",
+    "公开": "Public",
+    "草稿": "Draft",
+    "已发布": "Published",
+    "状态": "Status",
+    "标题": "Title",
+    "摘要": "Summary",
+    "正文": "Article body",
+    "上传图片": "Upload image",
+    "上传文件": "Upload file",
+    "上传文件/视频": "Upload file/video",
+    "上传成功": "Upload complete",
+    "上传完成": "Upload complete",
+    "保存权限": "Save permissions",
+    "删除": "Delete",
+    "刷新": "Refresh"
   }));
 
   function localTranslate(text, targetLanguage) {
@@ -54,18 +250,39 @@
       return Array.from(text, (character) => traditionalCharacters.get(character) || character).join("");
     }
     if (targetLanguage !== "en") return text;
+    const phraseExact = englishPhrases.get(text);
+    if (phraseExact) return phraseExact;
     let translated = text;
     [...englishPhrases.entries()]
       .sort((a, b) => b[0].length - a[0].length)
       .forEach(([source, value]) => { translated = translated.split(source).join(value); });
-    return translated;
+    // 不显示中英拼接的半成品；未知长文由后台预取后一次性替换。
+    return /[\u3400-\u9fff]/u.test(translated) ? text : translated;
   }
 
   function readLanguage() {
     try {
-      const value = localStorage.getItem(STORAGE_KEY) || "zh-CN";
-      return VALID.has(value) ? value : "zh-CN";
+      const value = localStorage.getItem(STORAGE_KEY)
+        || localStorage.getItem(LEGACY_STORAGE_KEY)
+        || "zh-CN";
+      const normalized = VALID.has(value) ? value : "zh-CN";
+      localStorage.setItem(STORAGE_KEY, normalized);
+      localStorage.removeItem?.(LEGACY_STORAGE_KEY);
+      return normalized;
     } catch { return "zh-CN"; }
+  }
+
+  function loadMemoryCache() {
+    try {
+      const entries = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "[]");
+      return new Map(Array.isArray(entries) ? entries.filter((item) => Array.isArray(item) && item.length === 2) : []);
+    } catch { return new Map(); }
+  }
+
+  function persistMemoryCache() {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify([...memoryCache.entries()].slice(-500)));
+    } catch { /* private browsing or storage quota */ }
   }
 
   function excluded(element) {
@@ -121,28 +338,55 @@
   }
 
   function writeTarget(target, value) {
-    if (target.type === "text") target.node.nodeValue = value;
-    else target.node.setAttribute(target.name, value);
+    if (target.type === "text") {
+      renderedText.set(target.node, value);
+      if (target.node.nodeValue === value) return false;
+      target.node.nodeValue = value;
+      return true;
+    }
+    let values = renderedAttributes.get(target.node);
+    if (!values) { values = new Map(); renderedAttributes.set(target.node, values); }
+    values.set(target.name, value);
+    if (target.node.getAttribute(target.name) === value) return false;
+    target.node.setAttribute(target.name, value);
+    return true;
   }
 
   function scheduleApply() {
     window.clearTimeout(mutationTimer);
     mutationTimer = window.setTimeout(() => {
       apply(document.body).catch(() => {});
-    }, 90);
+    }, 16);
+    schedulePrefetch();
   }
 
-  async function requestTranslations(texts, targetLanguage) {
-    const result = new Map();
-    const missing = [];
-    texts.forEach((text) => {
-      const key = `${targetLanguage}\u0000${text}`;
-      if (memoryCache.has(key)) result.set(text, memoryCache.get(key));
-      else if (!missing.includes(text)) missing.push(text);
-    });
-    const batches = [];
-    for (let index = 0; index < missing.length; index += 30) batches.push(missing.slice(index, index + 30));
-    await Promise.all(batches.map(async (batch) => {
+  function schedulePrefetch(delay = 220) {
+    window.clearTimeout(prefetchTimer);
+    prefetchTimer = window.setTimeout(() => prefetchEnglish(document.body), delay);
+  }
+
+  function translationKey(targetLanguage, text) {
+    return `${targetLanguage}\u0000${text}`;
+  }
+
+  function translatedCore(text, targetLanguage, translations = null) {
+    if (targetLanguage === "zh-CN") return text;
+    return translations?.get(text)
+      || memoryCache.get(translationKey(targetLanguage, text))
+      || localTranslate(text, targetLanguage);
+  }
+
+  function needsRemoteEnglish(text) {
+    return translatable(text)
+      && !memoryCache.has(translationKey("en", text))
+      && /[\u3400-\u9fff]/u.test(localTranslate(text, "en"));
+  }
+
+  function requestTranslationBatch(batch, targetLanguage) {
+    const batchKey = `${targetLanguage}\u0000${batch.join("\u0002")}`;
+    if (inflightBatches.has(batchKey)) return inflightBatches.get(batchKey);
+    const request = (async () => {
+      const output = new Map();
       try {
         const response = await fetch("/api/i18n/translate", {
           method: "POST",
@@ -154,69 +398,109 @@
         const payload = await response.json();
         batch.forEach((text, offset) => {
           const translated = String(payload.translations?.[offset] || localTranslate(text, targetLanguage));
-          memoryCache.set(`${targetLanguage}\u0000${text}`, translated);
-          result.set(text, translated);
+          memoryCache.set(translationKey(targetLanguage, text), translated);
+          output.set(text, translated);
         });
+        persistMemoryCache();
       } catch (error) {
         console.warn("Site translation unavailable", error);
-        batch.forEach((text) => {
-          result.set(text, localTranslate(text, targetLanguage));
-        });
+        batch.forEach((text) => output.set(text, localTranslate(text, targetLanguage)));
       }
-    }));
+      return output;
+    })().finally(() => inflightBatches.delete(batchKey));
+    inflightBatches.set(batchKey, request);
+    return request;
+  }
+
+  async function requestTranslations(texts, targetLanguage) {
+    const result = new Map();
+    const missing = [];
+    texts.forEach((text) => {
+      const key = translationKey(targetLanguage, text);
+      if (memoryCache.has(key)) result.set(text, memoryCache.get(key));
+      else if (!missing.includes(text)) missing.push(text);
+    });
+    const batches = [];
+    let batch = [];
+    let batchLength = 0;
+    missing.forEach((text) => {
+      if (batch.length && (batch.length >= 30 || batchLength + text.length > 10_000)) {
+        batches.push(batch);
+        batch = [];
+        batchLength = 0;
+      }
+      batch.push(text);
+      batchLength += text.length;
+    });
+    if (batch.length) batches.push(batch);
+    const batchResults = await Promise.all(batches.map((batch) => requestTranslationBatch(batch, targetLanguage)));
+    batchResults.forEach((items) => items.forEach((value, key) => result.set(key, value)));
     return result;
+  }
+
+  function sourceIsCurrent(row) {
+    if (!row.target.node.isConnected) return false;
+    if (row.target.type === "text") return nodeSources.get(row.target.node) === row.source;
+    return attributeSources.get(row.target.node)?.get(row.target.name) === row.source;
+  }
+
+  function renderRows(sourceRows, targetLanguage, translations = null) {
+    let changed = false;
+    sourceRows.forEach(({ target, source }) => {
+      const parts = sourceParts(source);
+      const value = targetLanguage === "zh-CN"
+        ? source
+        : `${parts.before}${translatedCore(parts.core, targetLanguage, translations)}${parts.after}`;
+      changed = writeTarget(target, value) || changed;
+    });
+    return changed;
   }
 
   function apply(root = document.body, { refreshSources = false } = {}) {
     const targets = textTargets(root);
     const activeLanguage = language;
     const activeRevision = languageRevision;
+    const activeEpoch = ++renderEpoch;
     const sourceRows = targets.map((target) => ({ target, source: rememberSource(target, refreshSources) }));
-    applying = true;
-    try {
-      if (activeLanguage === "zh-CN") {
-        sourceRows.forEach(({ target, source }) => writeTarget(target, source));
-      } else {
-        sourceRows.forEach(({ target, source }) => {
-          const parts = sourceParts(source);
-          writeTarget(target, `${parts.before}${localTranslate(parts.core, activeLanguage)}${parts.after}`);
-        });
-      }
-      document.documentElement.lang = activeLanguage;
+    const changed = renderRows(sourceRows, activeLanguage);
+    document.documentElement.lang = activeLanguage;
+    if (changed) {
       window.dispatchEvent(new CustomEvent("xyji18napplied", { detail: { language: activeLanguage, root, immediate: true } }));
-    } finally {
-      window.setTimeout(() => {
-        applying = false;
-        if (rescanAfterApply) {
-          rescanAfterApply = false;
-          scheduleApply();
-        }
-      }, 0);
     }
 
-    if (activeLanguage !== "zh-CN") {
-      const cores = [...new Set(sourceRows.map(({ source }) => sourceParts(source).core).filter(translatable))];
+    if (activeLanguage === "en") {
+      const cores = [...new Set(sourceRows
+        .map(({ source }) => sourceParts(source).core)
+        .filter(needsRemoteEnglish))];
       requestTranslations(cores, activeLanguage).then((translations) => {
-        if (language !== activeLanguage || languageRevision !== activeRevision) return;
-        applying = true;
-        try {
-          sourceRows.forEach(({ target, source }) => {
-            const parts = sourceParts(source);
-            writeTarget(target, `${parts.before}${translations.get(parts.core) || localTranslate(parts.core, activeLanguage)}${parts.after}`);
-          });
+        if (language !== activeLanguage || languageRevision !== activeRevision || renderEpoch !== activeEpoch) return;
+        const currentRows = sourceRows.filter(sourceIsCurrent);
+        if (renderRows(currentRows, activeLanguage, translations)) {
           window.dispatchEvent(new CustomEvent("xyji18napplied", { detail: { language: activeLanguage, root, immediate: false } }));
-        } finally {
-          window.setTimeout(() => { applying = false; }, 0);
         }
       }).catch(() => {});
     }
     return Promise.resolve();
   }
 
-  async function setLanguage(value) {
-    language = VALID.has(value) ? value : "zh-CN";
+  function prefetchEnglish(root) {
+    const cores = [...new Set(textTargets(root)
+      .map((target) => sourceParts(rememberSource(target)).core)
+      .filter(needsRemoteEnglish))];
+    if (cores.length) requestTranslations(cores, "en").catch(() => {});
+  }
+
+  function setLanguage(value, { persist = true } = {}) {
+    const nextLanguage = VALID.has(value) ? value : "zh-CN";
+    if (nextLanguage === language && document.documentElement.lang === nextLanguage) return;
+    language = nextLanguage;
     languageRevision += 1;
-    try { localStorage.setItem(STORAGE_KEY, language); } catch { /* storage can be disabled */ }
+    if (persist) {
+      try {
+        localStorage.setItem(STORAGE_KEY, language);
+        localStorage.removeItem?.(LEGACY_STORAGE_KEY);
+      } catch { /* storage can be disabled */ }
+    }
     document.querySelectorAll("#site-language, [data-language-select]").forEach((select) => {
       if (select.value !== language) select.value = language;
     });
@@ -227,19 +511,21 @@
   function install() {
     document.querySelectorAll("#site-language, [data-language-select]").forEach((select) => {
       select.value = language;
-      select.addEventListener("change", () => setLanguage(select.value));
+      const changeLanguage = () => {
+        if (select.value !== language) setLanguage(select.value);
+      };
+      // input 比 change 更早触发，鼠标或触屏选中后在同一帧完成首轮重绘。
+      select.addEventListener("input", changeLanguage);
+      select.addEventListener("change", changeLanguage);
+      select.addEventListener("focus", () => schedulePrefetch(0));
     });
     apply(document.body);
-    const observer = new MutationObserver((mutations) => {
-      if (applying) {
-        // 接口数据常与首次翻译并行返回；新增节点完成后必须再扫一次，不能只翻译静态标题。
-        if (mutations.some((mutation) => mutation.type === "childList")) rescanAfterApply = true;
-        return;
-      }
+    observer = new MutationObserver((mutations) => {
       const roots = new Set();
       for (const mutation of mutations) {
         if (mutation.type === "characterData") {
           if (mutation.target.parentElement && !excluded(mutation.target.parentElement)) {
+            if (renderedText.get(mutation.target) === (mutation.target.nodeValue || "")) continue;
             nodeSources.set(mutation.target, mutation.target.nodeValue || "");
             roots.add(mutation.target.parentElement);
           }
@@ -249,14 +535,15 @@
             else if (node.parentElement) roots.add(node.parentElement);
           });
         } else if (mutation.type === "attributes" && mutation.target instanceof Element) {
+          const currentValue = mutation.target.getAttribute(mutation.attributeName) || "";
+          if (renderedAttributes.get(mutation.target)?.get(mutation.attributeName) === currentValue) continue;
           let values = attributeSources.get(mutation.target);
           if (!values) { values = new Map(); attributeSources.set(mutation.target, values); }
-          values.set(mutation.attributeName, mutation.target.getAttribute(mutation.attributeName) || "");
+          values.set(mutation.attributeName, currentValue);
           roots.add(mutation.target);
         }
       }
       if (!roots.size) return;
-      // 以 body 为批次统一去重；服务端缓存保证动态重绘不会重复调用模型。
       scheduleApply();
     });
     observer.observe(document.body, {
@@ -266,9 +553,19 @@
       attributes: true,
       attributeFilter: ATTRIBUTES,
     });
+    schedulePrefetch(0);
+    window.addEventListener("storage", (event) => {
+      if (event.key === STORAGE_KEY && VALID.has(event.newValue)) {
+        setLanguage(event.newValue, { persist: false });
+      }
+    });
   }
 
-  document.addEventListener("DOMContentLoaded", install, { once: true });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", install, { once: true });
+  } else {
+    install();
+  }
   window.XYJI18n = Object.freeze({
     apply,
     setLanguage,

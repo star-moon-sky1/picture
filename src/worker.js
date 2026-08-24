@@ -913,6 +913,22 @@ async function initializeSchema(env) {
   ]);
 
   /*
+   * 旧版文章允许从通用文件库插入资源，正文仍完整保存 data-resource-id，
+   * 但这些文件没有 content_id。资源域收紧后，它们因此只出现在文件管理中，
+   * 文章卡片却无法解析。这里只修复正文明确引用的文件元数据，不移动、复制或
+   * 删除任何 R2 对象；迁移标记保证生产数据库只扫描一次。
+   */
+  const articleAssetMigration = await env.DB.prepare(
+    "SELECT value FROM settings WHERE key = 'legacy_article_embeds_migrated_v2'",
+  ).first();
+  if (!articleAssetMigration) {
+    await migrateLegacyEmbeddedArticleAssets(env, timestamp);
+    await env.DB.prepare(`
+      INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+    `).bind("legacy_article_embeds_migrated_v2", "1", timestamp).run();
+  }
+
+  /*
    * 三类资源域严格按所属大板块归档。旧逻辑只判断 section_id 是否为空，
    * 会把文件资源误归进图片板块；这里按真实板块类型修正，并保证独立文件库
    * 永远只属于固定的“文件资源”板块。
@@ -3885,6 +3901,58 @@ function inlineMediaIdsFromHtml(html) {
   return [...ids];
 }
 
+function embeddedAssetIdsFromHtml(html) {
+  const ids = new Set();
+  for (const match of String(html || "").matchAll(/<div\b([^>]*)>/gi)) {
+    const attributes = match[1] || "";
+    const type = attributes.match(/\bdata-resource-type\s*=\s*["']([^"']+)["']/i)?.[1];
+    const id = attributes.match(/\bdata-resource-id\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (type === "asset" && validId(id)) ids.add(id);
+  }
+  return [...ids];
+}
+
+async function moveLegacyAssetsIntoArticle(env, content, assetIds, timestamp) {
+  if (!assetIds.length) return;
+  const statements = assetIds.map((assetId) => env.DB.prepare(`
+    UPDATE assets
+    SET scope = 'article', folder_id = NULL, album_id = NULL, content_id = ?,
+        section_id = ?, subsection_id = ?, updated_at = ?
+    WHERE id = ?
+      AND (COALESCE(scope, 'library') = 'library' OR (scope = 'article' AND content_id IS NULL))
+  `).bind(
+    content.id,
+    content.section_id || (content.type === "guide" ? "section-guides" : "section-essays"),
+    content.subsection_id || null,
+    timestamp,
+    assetId,
+  ));
+  for (let index = 0; index < statements.length; index += 40) {
+    await env.DB.batch(statements.slice(index, index + 40));
+  }
+}
+
+async function migrateLegacyEmbeddedArticleAssets(env, timestamp) {
+  const contentItems = rows(await env.DB.prepare(`
+    SELECT id, type, section_id, subsection_id, body_html
+    FROM content
+    WHERE body_html LIKE '%data-resource-id=%'
+    ORDER BY updated_at DESC, created_at DESC
+  `).all());
+  const claimedAssetIds = new Set();
+  for (const content of contentItems) {
+    const assetIds = embeddedAssetIdsFromHtml(content.body_html)
+      .filter((assetId) => !claimedAssetIds.has(assetId));
+    if (!assetIds.length) continue;
+    assetIds.forEach((assetId) => claimedAssetIds.add(assetId));
+    await moveLegacyAssetsIntoArticle(env, content, assetIds, timestamp);
+  }
+}
+
+async function syncEmbeddedArticleAssets(env, content, bodyHtml, timestamp) {
+  await moveLegacyAssetsIntoArticle(env, content, embeddedAssetIdsFromHtml(bodyHtml), timestamp);
+}
+
 async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds = []) {
   const ids = inlineMediaIdsFromHtml(bodyHtml);
   if (!ids.length) return;
@@ -4134,6 +4202,9 @@ async function adminContent(request, env, id) {
         status === "published" ? timestamp : null, visibility, timestamp, timestamp,
       ).run();
       await replaceAllowedUsers(env, "content", newId, allowedUserIds, timestamp);
+      await syncEmbeddedArticleAssets(env, {
+        id: newId, type, section_id: sectionId, subsection_id: subsectionId,
+      }, bodyHtml, timestamp);
       await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
       if (status === "published") await notifyArticlePublished(env, newId, title);
       return { id: newId };
@@ -4149,6 +4220,9 @@ async function adminContent(request, env, id) {
           status = ?, visibility = ?, published_at = ?, updated_at = ?
       WHERE id = ?
     `).bind(type, sectionId, subsectionId, title, excerpt, bodyHtml, coverMediaId, status, visibility, publishedAt, timestamp, id).run();
+    await syncEmbeddedArticleAssets(env, {
+      id, type, section_id: sectionId, subsection_id: subsectionId,
+    }, bodyHtml, timestamp);
     await env.DB.prepare(`
       UPDATE assets SET section_id = ?, subsection_id = ?, updated_at = ?
       WHERE scope = 'article' AND content_id = ?

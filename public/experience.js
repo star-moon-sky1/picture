@@ -112,7 +112,9 @@
   function installLanguageSetting() {
     const select = document.getElementById("site-language");
     if (!select) return;
-    select.value = localStorage.getItem("xyj_language") || "zh-CN";
+    select.value = localStorage.getItem("xyj_front_language")
+      || localStorage.getItem("xyj_language")
+      || "zh-CN";
   }
 
   function installMobileScrollHeader() {
