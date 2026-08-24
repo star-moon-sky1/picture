@@ -1,7 +1,7 @@
 /*
  * 星月集全站主题控制器
  * ------------------------------------------------------------------
- * 可选值：system（跟随系统）、light（白天）、dark（夜览）。
+ * 可选值：system（跟随系统）、light（白天）、dark（夜览）、scheduled（定时）。
  * 本文件在页面样式之前同步执行，先给 <html> 写入 data-theme，避免刷新时
  * 先出现白色页面再跳到夜览模式。公开网站、账户页和 Studio 共用同一个键。
  */
@@ -9,9 +9,36 @@
   "use strict";
 
   const STORAGE_KEY = "xyj_theme_preference";
-  const VALID_PREFERENCES = new Set(["system", "light", "dark"]);
+  const SCHEDULE_KEY = "xyj_theme_schedule";
+  const VALID_PREFERENCES = new Set(["system", "light", "dark", "scheduled"]);
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
   const root = document.documentElement;
+
+  function scheduleConfig() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(SCHEDULE_KEY) || "{}");
+      const validTime = (value) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+      return {
+        start: validTime(parsed.start) ? parsed.start : "22:00",
+        end: validTime(parsed.end) ? parsed.end : "07:00",
+      };
+    } catch { return { start: "22:00", end: "07:00" }; }
+  }
+
+  function scheduledTheme() {
+    const { start, end } = scheduleConfig();
+    const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
+    const startMinutes = minutes(start);
+    const endMinutes = minutes(end);
+    const now = new Date();
+    const current = now.getHours() * 60 + now.getMinutes();
+    const dark = startMinutes === endMinutes
+      ? true
+      : startMinutes < endMinutes
+        ? current >= startMinutes && current < endMinutes
+        : current >= startMinutes || current < endMinutes;
+    return dark ? "dark" : "light";
+  }
 
   /*
    * 页面可以用 data-theme-default 指定特殊页面的初始外观；星月集当前所有
@@ -35,12 +62,13 @@
 
   function resolvedTheme(preference) {
     if (preference === "system") return systemDark.matches ? "dark" : "light";
+    if (preference === "scheduled") return scheduledTheme();
     return preference;
   }
 
   function updateControls(preference, resolved) {
-    const labels = { system: "跟随系统", light: "白天模式", dark: "夜览模式" };
-    const icons = { system: "◐", light: "☀", dark: "☾" };
+    const labels = { system: "跟随系统", light: "白天模式", dark: "夜览模式", scheduled: "定时夜览" };
+    const icons = { system: "◐", light: "☀", dark: "☾", scheduled: "◷" };
     document.querySelectorAll("[data-theme-choice]").forEach((control) => {
       const selected = control.dataset.themeChoice === preference;
       control.classList.toggle("active", selected);
@@ -53,6 +81,14 @@
       if (text) text.textContent = labels[preference];
       control.title = `当前：${labels[preference]}（实际为${resolved === "dark" ? "夜览" : "白天"}）`;
       control.setAttribute("aria-label", control.title);
+    });
+    document.querySelectorAll("[data-theme-schedule-panel]").forEach((panel) => {
+      panel.hidden = preference !== "scheduled";
+      const config = scheduleConfig();
+      const start = panel.querySelector("[data-theme-schedule-start]");
+      const end = panel.querySelector("[data-theme-schedule-end]");
+      if (start && document.activeElement !== start) start.value = config.start;
+      if (end && document.activeElement !== end) end.value = config.end;
     });
   }
 
@@ -110,6 +146,16 @@
       });
     });
 
+    document.querySelectorAll("[data-theme-schedule-save]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const panel = button.closest("[data-theme-schedule-panel]");
+        const start = panel?.querySelector("[data-theme-schedule-start]")?.value || "22:00";
+        const end = panel?.querySelector("[data-theme-schedule-end]")?.value || "07:00";
+        try { localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ start, end })); } catch { /* ignore */ }
+        apply("scheduled", { persist: true });
+      });
+    });
+
     document.addEventListener("click", (event) => {
       if (!(event.target instanceof Element) || !event.target.closest("[data-theme-picker]")) closeThemeMenus();
     });
@@ -122,6 +168,9 @@
   systemDark.addEventListener?.("change", () => {
     if ((root.dataset.themePreference || "system") === "system") apply("system", { announce: true });
   });
+  window.setInterval(() => {
+    if ((root.dataset.themePreference || "system") === "scheduled") apply("scheduled", { announce: true });
+  }, 60_000);
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEY) apply(savedPreference(), { announce: true });
   });
@@ -133,5 +182,10 @@
       preference: root.dataset.themePreference || "system",
       resolved: root.dataset.theme || "light",
     }),
+    schedule: () => scheduleConfig(),
+    updateSchedule: (start, end) => {
+      try { localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ start, end })); } catch { /* ignore */ }
+      return apply("scheduled", { persist: true });
+    },
   });
 })();

@@ -23,6 +23,7 @@
   <script src="/pwa.js"></script>
   <!-- 主题脚本必须在样式前同步执行，才能避免夜览模式刷新时出现白屏闪烁。 -->
   <script src="/theme.js"></script>
+  <script src="/i18n.js" defer></script>
   <!-- 给登录卡片补充可随背景照片变化的放大折射层；不读取或暴露照片原片。 -->
   <script src="/liquid-glass.js"></script>
   <!--
@@ -1534,6 +1535,7 @@
         <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
         <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
         <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+        <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
       </div>
     </div>
     <div class="entry-card">
@@ -1543,13 +1545,13 @@
         <label class="entry-field" for="entry-username">登录用户名
           <input id="entry-username" required autocomplete="username" placeholder="输入登录用户名">
         </label>
-        <label class="entry-field" for="entry-password">密码
-          <input id="entry-password" type="password" required autocomplete="current-password" placeholder="输入密码">
-        </label>
         <div class="entry-options">
           <label><input id="entry-remember" type="checkbox">保持登录30天</label>
           <a class="entry-link" href="/login?mode=forgot&amp;next=/">忘记密码？</a>
         </div>
+        <label class="entry-field" for="entry-password">密码
+          <input id="entry-password" type="password" required autocomplete="current-password" placeholder="输入密码">
+        </label>
         <!-- 登录与游客进入复用同一次服务端 Turnstile 校验。 -->
         <div id="guest-turnstile" class="guest-turnstile-wrap" hidden aria-label="登录与游客人机验证"></div>
         <button class="btn entry-primary" type="submit">登录并进入网站</button>
@@ -1559,8 +1561,6 @@
         </div>
         <p id="entry-notice" class="notice" aria-live="polite"></p>
       </form>
-      <p class="entry-note">游客可以浏览公开页面；AI 助手和个人空间完整内容仅向审核通过的账号开放。</p>
-      <p class="entry-note guest-privacy-note">游客进入后会记录脱敏 IP、大致城市/地区、浏览器和访问时间，用于安全与按日统计；记录最多保留 90 天。</p>
     </div>
   </section>
 
@@ -1662,16 +1662,17 @@
       <!-- ==================== 关于我 ==================== -->
       <section id="about" class="content-section">
         <div class="section-inner">
-          <h1>关于我</h1>
+          <h1 id="about-heading">关于我</h1>
+          <p id="about-intro" class="lead" hidden></p>
           <div class="profile-grid">
-            <div class="info-card"><span>就读院校与专业</span><strong id="about-school">北京理工大学 计算机学院 计算机科学与技术</strong></div>
+            <div class="info-card"><span id="about-school-label">就读院校与专业</span><strong id="about-school">北京理工大学 计算机学院 计算机科学与技术</strong></div>
           </div>
-          <h2>目前学习方向</h2>
-          <div class="badges"><span class="badge">Python</span><span class="badge">C</span><span class="badge">HTML / CSS / JavaScript</span><span class="badge">OpenHarmony开发</span></div>
-          <h2>联系方式</h2>
+          <h2 id="about-learning-title">目前学习方向</h2>
+          <div id="about-learning-items" class="badges"></div>
+          <h2 id="about-contact-title">联系方式</h2>
           <div class="profile-grid">
-            <div class="info-card"><span>国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
-            <div class="info-card"><span>国际邮箱</span><a href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
+            <div class="info-card"><span id="contact-email-label">国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
+            <div class="info-card"><span id="contact-email-intl-label">国际邮箱</span><a id="contact-email-intl" href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
           </div>
         </div>
       </section>
@@ -1680,10 +1681,9 @@
       <section id="feedback" class="content-section">
         <div class="section-inner">
           <h1>留言与反馈</h1>
-          <p class="section-desc">可以游客身份留言、报告网站问题或提出功能建议。联系方式只供站长查看。</p>
           <div class="feedback-layout">
             <form id="feedback-form" class="feedback-form">
-              <label>游客署名<input id="feedback-name" maxlength="30" required placeholder="怎么称呼你"></label>
+              <input id="feedback-name" type="hidden">
               <label>联系方式（选填，仅站长可见）<input id="feedback-contact" maxlength="160" placeholder="邮箱、微信或 QQ"></label>
               <label>类型<select id="feedback-category"><option value="message">留言</option><option value="bug">网站问题</option><option value="suggestion">功能建议</option></select></label>
               <label>内容<textarea id="feedback-body" maxlength="3000" required placeholder="写下想说的话…"></textarea></label>
@@ -1691,9 +1691,11 @@
               <button class="btn" type="submit">提交给站长</button>
               <p id="feedback-notice" class="notice"></p>
             </form>
+            <div id="feedback-auth-required" class="registered-only-placeholder" hidden>
+              <strong>登录后即可留言</strong><button class="btn" type="button" data-login-required>登录账号</button>
+            </div>
             <div class="feedback-board">
               <h2 class="section-title">公开留言板</h2>
-              <p class="feedback-board-note">游客可以发布留言；留言下方只有站长能够回复。</p>
               <div id="feedback-list" class="feedback-list"><p class="loading">正在读取留言…</p></div>
             </div>
           </div>
@@ -1768,7 +1770,13 @@
                   <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
                   <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
                   <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+                  <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
                 </div>
+              </div>
+              <div class="theme-schedule-settings" data-theme-schedule-panel hidden>
+                <label>开启时间<input type="time" data-theme-schedule-start value="22:00"></label>
+                <label>关闭时间<input type="time" data-theme-schedule-end value="07:00"></label>
+                <button class="btn ghost" type="button" data-theme-schedule-save>保存定时</button>
               </div>
               <div class="settings-install-slot" data-install-app-container hidden>
                 <button id="install-app-button" class="sidebar-install-button" type="button" title="创建桌面访问" data-install-app hidden>
@@ -1889,13 +1897,28 @@
       <section class="comments">
         <h3>评论</h3>
         <form id="comment-form" class="comment-form">
-          <input id="guest-name" maxlength="30" required placeholder="游客署名">
+          <input id="guest-name" type="hidden">
           <textarea id="comment-body" maxlength="1000" required placeholder="写下评论…"></textarea>
           <button class="btn small" type="submit">发表</button>
         </form>
+        <div id="comment-auth-required" class="registered-only-placeholder" hidden>
+          <strong>登录后即可评论和点赞</strong><button class="btn small" type="button" data-login-required>登录账号</button>
+        </div>
         <p id="comment-notice" class="notice"></p>
         <div id="comment-list"></div>
       </section>
+    </div>
+  </dialog>
+
+  <dialog id="guest-limit-dialog" class="auth-lock-dialog">
+    <div class="auth-lock-card">
+      <div class="auth-lock-symbol">◇</div>
+      <h2>今日游客名额已满</h2>
+      <p>本日游客浏览已达流量上限，请注册账号进行浏览</p>
+      <div class="auth-lock-actions">
+        <a class="btn" href="/login?mode=register&amp;next=/">注册账号</a>
+        <button class="btn ghost" type="button" data-close-dialog="guest-limit-dialog">返回</button>
+      </div>
     </div>
   </dialog>
 
@@ -1968,6 +1991,7 @@
       entryRequestedSection: "",
       activeSection: "home",
       currentResourceFolder: "",
+      resourceRootLocked: false,
       activeResourceAsset: null,
       hlsPlayer: null,
       hlsLibraryPromise: null,
@@ -2588,9 +2612,6 @@
         { id: "section-photos", name: "拍摄照片", kind: "gallery", show_all: 1 },
         { id: "section-guides", name: "北京旅行指南", kind: "content", show_all: 1 },
       ];
-      if (!sections.some((item) => item.id === "section-resources")) {
-        sections.push({ id: "section-resources", name: "文件资源", kind: "resources", description: "文件、文档与视频", show_all: 1 });
-      }
       return sections;
     }
 
@@ -2647,7 +2668,7 @@
         const belongs = item.section_id ? item.section_id === section.id : section.id === "section-photos";
         return belongs && (activeAlbum === "all" || item.album_id === activeAlbum);
       });
-      const videos = (state.data?.assets || []).filter((item) => item.kind === "video"
+      const videos = (state.data?.galleryAssets || []).filter((item) => item.kind === "video"
         && item.section_id === section.id && (activeAlbum === "all" || item.album_id === activeAlbum));
       if (!photos.length && !videos.length) { gallery.append(empty("这个图片板块还没有上传图片或视频。")); return; }
       photos.forEach((photo) => {
@@ -2663,8 +2684,9 @@
         card.setAttribute("role", "button"); card.setAttribute("aria-label", `播放视频：${asset.display_name}`);
         const video = document.createElement("video"); video.preload = "metadata"; video.muted = true; video.playsInline = true;
         video.src = asset.url; if (asset.poster_url) video.poster = asset.poster_url;
+        const badge = document.createElement("span"); badge.className = "gallery-video-badge"; badge.textContent = "▶ 视频";
         const open = () => openResourceAsset(asset);
-        card.append(video); card.addEventListener("click", open);
+        card.append(video, badge); card.addEventListener("click", open);
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
       });
     }
@@ -2677,6 +2699,43 @@
       state.activePortfolioSection = section.id;
       if (section.kind === "gallery") { renderGallerySection(host, section); return; }
       if (section.kind === "resources") {
+        const folders = state.data?.assetFolders || [];
+        const roots = folders.filter((item) => !item.parent_id);
+        const canShowAll = Number(section.show_all) || !roots.length;
+        const folderMap = new Map(folders.map((item) => [item.id, item]));
+        let cursor = state.currentResourceFolder ? folderMap.get(state.currentResourceFolder) : null;
+        const visited = new Set();
+        while (cursor?.parent_id && !visited.has(cursor.id)) {
+          visited.add(cursor.id);
+          cursor = folderMap.get(cursor.parent_id);
+        }
+        let activeRoot = cursor?.id || (canShowAll ? "all" : roots[0]?.id || "all");
+        if (!canShowAll && activeRoot === "all") activeRoot = roots[0]?.id || "all";
+        if (activeRoot !== "all" && !roots.some((item) => item.id === activeRoot)) {
+          activeRoot = canShowAll ? "all" : roots[0]?.id || "all";
+        }
+        if (!canShowAll && !state.currentResourceFolder) state.currentResourceFolder = activeRoot;
+        state.resourceRootLocked = !canShowAll;
+
+        if (roots.length) {
+          const tabs = document.createElement("div"); tabs.className = "portfolio-subtabs";
+          const selectRoot = (folderId) => {
+            state.currentResourceFolder = folderId === "all" ? "" : folderId;
+            renderPortfolioPanel();
+          };
+          if (canShowAll) {
+            const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
+            all.className = `tab-button${activeRoot === "all" ? " active" : ""}`;
+            all.addEventListener("click", () => selectRoot("all")); tabs.append(all);
+          }
+          roots.forEach((folder) => {
+            const button = document.createElement("button"); button.type = "button"; button.textContent = folder.name;
+            button.className = `tab-button${activeRoot === folder.id ? " active" : ""}`;
+            button.title = folder.description || folder.name;
+            button.addEventListener("click", () => selectRoot(folder.id)); tabs.append(button);
+          });
+          host.append(tabs);
+        }
         state.resourcePanelNode ||= document.querySelector("#resources .section-inner");
         if (state.resourcePanelNode) host.append(state.resourcePanelNode);
         renderResources();
@@ -2684,15 +2743,21 @@
       }
 
       const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
-      let activeSubsection = state.activeSubsections[section.id] || "all";
-      if (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection)) activeSubsection = "all";
+      const canShowAll = Number(section.show_all) || !subsections.length;
+      let activeSubsection = state.activeSubsections[section.id] || (canShowAll ? "all" : subsections[0]?.id);
+      if ((activeSubsection === "all" && !canShowAll)
+        || (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection))) {
+        activeSubsection = canShowAll ? "all" : subsections[0]?.id;
+      }
       state.activeSubsections[section.id] = activeSubsection;
       if (subsections.length) {
         const subTabs = document.createElement("div"); subTabs.className = "portfolio-subtabs";
         const selectSubsection = (subsectionId) => { state.activeSubsections[section.id] = subsectionId; renderPortfolioPanel(); };
-        const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-        all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
-        all.addEventListener("click", () => selectSubsection("all")); subTabs.append(all);
+        if (canShowAll) {
+          const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
+          all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
+          all.addEventListener("click", () => selectSubsection("all")); subTabs.append(all);
+        }
         subsections.forEach((subsection) => {
           const control = document.createElement("button"); control.type = "button"; control.textContent = subsection.name;
           control.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
@@ -2795,10 +2860,15 @@
       const folders = state.data?.assetFolders || [];
       const assets = state.data?.assets || [];
       if (state.currentResourceFolder && !folders.some((item) => item.id === state.currentResourceFolder)) state.currentResourceFolder = "";
+      const resourceSection = portfolioSections().find((item) => item.kind === "resources");
+      const roots = folders.filter((item) => !item.parent_id);
+      state.resourceRootLocked = Boolean(resourceSection && !Number(resourceSection.show_all) && roots.length);
+      if (state.resourceRootLocked && !state.currentResourceFolder) state.currentResourceFolder = roots[0].id;
       const current = state.currentResourceFolder || null;
       document.getElementById("resource-path").textContent = resourceFolderPath(current);
-      const up = document.getElementById("resource-up"); up.hidden = !current;
       const currentFolder = folders.find((item) => item.id === current);
+      const up = document.getElementById("resource-up");
+      up.hidden = !current || (state.resourceRootLocked && !currentFolder?.parent_id);
       const folderArchive = currentFolder?.archive_asset_id
         ? assets.find((item) => item.id === currentFolder.archive_asset_id && item.kind === "archive")
         : null;
@@ -3079,7 +3149,8 @@
         const id = placeholder.dataset.resourceId;
         const item = type === "folder"
           ? (state.data?.assetFolders || []).find((folder) => folder.id === id)
-          : (state.data?.assets || []).find((asset) => asset.id === id && asset.status === "ready");
+          : [...(state.data?.articleAssets || []), ...(state.data?.assets || [])]
+            .find((asset) => asset.id === id && asset.status === "ready");
         const replacement = item
           ? (type === "folder" ? resourceCardForFolder(item) : resourceCardForAsset(item))
           : empty("该资源不存在，或当前账号没有访问权限。");
@@ -3182,11 +3253,11 @@
     function renderUsageGuide(value) {
       const guide = document.getElementById("usage-guide");
       const content = document.getElementById("usage-guide-content");
-      const text = String(value || "").trim();
+      const text = String(value || "").replace(/\r\n?/g, "\n");
       content.replaceChildren();
-      if (!text) { guide.hidden = true; return; }
+      if (!text.trim()) { guide.hidden = true; return; }
 
-      text.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean).forEach((paragraph) => {
+      text.split(/\n{2,}/).filter((paragraph) => paragraph.trim()).forEach((paragraph) => {
         const node = document.createElement("p");
         node.textContent = paragraph;
         content.append(node);
@@ -3212,12 +3283,28 @@
       renderUsageGuide(settings.usage_guide);
       document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "2.2.0.0"}`;
 
-      // 后台旧数据通常只保存院校和学院；前端自动补全专业，并避免重复追加。
-      const school = settings.school || "北京理工大学 计算机学院";
-      document.getElementById("about-school").textContent =
-        school.includes("计算机科学与技术") ? school : `${school} 计算机科学与技术`;
+      document.getElementById("about-heading").textContent = settings.about_heading || "关于我";
+      const aboutIntro = String(settings.about_intro || "");
+      const aboutIntroNode = document.getElementById("about-intro");
+      aboutIntroNode.textContent = aboutIntro;
+      aboutIntroNode.hidden = !aboutIntro.trim();
+      document.getElementById("about-school-label").textContent = settings.about_school_label || "就读院校与专业";
+      document.getElementById("about-school").textContent = settings.school || "北京理工大学 计算机学院";
+      document.getElementById("about-learning-title").textContent = settings.about_learning_title || "目前学习方向";
+      const learning = document.getElementById("about-learning-items");
+      learning.replaceChildren();
+      String(settings.about_learning_items || "Python\nC\nHTML / CSS / JavaScript\nOpenHarmony开发")
+        .split(/\n+/).map((item) => item.trim()).filter(Boolean).forEach((item) => {
+          const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = item; learning.append(badge);
+        });
+      document.getElementById("about-contact-title").textContent = settings.about_contact_title || "联系方式";
+      document.getElementById("contact-email-label").textContent = settings.contact_email_label || "国内邮箱";
       const email = settings.contact_email || "1598116329@qq.com";
       const contact = document.getElementById("contact-email"); contact.textContent = email; contact.href = `mailto:${email}`;
+      document.getElementById("contact-email-intl-label").textContent = settings.contact_email_intl_label || "国际邮箱";
+      const intlEmail = settings.contact_email_intl || "xingyueji8@gmail.com";
+      const intlContact = document.getElementById("contact-email-intl");
+      intlContact.textContent = intlEmail; intlContact.href = `mailto:${intlEmail}`;
     }
 
     /* ---------- 07. 普通用户账户状态、昵称和密码。 ---------- */
@@ -3231,6 +3318,13 @@
         : (document.documentElement.lang === "zh-TW" ? "設定" : "设置");
       const accessNote = document.getElementById("portfolio-access-note");
       accessNote.textContent = hasFullAccess() ? "已显示个人空间完整内容" : "游客或待审核账号仅显示公开内容";
+      const registered = Boolean(user);
+      document.getElementById("comment-form").hidden = !registered;
+      document.getElementById("comment-auth-required").hidden = registered;
+      document.getElementById("feedback-form").hidden = !registered;
+      document.getElementById("feedback-auth-required").hidden = registered;
+      document.getElementById("content-like").hidden = !registered;
+      document.getElementById("content-dislike").hidden = !registered;
       const commentName = document.getElementById("guest-name");
       if (commentName) {
         commentName.readOnly = Boolean(user);
@@ -3256,7 +3350,7 @@
       document.getElementById("account-last-login").textContent = formatDate(user.lastLoginAt) || "—";
       document.getElementById("account-nickname").value = user.nickname;
 
-      // 登录账号发表评论时默认使用账号昵称，但仍允许用户临时改成其他署名。
+      // 评论和留言统一使用当前账号昵称，不再允许游客署名。
       if (!document.getElementById("guest-name").value) document.getElementById("guest-name").value = user.nickname;
       if (!document.getElementById("feedback-name").value) document.getElementById("feedback-name").value = user.nickname;
     }
@@ -3295,6 +3389,7 @@
     }
 
     async function sendReaction(targetType, targetId, value, button) {
+      if (!state.auth.authenticated) { showAuthLock("account"); return; }
       try {
         button.disabled = true;
         const result = await api("/api/reactions", {
@@ -3325,6 +3420,9 @@
       if (Number(comment.is_admin)) {
         const badge = document.createElement("span"); badge.className = "admin-badge"; badge.textContent = "站长"; author.append(badge);
       }
+      if (Number(comment.is_pinned)) {
+        const pinned = document.createElement("span"); pinned.className = "comment-pin-badge"; pinned.textContent = "置顶"; author.append(pinned);
+      }
       const date = document.createElement("span"); date.className = "comment-date";
       date.textContent = `${isReply ? "回复于" : "评论于"} ${formatDateTime(comment.created_at) || "时间未知"}`;
       head.append(author, date);
@@ -3332,14 +3430,20 @@
       const actions = document.createElement("div"); actions.className = "comment-actions";
       const like = document.createElement("button"); like.className = "text-button"; like.textContent = `👍 ${comment.like_count}`;
       const dislike = document.createElement("button"); dislike.className = "text-button"; dislike.textContent = `👎 ${comment.dislike_count}`;
-      like.addEventListener("click", () => sendReaction("comment", comment.id, 1, like));
-      dislike.addEventListener("click", () => sendReaction("comment", comment.id, -1, dislike));
-      actions.append(like, dislike);
-      if (!isReply) {
+      if (state.auth.authenticated) {
+        like.addEventListener("click", () => sendReaction("comment", comment.id, 1, like));
+        dislike.addEventListener("click", () => sendReaction("comment", comment.id, -1, dislike));
+        actions.append(like, dislike);
+      }
+      if (!isReply && state.auth.authenticated) {
         const reply = document.createElement("button"); reply.className = "text-button"; reply.textContent = "回复";
         reply.addEventListener("click", () => showReplyForm(wrap, comment.id)); actions.append(reply);
       }
-      wrap.append(head, body, actions); return wrap;
+      wrap.append(head, body, actions);
+      if (Number(comment.author_liked)) {
+        const liked = document.createElement("small"); liked.className = "author-liked-note"; liked.textContent = "作者已赞"; wrap.append(liked);
+      }
+      return wrap;
     }
 
     function renderComments() {
@@ -3353,6 +3457,7 @@
     }
 
     function showReplyForm(parentNode, parentId) {
+      if (!state.auth.authenticated) { showAuthLock("account"); return; }
       document.querySelectorAll(".reply-form").forEach((form) => form.remove());
       const form = document.createElement("form"); form.className = "reply-form";
       const name = document.createElement("input"); name.required = true; name.maxLength = 30; name.placeholder = "游客署名"; name.value = state.auth.user?.nickname || localStorage.getItem("xyj_guest_name") || ""; name.readOnly = Boolean(state.auth.user);
@@ -3881,7 +3986,13 @@
         await boot();
         window.dispatchEvent(new CustomEvent("xyj-auth-changed"));
       } catch (error) {
-        notice.textContent = error.message;
+        if (error.code === "GUEST_DAILY_LIMIT") {
+          notice.textContent = "";
+          const dialog = document.getElementById("guest-limit-dialog");
+          if (!dialog.open) dialog.showModal();
+        } else {
+          notice.textContent = error.message;
+        }
         resetGuestTurnstile();
       } finally {
         submit.disabled = false;
@@ -3913,15 +4024,35 @@
         state.siteLoaded = false;
         await boot({ enterAsGuest: true });
       } catch (error) {
-        notice.textContent = error.message;
+        if (error.code === "GUEST_DAILY_LIMIT") {
+          notice.textContent = "";
+          const dialog = document.getElementById("guest-limit-dialog");
+          if (!dialog.open) dialog.showModal();
+        } else {
+          notice.textContent = error.message;
+        }
         resetGuestTurnstile();
       } finally { button.disabled = false; }
     });
 
-    document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => navigateSection(button.dataset.section)));
+    function animateNavigationIcon(button) {
+      const icon = button.querySelector(".nav-icon");
+      if (!icon || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      icon.classList.remove("nav-icon-activated");
+      void icon.offsetWidth;
+      icon.classList.add("nav-icon-activated");
+      window.setTimeout(() => icon.classList.remove("nav-icon-activated"), 620);
+    }
+    document.querySelectorAll(".nav button[data-section]").forEach((button) => button.addEventListener("click", () => {
+      animateNavigationIcon(button);
+      navigateSection(button.dataset.section);
+    }));
+    document.querySelectorAll("[data-login-required]").forEach((button) => button.addEventListener("click", () => showAuthLock("account")));
     document.getElementById("resource-up").addEventListener("click", () => {
       const current = (state.data?.assetFolders || []).find((item) => item.id === state.currentResourceFolder);
-      state.currentResourceFolder = current?.parent_id || ""; renderResources();
+      if (state.resourceRootLocked && current && !current.parent_id) return;
+      state.currentResourceFolder = current?.parent_id || "";
+      renderPortfolioPanel();
     });
     document.getElementById("resource-folder-download").addEventListener("click", (event) => {
       const asset = (state.data?.assets || []).find((item) => item.id === event.currentTarget.dataset.assetId);
@@ -4156,6 +4287,7 @@
     document.getElementById("guest-name").value = localStorage.getItem("xyj_guest_name") || "";
     document.getElementById("comment-form").addEventListener("submit", async (event) => {
       event.preventDefault(); if (!state.currentContent) return;
+      if (!state.auth.authenticated) { showAuthLock("account"); return; }
       const name = document.getElementById("guest-name"); const body = document.getElementById("comment-body"); const notice = document.getElementById("comment-notice");
       notice.textContent = "正在发表…";
       try {
@@ -4170,6 +4302,7 @@
     document.getElementById("feedback-name").value = localStorage.getItem("xyj_guest_name") || "";
     document.getElementById("feedback-form").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!state.auth.authenticated) { showAuthLock("account"); return; }
       const submit = event.currentTarget.querySelector("button[type='submit']");
       const notice = document.getElementById("feedback-notice");
       const guestName = document.getElementById("feedback-name").value.trim();

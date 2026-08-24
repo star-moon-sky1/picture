@@ -18,6 +18,7 @@
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
+  <script src="/i18n.js" defer></script>
   <style>
     /* =========================================================
        01. 后台全局颜色和基础控件
@@ -149,7 +150,7 @@
        ========================================================= */
     .toolbar { display:flex; flex-wrap:wrap; gap:5px; padding:8px; border:1px solid var(--line); border-bottom:0; border-radius:10px 10px 0 0; background:#f7faf9; }
     .toolbar button { min-width:34px; border:1px solid var(--line); border-radius:7px; padding:6px 8px; background:white; }
-    .editor { min-height:360px; padding:18px; border:1px solid var(--line); border-radius:0 0 10px 10px; line-height:1.9; outline:none; overflow-wrap:anywhere; }
+    .editor { height:420px; min-height:420px; max-height:420px; overflow:auto; padding:18px; border:1px solid var(--line); border-radius:0 0 10px 10px; line-height:1.9; outline:none; overflow-wrap:anywhere; }
     .editor:focus { border-color:var(--cyan); }
     .editor img { max-width:100%; height:auto; border-radius:9px; }
     .actions { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-top:16px; }
@@ -213,6 +214,16 @@
     .resource-picker-list { display:grid; gap:8px; max-height:55dvh; overflow:auto; margin:14px 0; }
     .resource-picker-item { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:12px; border:1px solid var(--line); border-radius:11px; background:var(--paper); }
     .editor .resource-embed { margin:14px 0; padding:14px; border:1px dashed var(--cyan); border-radius:12px; background:#eefafa; color:#286a74; font-weight:800; }
+    .editor .resource-embed.is-selected { outline:3px solid rgba(49,191,200,.28); }
+    .cover-preview { min-height:150px; margin-top:8px; display:grid; place-items:center; overflow:hidden; border:1px solid var(--line); border-radius:14px; color:var(--muted); background:rgba(236,244,244,.72); }
+    .cover-preview img { width:100%; height:190px; object-fit:cover; display:block; }
+    .article-linked-panel { margin-top:18px; }
+    .article-linked-panel textarea { min-height:90px; }
+    .asset-help { margin:0 0 16px; padding:12px 14px; border:1px solid var(--line); border-radius:13px; background:rgba(239,248,248,.78); }
+    .asset-help summary { cursor:pointer; font-weight:800; }
+    .asset-help p { margin:10px 0 0; line-height:1.75; }
+    .video-poster-preview { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#e9eeee; }
+    .feedback-tabs .active { border-color:rgba(255,255,255,.54); background:rgba(49,175,191,.54); }
 
     /* =========================================================
        07. 用户审核、在线状态与密码重置
@@ -294,15 +305,16 @@
        ========================================================= */
     @media(max-width:980px) { .cards{grid-template-columns:repeat(2,1fr)} .split{grid-template-columns:1fr} .media-grid{grid-template-columns:repeat(3,1fr)} }
     @media(max-width:720px) {
-      .studio { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:100dvh; }
-      .side { position:static; height:auto; padding:12px; overflow:visible; }
-      /* 手机端保留头像作为 Studio 标识，只隐藏占宽的品牌文字。 */
-      .side-brand { margin:0 4px 9px; }
-      .side-brand .studio-avatar { width:43px; height:43px; flex-basis:43px; }
-      .side-brand-copy,.side-footer { display:none; }
-      .side-nav { display:flex; overflow-x:auto; gap:5px; }
-      .side-nav button { flex:0 0 auto; padding:8px 10px; }
-      .workspace { height:auto; min-height:0; padding:22px 14px 55px; }
+      .studio { display:flex; flex-direction:column; min-height:100dvh; height:auto; }
+      .side { position:sticky; top:0; z-index:100; width:100%; height:auto; max-height:112px; padding:7px 9px 9px; overflow:hidden; flex:0 0 auto; }
+      .side-brand { position:absolute; top:7px; left:8px; z-index:2; margin:0; pointer-events:none; }
+      .side-brand .studio-avatar { width:34px; height:34px; flex-basis:34px; }
+      .side-brand-copy,.side-footer,.side-nav-group-title { display:none; }
+      .side-nav { display:flex; flex-flow:row nowrap; overflow-x:auto; overflow-y:hidden; gap:7px; padding:41px 2px 1px; scrollbar-width:none; overscroll-behavior-x:contain; }
+      .side-nav::-webkit-scrollbar { display:none; }
+      .side-nav-group { display:contents; }
+      .side-nav button { flex:0 0 auto; width:auto; min-height:36px; padding:7px 11px; white-space:nowrap; }
+      .workspace { height:auto; min-height:calc(100dvh - 96px); overflow:visible; padding:18px 12px 55px; }
       .topbar { align-items:flex-start; }
       .cards,.form-grid { grid-template-columns:1fr; }
       .form-grid .wide { grid-column:auto; }
@@ -311,6 +323,9 @@
       .asset-row { grid-template-columns:1fr; }
       .asset-row-controls { justify-content:flex-start; }
       .user-grid { grid-template-columns:1fr; }
+      .editor { height:340px; min-height:340px; max-height:340px; }
+      .login-shell { overflow:hidden; padding:12px; }
+      .login-card { max-height:calc(100dvh - 24px); overflow:hidden; }
     }
     @media(prefers-reduced-motion:reduce) {
       .view.active,.control-bounce-release { animation:none !important; }
@@ -351,6 +366,7 @@
           <button data-view="sections">大板块与小板块</button>
           <button data-view="content">文章内容与文件</button>
           <button data-view="media">图片、相册与视频</button>
+          <button data-view="assets">独立文件资源</button>
           <button data-view="comments">评论管理</button>
         </div>
         <button data-view="changelogs">更新日志</button>
@@ -389,11 +405,11 @@
             <h3>板块设置</h3><input id="section-id" type="hidden">
             <div class="form-grid">
               <div class="field"><label>板块名称</label><input id="section-name" maxlength="80" required placeholder="例如 随笔"></div>
-              <div class="field"><label>板块类型</label><select id="section-kind"><option value="content">文章类</option><option value="gallery">图片类</option></select></div>
+              <div class="field"><label>板块类型</label><select id="section-kind"><option value="content">文章类</option><option value="gallery">图片类</option><option value="resources" disabled>文件资源类（固定）</option></select></div>
               <div class="field wide"><label>板块说明</label><input id="section-description" maxlength="500"></div>
               <div class="field"><label>排序（数字越小越靠前）</label><input id="section-sort" type="number" value="0"></div>
-              <div class="field"><label>访问权限</label><select id="section-visibility"><option value="public">游客与用户均可见</option><option value="member">仅审核通过的用户可见</option></select></div>
-              <label class="checkbox-field"><input id="section-show-all" type="checkbox" checked>图片类板块显示“全部”筛选</label>
+              <div class="field"><label>访问权限</label><select id="section-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="section-user-picker" class="audience-picker hidden"></div></div>
+              <label class="checkbox-field"><input id="section-show-all" type="checkbox" checked>显示“全部”小板块</label>
             </div>
             <div class="actions"><button class="btn" type="submit">保存板块</button><button id="delete-section" class="btn danger hidden" type="button">删除板块及内容</button><span id="section-notice" class="status"></span></div>
           </form>
@@ -409,6 +425,7 @@
               <div class="field"><label>所属文章大板块</label><select id="subsection-section"></select></div>
               <div class="field"><label>名称</label><input id="subsection-name" maxlength="80" required placeholder="例如 所有、学习笔记"></div>
               <div class="field"><label>排序</label><input id="subsection-sort" type="number" value="0"></div>
+              <div class="field"><label>访问权限</label><select id="subsection-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="subsection-user-picker" class="audience-picker hidden"></div></div>
               <div class="field wide"><label>说明</label><input id="subsection-description" maxlength="500"></div>
             </div>
             <div class="actions"><button class="btn" type="submit">保存小板块</button><button id="delete-subsection" class="btn danger hidden" type="button">删除</button><span id="subsection-notice" class="status"></span></div>
@@ -435,21 +452,21 @@
                   <option value="public">公开（游客与登录用户均可见）</option>
                   <option value="member">仅审核用户（审核通过后可见）</option>
                   <option value="selected">仅指定用户（按账号白名单开放）</option>
-                  <option value="private">私密（仅站长后台可见）</option>
+                  <option value="excluded">不给指定用户看（黑名单）</option>
+                  <option value="private">仅本人可见</option>
                 </select>
                 <div id="content-user-picker" class="audience-picker hidden"></div>
-                <small>“草稿”表示尚未发布；“私密”内容即使设为已发布，也不会出现在普通网站中。</small>
               </div>
               <div class="field wide"><label>标题</label><input id="content-title" maxlength="120" required placeholder="输入标题"></div>
               <div class="field wide"><label>摘要</label><textarea id="content-excerpt" maxlength="500" style="min-height:75px" placeholder="列表中显示的简短介绍"></textarea></div>
-              <div class="field wide"><label>封面图片</label><select id="content-cover"><option value="">无封面</option></select></div>
+              <div class="field wide"><label>封面图片（来自“图片、相册与视频”中的照片）</label><select id="content-cover"><option value="">无封面</option></select><div id="content-cover-preview" class="cover-preview"><span>尚未选择封面</span></div></div>
               <div class="wide">
                 <!-- 正文工具栏：按钮使用 data-command 调用浏览器富文本命令。 -->
                 <label style="display:block;margin-bottom:7px;color:var(--muted);font-size:.8rem;font-weight:700">正文</label>
                 <div class="toolbar">
                   <button type="button" data-command="bold"><b>B</b></button><button type="button" data-command="italic"><i>I</i></button>
                   <button type="button" data-block="h2">H2</button><button type="button" data-block="h3">H3</button>
-                  <button type="button" data-command="insertUnorderedList">列表</button><button type="button" id="insert-link">链接</button><button type="button" id="insert-image">插图</button><button type="button" id="insert-resource">插入文件/视频</button>
+                  <button type="button" data-command="insertUnorderedList">列表</button><button type="button" id="insert-link">链接</button><button type="button" id="insert-image">插图</button><button type="button" id="insert-resource">插入文件/视频</button><button type="button" id="remove-editor-resource">删除选中资源</button>
                 </div>
                 <div id="content-editor" class="editor" contenteditable="true"></div>
                 <input id="inline-image-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
@@ -458,7 +475,18 @@
             <div class="actions"><button class="btn" type="submit">保存内容</button><button id="delete-content" class="btn danger hidden" type="button">删除</button><span id="content-notice" class="status"></span></div>
           </form>
         </div>
-        <div id="content-assets-host"></div>
+        <section id="article-assets-panel" class="panel article-linked-panel hidden">
+          <h3>当前文章的独立附件</h3>
+          <div class="actions"><button id="article-upload-file" class="btn small" type="button">给当前文章上传文件/视频</button><span id="article-asset-notice" class="status"></span></div>
+          <input id="article-file-input" class="hidden" type="file" multiple>
+          <div id="article-upload-queue" class="upload-queue"></div>
+          <div id="article-assets-list" class="asset-browser"></div>
+        </section>
+        <section id="article-comments-panel" class="panel article-linked-panel hidden">
+          <h3>当前文章评论区</h3>
+          <form id="author-comment-form" class="message-compose"><textarea id="author-comment-body" maxlength="1000" placeholder="以作者身份发表评论"></textarea><button class="btn" type="submit">发表评论</button></form>
+          <div id="current-content-comments"></div>
+        </section>
       </section>
 
       <!-- ==================== 历史更新日志 ==================== -->
@@ -486,7 +514,8 @@
           <div class="field" style="max-width:420px"><label>当前图片大板块</label><select id="media-section"></select></div>
           <div id="album-row" class="album-row"></div>
           <div class="actions"><button id="add-album" class="btn small">新建相册</button></div>
-          <div class="actions"><button id="media-upload-video" class="btn small ghost" type="button">上传视频到当前相册</button><span class="status">视频使用分片上传，并会同时出现在当前图片板块和“文件资源”中。</span></div>
+          <div class="actions"><button id="media-upload-video" class="btn small ghost" type="button">上传视频到当前相册</button><span class="status">视频只归当前图片板块管理，不会混入独立文件资源。</span></div>
+          <div id="media-video-upload-queue" class="upload-queue"></div>
         </div>
         <form id="media-form" class="panel">
           <h3>上传图片</h3>
@@ -499,7 +528,8 @@
                 <option value="public">公开（游客与登录用户均可见）</option>
                 <option value="member">仅审核用户（审核通过后可见）</option>
                 <option value="selected">仅指定用户（按账号白名单开放）</option>
-                <option value="private">私密（仅站长后台可见）</option>
+                <option value="excluded">不给指定用户看（黑名单）</option>
+                <option value="private">仅本人可见</option>
               </select>
               <div id="media-user-picker" class="audience-picker hidden"></div>
               <small>可见范围同时保护压缩预览与原片下载；上传后仍可在照片卡片中修改。</small>
@@ -514,11 +544,11 @@
       <!-- ==================== R2 大文件、文件夹与视频 ==================== -->
       <section id="view-assets" class="view">
         <div class="panel" style="margin-top:0">
-          <h3>文章附件与视频资源</h3>
-          <p class="status">文件由浏览器分成 32MiB 小片写入 R2；支持大文件夹、PDF/Word、压缩包和视频。浏览器关闭前请等待当前文件显示“上传完成”。</p>
+          <h3>独立文件资源</h3>
+          <details class="asset-help"><summary>权限、清晰度与自动画质怎么用？</summary><p><b>保存权限</b>决定谁能看见或下载文件；<b>上传清晰度</b>用于给同一视频补充 1080P、720P 等不同文件；<b>接入自动画质</b>用于填写已由视频平台转码好的 HLS/DASH 播放地址，让播放器按网络自动切换画质。</p></details>
           <div class="asset-toolbar">
             <div class="field" style="margin:0"><label>当前文件夹</label><select id="asset-current-folder"><option value="">根目录</option></select></div>
-            <div class="field" style="margin:0"><label>默认可见范围</label><select id="asset-upload-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="private">私密（仅 Studio）</option></select></div>
+            <div class="field" style="margin:0"><label>默认可见范围</label><select id="asset-upload-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="asset-upload-user-picker" class="audience-picker hidden"></div></div>
             <div class="field" style="margin:0"><label>默认下载权限</label><select id="asset-download-policy"><option value="member">仅审核用户可下载</option><option value="public">游客也可下载</option></select></div>
           </div>
           <div class="actions">
@@ -531,6 +561,7 @@
           <input id="asset-file-input" class="hidden" type="file" multiple>
           <input id="asset-folder-input" class="hidden" type="file" webkitdirectory directory multiple>
           <input id="asset-variant-input" class="hidden" type="file">
+          <input id="asset-poster-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp">
           <div id="asset-upload-queue" class="upload-queue"></div>
           <div id="asset-browser" class="asset-browser"></div>
         </div>
@@ -554,7 +585,7 @@
       <!-- ==================== 留言与反馈管理 ==================== -->
       <section id="view-feedback" class="view">
         <div class="panel" style="margin-top:0">
-          <div class="actions" style="margin:0 0 14px"><button id="refresh-feedback" class="btn small ghost">刷新留言</button><span class="status">QQ 官方机器人通知需配置 QQ_BOT_SECRET，并通过“绑定网站通知”指令绑定站长 QQ；企业微信仍可使用 WECOM_WEBHOOK_URL。</span></div>
+          <div class="actions feedback-tabs" style="margin:0 0 14px"><button id="feedback-open-tab" class="btn small active" type="button">待处理</button><button id="feedback-archive-tab" class="btn small ghost" type="button" aria-label="查看已解决信箱">📥 已解决信箱</button><button id="refresh-feedback" class="btn small ghost">刷新留言</button></div>
           <div id="feedback-admin-list" class="list"></div>
         </div>
       </section>
@@ -616,6 +647,16 @@
               <small>这里只保存纯文字；段落之间留一个空行，主页会自动排版。留空则隐藏整个“本站使用说明”框。</small>
             </div>
             <div class="field wide"><label>联系邮箱</label><input id="setting-email" type="email" maxlength="240"></div>
+            <div class="field"><label>每日游客人次上限</label><input id="setting-guest-limit" type="number" min="0" max="100000" value="20"></div>
+            <div class="field"><label>关于我标题</label><input id="setting-about-heading" maxlength="80"></div>
+            <div class="field wide"><label>关于我介绍</label><textarea id="setting-about-intro" maxlength="3000"></textarea></div>
+            <div class="field"><label>院校信息标题</label><input id="setting-about-school-label" maxlength="120"></div>
+            <div class="field"><label>学习方向标题</label><input id="setting-about-learning-title" maxlength="120"></div>
+            <div class="field wide"><label>学习方向（每行一项）</label><textarea id="setting-about-learning-items" maxlength="3000"></textarea></div>
+            <div class="field"><label>联系方式标题</label><input id="setting-about-contact-title" maxlength="120"></div>
+            <div class="field"><label>邮箱标签</label><input id="setting-email-label" maxlength="120"></div>
+            <div class="field"><label>国际邮箱标签</label><input id="setting-email-intl-label" maxlength="120"></div>
+            <div class="field"><label>国际邮箱</label><input id="setting-email-intl" type="email" maxlength="240"></div>
             <div class="field wide"><label>绑定站长用户账号</label><select id="setting-owner-user"><option value="">尚未绑定</option></select><small>绑定后可用该用户身份发送私信，并让后台评论回复显示“站长”。</small></div>
           </div>
           <div class="actions"><button class="btn" type="submit">保存网站设置</button><span id="settings-notice" class="status"></span></div>
@@ -634,35 +675,42 @@
     </div>
   </dialog>
 
+  <dialog id="visibility-editor-dialog" class="resource-picker">
+    <form id="visibility-editor-form" method="dialog" class="resource-picker-inner">
+      <h3 id="visibility-editor-title" style="margin:0 0 14px">设置查看权限</h3>
+      <div class="field"><label>可见范围</label><select id="visibility-editor-mode"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select></div>
+      <div id="visibility-editor-users" class="audience-picker hidden"></div>
+      <div class="actions"><button id="visibility-editor-save" class="btn" type="submit" value="save">保存权限</button><button class="btn ghost" type="submit" value="cancel">取消</button></div>
+    </form>
+  </dialog>
+
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script>
     const app = {
       sections: [], subsections: [], content: [], changelogs: [], albums: [], media: [], assetFolders: [], assets: [], comments: [], feedback: [], guestAnalytics: null,
       users: [], passwordResets: [], userEvents: [], generatedResetLinks: new Map(), settings: {},
-      currentAssetFolder: "", editorRange: null, variantTarget: null, assetUploadContext: null, messageContacts: [], messagePeer: null,
+      currentAssetFolder: "", editorRange: null, variantTarget: null, posterTarget: null, assetUploadContext: null, messageContacts: [], messagePeer: null,
+      feedbackArchive: false, visibilityEditor: null,
     };
     const viewInfo = {
-      dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","增加、改名、排序或删除文章类与图片类大板块。"],
+      dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","管理文章、图片和固定文件资源板块及其分支。"],
       content:["文章内容","在任意文章类大板块中撰写、保存草稿并发布内容。"],
       changelogs:["更新日志","追加并保留每一次网站版本更新。"], media:["图片与相册","上传原图、划分主题相册并管理下载资源。"],
-      assets:["附件与视频资源","分片上传大文件或文件夹，管理文档预览、视频清晰度和下载权限。"],
-      comments:["评论管理","查看、隐藏或永久删除文章评论及其全部回复。"], feedback:["留言与反馈","处理、删除游客留言；公开留言只有站长能够回复。"],
+      assets:["独立文件资源","分片上传独立文件或文件夹，管理文档预览、视频清晰度和下载权限。"],
+      comments:["评论管理","查看、隐藏或永久删除文章评论及其全部回复。"], feedback:["留言与反馈","处理注册用户的留言，并在已解决信箱中查看历史记录。"],
       messages:["用户私信","使用绑定的站长账号查看和发送站内私信。"],
       visitors:["游客统计","按日查看游客数量、页面访问、脱敏 IP、大致地区和设备信息。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
       settings:["网站设置","修改主页公开资料、本站使用说明和左下角版本号。"],
     };
 
-    /* “文件与视频”不再作为独立导航，管理面板并入文章内容。 */
-    const assetManagementPanel=document.querySelector("#view-assets > .panel");
-    if(assetManagementPanel)document.getElementById("content-assets-host").append(assetManagementPanel);
-    document.getElementById("view-assets")?.remove();
-    // 文章和照片共用同一套权限名称，避免列表文字与表单选项含义不一致。
+    // 所有板块与文件共用同一套五级权限名称。
     const visibilityLabels = {
       public: "公开",
       member: "仅审核用户",
       selected: "仅指定用户",
-      private: "私密（仅 Studio）",
+      excluded: "不给指定用户看",
+      private: "仅本人可见",
     };
 
     async function api(path, options={}) {
@@ -694,10 +742,29 @@
         label.append(input,name);host.append(label);
       });
     }
+    function visibilityUsesAudience(value){return value==="selected"||value==="excluded"}
     function syncAudiencePicker(selectTarget,pickerTarget,selectedIds=[]){
       const select=audienceNode(selectTarget);const picker=audienceNode(pickerTarget);if(!select||!picker)return;
       renderAudiencePicker(picker,selectedIds);
-      picker.classList.toggle("hidden",select.value!=="selected");
+      picker.classList.toggle("hidden",!visibilityUsesAudience(select.value));
+    }
+    function visibilityPayload(selectTarget,pickerTarget){
+      const visibility=audienceNode(selectTarget).value;
+      return{visibility,allowedUserIds:visibilityUsesAudience(visibility)?selectedAudienceIds(pickerTarget):[]};
+    }
+    function validateVisibilityChoice(choice,messageTarget=null){
+      const valid=!visibilityUsesAudience(choice.visibility)||choice.allowedUserIds.length>0;
+      if(!valid){const text=choice.visibility==="excluded"?"选择‘不给指定用户看’时，请至少勾选一个账号。":"选择‘仅指定用户’时，请至少勾选一个账号。";if(messageTarget)messageTarget.textContent=text;else alert(text)}
+      return valid;
+    }
+    function openVisibilityEditor(title,visibility="public",allowedUserIds=[]){
+      const dialog=document.getElementById("visibility-editor-dialog");
+      document.getElementById("visibility-editor-title").textContent=title;
+      document.getElementById("visibility-editor-mode").value=visibility||"public";
+      syncAudiencePicker("visibility-editor-mode","visibility-editor-users",allowedUserIds);
+      dialog.returnValue="";
+      dialog.showModal();
+      return new Promise(resolve=>{app.visibilityEditor={resolve};});
     }
 
     /* 在实际按下点创建小范围柔光；按住期间保留，松手或取消后才消散。 */
@@ -717,7 +784,6 @@
       document.body.append(bloom);
       return bloom;
     }
-
     function releaseHarmonyLightBloom(bloom) {
       if (!bloom?.isConnected || bloom.classList.contains("is-releasing")) return;
       bloom.classList.add("is-releasing");
@@ -876,13 +942,13 @@
       await Promise.all([loadSections(),loadUsers()]);
       await Promise.all([loadDashboard(),loadSubsections(),loadContent(),loadChangelogs(),loadAlbumsAndMedia(),loadAssets(),loadComments(),loadFeedback(),loadGuestAnalytics(),loadSettings()]);
     }
-    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["今日游客",data.guestVisitorsToday],["今日浏览",data.guestPageViewsToday],["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["文件资源",data.assets],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
+    async function loadDashboard(){const data=await api("/api/admin/dashboard");const stats=document.getElementById("stats");clear(stats);[["今日游客人次",data.guestVisitorsToday],["今日浏览",data.guestPageViewsToday],["大板块",data.sections],["全部内容",data.content],["已发布",data.published],["注册用户",data.users],["待审核",data.pendingUsers],["当前在线",data.onlineUsers],["重置申请",data.resetRequests],["评论",data.comments],["图片",data.media],["文件资源",data.assets],["更新记录",data.changelogs],["新留言",data.unreadFeedback],["全部留言",data.feedback]].forEach(([label,value])=>{const card=document.createElement("div");card.className="stat";const s=document.createElement("span");s.textContent=label;const strong=document.createElement("strong");strong.textContent=value;card.append(s,strong);stats.append(card)})}
 
     async function loadSections(){app.sections=await api("/api/admin/sections");renderSectionList();refreshSectionOptions()}
-    function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${item.kind==="gallery"?"图片类":"文章类"} · ${item.visibility==="member"?"仅正式用户":"游客可见"} · 内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
-    function resetSectionForm(){document.getElementById("section-form").reset();document.getElementById("section-id").value="";document.getElementById("section-sort").value="0";document.getElementById("section-show-all").checked=true;document.getElementById("delete-section").classList.add("hidden");document.getElementById("section-notice").textContent="";renderSectionList()}
-    function editSection(item){document.getElementById("section-id").value=item.id;document.getElementById("section-name").value=item.name;document.getElementById("section-kind").value=item.kind;document.getElementById("section-description").value=item.description||"";document.getElementById("section-sort").value=item.sort_order||0;document.getElementById("section-visibility").value=item.visibility||"public";document.getElementById("section-show-all").checked=Number(item.show_all)!==0;document.getElementById("delete-section").classList.remove("hidden");renderSectionList()}
-    function sectionPayload(){return{name:document.getElementById("section-name").value,kind:document.getElementById("section-kind").value,description:document.getElementById("section-description").value,sortOrder:Number(document.getElementById("section-sort").value||0),visibility:document.getElementById("section-visibility").value,showAll:document.getElementById("section-show-all").checked}}
+    function renderSectionList(){const list=document.getElementById("section-list");clear(list);if(!app.sections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有大板块。";list.append(p);return}app.sections.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("section-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";const audience=visibilityUsesAudience(item.visibility)?`（${item.allowed_user_ids?.length||0} 人）`:"";const kindLabel=item.kind==="gallery"?"图片类":item.kind==="resources"?"文件资源类":"文章类";const counts=item.kind==="resources"?`文件 ${item.resource_count||0}`:`内容 ${item.content_count||0} · 相册 ${item.album_count||0} · 图片 ${item.media_count||0}`;meta.textContent=`${kindLabel} · ${visibilityLabels[item.visibility]||visibilityLabels.public}${audience} · ${counts}`;row.append(title,meta);row.addEventListener("click",()=>editSection(item));list.append(row)})}
+    function resetSectionForm(){document.getElementById("section-form").reset();document.getElementById("section-id").value="";document.getElementById("section-kind").disabled=false;document.getElementById("section-sort").value="0";document.getElementById("section-show-all").checked=true;document.getElementById("delete-section").classList.add("hidden");document.getElementById("section-notice").textContent="";syncAudiencePicker("section-visibility","section-user-picker",[]);renderSectionList()}
+    function editSection(item){document.getElementById("section-id").value=item.id;document.getElementById("section-name").value=item.name;document.getElementById("section-kind").value=item.kind;document.getElementById("section-kind").disabled=item.kind==="resources";document.getElementById("section-description").value=item.description||"";document.getElementById("section-sort").value=item.sort_order||0;document.getElementById("section-visibility").value=item.visibility||"public";syncAudiencePicker("section-visibility","section-user-picker",item.allowed_user_ids||[]);document.getElementById("section-show-all").checked=Number(item.show_all)!==0;document.getElementById("delete-section").classList.toggle("hidden",item.kind==="resources");renderSectionList()}
+    function sectionPayload(){return{name:document.getElementById("section-name").value,kind:document.getElementById("section-kind").value,description:document.getElementById("section-description").value,sortOrder:Number(document.getElementById("section-sort").value||0),...visibilityPayload("section-visibility","section-user-picker"),showAll:document.getElementById("section-show-all").checked}}
     function refreshSectionOptions(){
       const contentSelect=document.getElementById("content-section");const mediaSelect=document.getElementById("media-section");const subsectionSection=document.getElementById("subsection-section");
       const currentContent=contentSelect.value;const currentMedia=mediaSelect.value;const currentSubsectionSection=subsectionSection.value;
@@ -896,16 +962,18 @@
     }
 
     async function loadSubsections(){app.subsections=await api("/api/admin/subsections");renderSubsectionList();refreshContentSubsectionOptions(document.getElementById("content-section").value)}
-    function renderSubsectionList(){const list=document.getElementById("subsection-list");clear(list);if(!app.subsections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有文章小板块。图片类可用相册、文件资源可用文件夹建立分支。";list.append(p);return}app.subsections.forEach(item=>{const section=app.sections.find(value=>value.id===item.section_id);const row=document.createElement("div");row.className=`list-item${document.getElementById("subsection-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${section?.name||"未知大板块"} · 内容 ${item.content_count||0} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editSubsection(item));list.append(row)})}
-    function resetSubsectionForm(){document.getElementById("subsection-form").reset();document.getElementById("subsection-id").value="";document.getElementById("subsection-sort").value="0";document.getElementById("delete-subsection").classList.add("hidden");document.getElementById("subsection-notice").textContent="";refreshSectionOptions();renderSubsectionList()}
-    function editSubsection(item){document.getElementById("subsection-id").value=item.id;document.getElementById("subsection-section").value=item.section_id;document.getElementById("subsection-name").value=item.name;document.getElementById("subsection-description").value=item.description||"";document.getElementById("subsection-sort").value=item.sort_order||0;document.getElementById("delete-subsection").classList.remove("hidden");renderSubsectionList()}
+    function renderSubsectionList(){const list=document.getElementById("subsection-list");clear(list);if(!app.subsections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有文章小板块。图片类可用相册、文件资源可用文件夹建立分支。";list.append(p);return}app.subsections.forEach(item=>{const section=app.sections.find(value=>value.id===item.section_id);const row=document.createElement("div");row.className=`list-item${document.getElementById("subsection-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${section?.name||"未知大板块"} · ${visibilityLabels[item.visibility]||visibilityLabels.public} · 内容 ${item.content_count||0} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editSubsection(item));list.append(row)})}
+    function resetSubsectionForm(){document.getElementById("subsection-form").reset();document.getElementById("subsection-id").value="";document.getElementById("subsection-sort").value="0";document.getElementById("delete-subsection").classList.add("hidden");document.getElementById("subsection-notice").textContent="";syncAudiencePicker("subsection-visibility","subsection-user-picker",[]);refreshSectionOptions();renderSubsectionList()}
+    function editSubsection(item){document.getElementById("subsection-id").value=item.id;document.getElementById("subsection-section").value=item.section_id;document.getElementById("subsection-name").value=item.name;document.getElementById("subsection-description").value=item.description||"";document.getElementById("subsection-sort").value=item.sort_order||0;document.getElementById("subsection-visibility").value=item.visibility||"public";syncAudiencePicker("subsection-visibility","subsection-user-picker",item.allowed_user_ids||[]);document.getElementById("delete-subsection").classList.remove("hidden");renderSubsectionList()}
     function refreshContentSubsectionOptions(sectionId,selectedId=""){const select=document.getElementById("content-subsection");const current=selectedId||select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.subsections.filter(item=>item.section_id===sectionId).forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;select.append(option)});if([...select.options].some(option=>option.value===current))select.value=current}
 
     async function loadContent(){app.content=await api("/api/admin/content");renderContentList();refreshCoverOptions()}
-    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);const audienceCount=item.visibility==="selected"?`（${item.allowed_user_ids?.length||0} 人）`:"";meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public}${audienceCount} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
-    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";syncAudiencePicker("content-visibility","content-user-picker",[]);refreshContentSubsectionOptions(document.getElementById("content-section").value);renderContentList()}
-    function editContent(item){const sectionId=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=sectionId;refreshContentSubsectionOptions(sectionId,item.subsection_id||"");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";syncAudiencePicker("content-visibility","content-user-picker",item.allowed_user_ids||[]);document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";document.getElementById("delete-content").classList.remove("hidden");renderContentList()}
-    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,subsectionId:document.getElementById("content-subsection").value||null,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,visibility:document.getElementById("content-visibility").value,allowedUserIds:selectedAudienceIds("content-user-picker"),title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
+    function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);const audienceCount=visibilityUsesAudience(item.visibility)?`（${item.allowed_user_ids?.length||0} 人）`:"";meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public}${audienceCount} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
+    function updateCoverPreview(){const host=document.getElementById("content-cover-preview");const id=document.getElementById("content-cover").value;const item=app.media.find(media=>media.id===id);clear(host);if(!item){const span=document.createElement("span");span.textContent="尚未选择封面";host.append(span);return}const img=document.createElement("img");img.src=item.previewUrl||item.url;img.alt=item.caption||item.filename;host.append(img)}
+    function syncCurrentContentPanels(){const id=document.getElementById("content-id").value;document.querySelectorAll(".article-linked-panel").forEach(panel=>panel.classList.toggle("hidden",!id));renderArticleAssets();renderCurrentContentComments()}
+    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";document.getElementById("article-asset-notice").textContent="请先保存文章草稿，再上传只属于这篇文章的附件。";syncAudiencePicker("content-visibility","content-user-picker",[]);refreshContentSubsectionOptions(document.getElementById("content-section").value);updateCoverPreview();syncCurrentContentPanels();renderContentList()}
+    function editContent(item){const sectionId=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=sectionId;refreshContentSubsectionOptions(sectionId,item.subsection_id||"");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";syncAudiencePicker("content-visibility","content-user-picker",item.allowed_user_ids||[]);document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.remove("hidden");document.getElementById("article-asset-notice").textContent="";updateCoverPreview();syncCurrentContentPanels();renderContentList()}
+    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,subsectionId:document.getElementById("content-subsection").value||null,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,...visibilityPayload("content-visibility","content-user-picker"),title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
 
     async function loadChangelogs(){app.changelogs=await api("/api/admin/changelogs");renderChangelogs()}
     function renderChangelogs(){const list=document.getElementById("changelog-list");clear(list);app.changelogs.forEach(item=>{const row=document.createElement("div");row.className="list-item";const title=document.createElement("div");title.className="list-title";title.textContent=`v${item.version} · ${item.title}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${formatDate(item.published_at)} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editChangelog(item));list.append(row)})}
@@ -913,7 +981,7 @@
     function editChangelog(item){document.getElementById("changelog-id").value=item.id;document.getElementById("changelog-version").value=item.version;document.getElementById("changelog-title").value=item.title;document.getElementById("changelog-body").value=item.body;document.getElementById("changelog-date").value=localDateTimeInput(item.published_at);document.getElementById("changelog-sort").value=item.sort_order||0;document.getElementById("delete-changelog").classList.remove("hidden")}
 
     async function loadAlbumsAndMedia(){[app.albums,app.media]=await Promise.all([api("/api/admin/albums"),api("/api/admin/media")]);renderAlbums();renderMedia();refreshCoverOptions()}
-    function renderAlbums(){const row=document.getElementById("album-row");const select=document.getElementById("media-album");const sectionId=document.getElementById("media-section").value;clear(row);clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.albums.filter(album=>album.section_id===sectionId||(!album.section_id&&sectionId==="section-photos")).forEach(album=>{const wrap=document.createElement("span");wrap.className="album-chip";const edit=button(`${album.name}（${album.media_count||0}）`);edit.addEventListener("click",()=>editAlbum(album));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAlbum(album));wrap.append(edit,del);row.append(wrap);const option=document.createElement("option");option.value=album.id;option.textContent=album.name;select.append(option)})}
+    function renderAlbums(){const row=document.getElementById("album-row");const select=document.getElementById("media-album");const sectionId=document.getElementById("media-section").value;clear(row);clear(select);const none=document.createElement("option");none.value="";none.textContent="未分类";select.append(none);app.albums.filter(album=>album.section_id===sectionId||(!album.section_id&&sectionId==="section-photos")).forEach(album=>{const wrap=document.createElement("span");wrap.className="album-chip";const edit=button(`${album.name}（${album.media_count||0}）· ${visibilityLabels[album.visibility]||"公开"}`);edit.addEventListener("click",()=>editAlbum(album));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAlbum(album));wrap.append(edit,del);row.append(wrap);const option=document.createElement("option");option.value=album.id;option.textContent=album.name;select.append(option)})}
     function renderMedia() {
       const grid = document.getElementById("media-grid");
       const sectionId = document.getElementById("media-section").value;
@@ -928,7 +996,7 @@
           const title = document.createElement("strong"); title.textContent = item.caption || item.filename;
           const small = document.createElement("small");
           const locationLabel = item.album_name || (item.kind === "inline" ? "文章插图" : "未分类");
-          const audienceCount = item.visibility === "selected" ? `（${item.allowed_user_ids?.length || 0} 人）` : "";
+          const audienceCount = visibilityUsesAudience(item.visibility) ? `（${item.allowed_user_ids?.length || 0} 人）` : "";
           small.textContent = `${locationLabel} · ${visibilityLabels[item.visibility] || visibilityLabels.public}${audienceCount} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
 
           // 已上传照片不必删除重传，可直接在卡片内调整四级权限和用户白名单。
@@ -936,16 +1004,16 @@
           const visibilityLabel = document.createElement("label"); visibilityLabel.textContent = "可见范围";
           const visibilitySelect = document.createElement("select");
           visibilitySelect.setAttribute("aria-label", `${item.caption || item.filename}的可见范围`);
-          [["public", "公开（游客与用户）"], ["member", "仅审核用户"], ["selected", "仅指定用户"], ["private", "私密（仅站长后台）"]].forEach(([value, text]) => {
+          [["public", "公开（游客与用户）"], ["member", "仅审核用户"], ["selected", "仅指定用户"], ["excluded", "不给指定用户看"], ["private", "仅本人可见"]].forEach(([value, text]) => {
             const option = document.createElement("option"); option.value = value; option.textContent = text;
             visibilitySelect.append(option);
           });
           visibilitySelect.value = item.visibility || "public";
           const audiencePicker = document.createElement("div"); audiencePicker.className = "audience-picker";
           renderAudiencePicker(audiencePicker, item.allowed_user_ids || []);
-          audiencePicker.classList.toggle("hidden", visibilitySelect.value !== "selected");
+          audiencePicker.classList.toggle("hidden", !visibilityUsesAudience(visibilitySelect.value));
           visibilitySelect.addEventListener("change", () => {
-            audiencePicker.classList.toggle("hidden", visibilitySelect.value !== "selected");
+            audiencePicker.classList.toggle("hidden", !visibilityUsesAudience(visibilitySelect.value));
           });
           const saveVisibility = button("保存照片权限");
           saveVisibility.addEventListener("click", () => updateMediaVisibility(item, visibilitySelect, audiencePicker, saveVisibility));
@@ -968,8 +1036,14 @@
           const del = button("删除", "btn small danger"); del.addEventListener("click", () => deleteMedia(item));
           actions.append(del); info.append(title, small, visibilityField, actions); card.append(img, info); grid.append(card);
         });
+      app.assets.filter(item=>item.scope==="gallery"&&item.section_id===sectionId&&item.status==="ready").forEach(item=>{
+        const card=document.createElement("article");card.className="media-card";
+        if(item.poster_url){const poster=document.createElement("img");poster.className="video-poster-preview";poster.src=item.poster_url;poster.alt=`${item.display_name}封面`;card.append(poster)}else{const empty=document.createElement("div");empty.className="cover-preview video-poster-preview";empty.textContent="视频尚未设置封面";card.append(empty)}
+        const info=document.createElement("div");info.className="media-info";const title=document.createElement("strong");title.textContent=`🎬 ${item.display_name}`;const meta=document.createElement("small");meta.textContent=`${app.albums.find(album=>album.id===item.album_id)?.name||"未分类"} · ${visibilityLabels[item.visibility]||"公开"}`;
+        const actions=document.createElement("div");actions.className="list-actions";const play=button("预览视频");play.addEventListener("click",()=>window.open(item.url,"_blank","noopener"));const permission=button("保存视频权限");permission.addEventListener("click",()=>editAssetVisibility(item));const poster=button(item.poster_url?"更换封面":"上传封面");poster.addEventListener("click",()=>{app.posterTarget=item;document.getElementById("asset-poster-input").click()});const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAsset(item));actions.append(play,permission,poster,del);info.append(title,meta,actions);card.append(info);grid.append(card)
+      });
     }
-    function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});select.value=current}
+    function refreshCoverOptions(){const select=document.getElementById("content-cover");if(!select)return;const current=select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="无封面";select.append(none);app.media.filter(item=>item.kind!=="inline").forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.caption||item.filename;select.append(option)});if([...select.options].some(option=>option.value===current))select.value=current;updateCoverPreview()}
 
     /* =========================================================
        R2 大文件分片上传与文件夹管理
@@ -991,7 +1065,7 @@
     async function loadAssets(){
       [app.assetFolders,app.assets]=await Promise.all([api("/api/admin/asset-folders"),api("/api/admin/assets")]);
       if(app.currentAssetFolder&&!app.assetFolders.some(item=>item.id===app.currentAssetFolder))app.currentAssetFolder="";
-      renderAssetFolderOptions();renderAssetBrowser();renderResourcePicker();
+      renderAssetFolderOptions();renderAssetBrowser();renderResourcePicker();renderArticleAssets();renderMedia();
     }
     function renderAssetFolderOptions(){
       const select=document.getElementById("asset-current-folder");const current=app.currentAssetFolder;clear(select);
@@ -1003,7 +1077,7 @@
     function renderAssetBrowser(){
       const browser=document.getElementById("asset-browser");clear(browser);const current=app.currentAssetFolder||null;
       const folders=app.assetFolders.filter(item=>(item.parent_id||null)===current);
-      const assets=app.assets.filter(item=>(item.folder_id||null)===current);
+      const assets=app.assets.filter(item=>item.scope==="library"&&(item.folder_id||null)===current);
       if(current){
         const folder=app.assetFolders.find(item=>item.id===current);const up=document.createElement("div");up.className="asset-row folder";
         const copy=document.createElement("div");copy.className="asset-row-title";const strong=document.createElement("strong");strong.textContent=`↩ 返回 ${folder?.parent_id?assetFolderPath(folder.parent_id):"根目录"}`;copy.append(strong);up.append(copy);
@@ -1027,22 +1101,22 @@
       const info=document.createElement("div");const title=document.createElement("div");title.className="asset-row-title";const name=document.createElement("strong");name.textContent=`${item.kind==="video"?"🎬":item.kind==="archive"?"🗜️":item.kind==="pdf"||item.kind==="word"?"📄":"📦"} ${item.display_name}`;title.append(name);
       const labels=(item.variants||[]).filter(v=>v.status==="ready").map(v=>v.label).join("、");const meta=document.createElement("div");meta.className="asset-row-meta";meta.textContent=`${item.kind.toUpperCase()} · ${formatBytes(item.size_bytes)} · ${visibilityLabels[item.visibility]||item.visibility} · ${item.download_policy==="public"?"游客可下载":"仅审核用户可下载"}${labels?` · 版本：${labels}`:""}`;info.append(title,meta);
       const controls=document.createElement("div");controls.className="asset-row-controls";
-      const visibility=document.createElement("select");[["public","公开"],["member","仅审核用户"],["private","私密"]].forEach(([value,text])=>{const o=document.createElement("option");o.value=value;o.textContent=text;visibility.append(o)});visibility.value=item.visibility;
       const download=document.createElement("select");[["member","登录后下载"],["public","游客可下载"]].forEach(([value,text])=>{const o=document.createElement("option");o.value=value;o.textContent=text;download.append(o)});download.value=item.download_policy;
-      const save=button("保存权限");save.addEventListener("click",()=>saveAssetMetadata(item,{visibility:visibility.value,downloadPolicy:download.value}));
+      const save=button("保存权限");save.addEventListener("click",async()=>{const choice=await openVisibilityEditor(`设置“${item.display_name}”的权限`,item.visibility,item.allowed_user_ids||[]);if(!choice)return;await saveAssetMetadata(item,{...choice,downloadPolicy:download.value})});
       const open=button(item.kind==="archive"?"下载测试":"预览");open.addEventListener("click",()=>window.open(item.kind==="archive"?item.downloadUrl:item.url,"_blank","noopener"));
-      controls.append(visibility,download,save,open);
+      controls.append(download,save,open);
       if(item.kind==="video"){
         const variant=button("上传清晰度");variant.addEventListener("click",()=>chooseAssetVariant(item));controls.append(variant);
         const stream=button(item.stream_hls_url?"修改自动流":"接入自动画质");stream.addEventListener("click",()=>configureVideoStream(item));controls.append(stream);
+        const poster=button(item.poster_url?"更换视频封面":"上传视频封面");poster.addEventListener("click",()=>{app.posterTarget=item;document.getElementById("asset-poster-input").click()});controls.append(poster);
       }
       if(item.kind==="word"){const preview=button("上传 PDF 预览");preview.addEventListener("click",()=>chooseAssetVariant(item,"preview"));controls.append(preview)}
       const rename=button("改名");rename.addEventListener("click",()=>renameAsset(item));const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteAsset(item));controls.append(rename,del);row.append(info,controls);return row;
     }
     async function editAssetFolder(folder){
       const name=prompt("文件夹名称",folder.name);if(name===null||!name.trim())return;const description=prompt("文件夹说明（选填）",folder.description||"");if(description===null)return;
-      const visibility=prompt("可见范围：public / member / private",folder.visibility||"public");if(visibility===null)return;
-      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:folder.parent_id,visibility,sortOrder:folder.sort_order,archiveAssetId:folder.archive_asset_id})});await loadAssets();
+      const choice=await openVisibilityEditor(`设置文件夹“${name}”的权限`,folder.visibility,folder.allowed_user_ids||[]);if(!choice)return;
+      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:folder.parent_id,...choice,sortOrder:folder.sort_order,archiveAssetId:folder.archive_asset_id})});await loadAssets();
     }
     async function attachFolderArchive(folder){
       const archives=app.assets.filter(item=>item.kind==="archive"&&item.status==="ready");
@@ -1050,10 +1124,11 @@
       const choices=archives.map((item,index)=>`${index+1}. ${item.display_name}`).join("\n");
       const answer=prompt(`输入压缩包前面的序号；输入 0 可取消整包关联：\n\n${choices}`,folder.archive_asset_id?String(Math.max(0,archives.findIndex(item=>item.id===folder.archive_asset_id)+1)):"1");
       if(answer===null)return;const number=Number(answer);if(!Number.isInteger(number)||number<0||number>archives.length){alert("序号无效");return}
-      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:folder.name,description:folder.description,parentId:folder.parent_id,visibility:folder.visibility,sortOrder:folder.sort_order,archiveAssetId:number?archives[number-1].id:null})});await loadAssets();
+      await api(`/api/admin/asset-folders/${folder.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:folder.name,description:folder.description,parentId:folder.parent_id,visibility:folder.visibility,allowedUserIds:folder.allowed_user_ids||[],sortOrder:folder.sort_order,archiveAssetId:number?archives[number-1].id:null})});await loadAssets();
     }
     async function deleteAssetFolder(folder){if(!confirm(`确定删除空文件夹“${folder.name}”吗？`))return;try{await api(`/api/admin/asset-folders/${folder.id}`,{method:"DELETE"});await loadAssets()}catch(error){alert(error.message)}}
-    async function saveAssetMetadata(item,changes){await api(`/api/admin/assets/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(changes)});document.getElementById("asset-notice").textContent="文件设置已保存。";await loadAssets()}
+    async function saveAssetMetadata(item,changes){const merged={visibility:item.visibility,allowedUserIds:item.allowed_user_ids||[],...changes};await api(`/api/admin/assets/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(merged)});document.getElementById("asset-notice").textContent="文件设置已保存。";await loadAssets()}
+    async function editAssetVisibility(item){const choice=await openVisibilityEditor(`设置“${item.display_name}”的权限`,item.visibility,item.allowed_user_ids||[]);if(choice)await saveAssetMetadata(item,choice)}
     async function renameAsset(item){const displayName=prompt("网站中显示的名称",item.display_name);if(displayName===null||!displayName.trim())return;await saveAssetMetadata(item,{displayName})}
     async function configureVideoStream(item){
       const streamHlsUrl=prompt("粘贴 Cloudflare Stream 的 HLS (.m3u8) 地址；留空可取消自动画质",item.stream_hls_url||"");if(streamHlsUrl===null)return;
@@ -1061,29 +1136,30 @@
     }
     async function deleteAsset(item){if(!confirm(`确定永久删除“${item.display_name}”及其全部清晰度/预览版本吗？`))return;await api(`/api/admin/assets/${item.id}`,{method:"DELETE"});await Promise.all([loadAssets(),loadDashboard()])}
 
-    function createUploadJob(file){
-      const queue=document.getElementById("asset-upload-queue");const job=document.createElement("div");job.className="upload-job";const head=document.createElement("div");head.className="upload-job-head";const name=document.createElement("strong");name.textContent=file.name;const state=document.createElement("span");state.textContent="等待上传";head.append(name,state);const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
+    function createUploadJob(file,scope="library"){
+      const queue=document.getElementById(scope==="article"?"article-upload-queue":scope==="gallery"?"media-video-upload-queue":"asset-upload-queue");const job=document.createElement("div");job.className="upload-job";const head=document.createElement("div");head.className="upload-job-head";const name=document.createElement("strong");name.textContent=file.name;const state=document.createElement("span");state.textContent="等待上传";head.append(name,state);const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
       return {update(percent,text){bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;state.textContent=text},fail(text){job.style.borderColor="#e4aaa5";state.textContent=text}};
     }
     async function uploadPartWithRetry(url,blob){
       let lastError;for(let attempt=1;attempt<=3;attempt+=1){try{const response=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:blob});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||`分片上传失败（${response.status}）`);return data}catch(error){lastError=error;if(attempt<3)await new Promise(resolve=>setTimeout(resolve,450*attempt))}}
       throw lastError;
     }
-    async function uploadAssetFile(file,{folderId="",relativePath="",assetId="",variantLabel="",sectionId="",albumId=""}={}){
-      const job=createUploadJob(file);let session=null;
+    async function uploadAssetFile(file,{folderId="",relativePath="",assetId="",variantLabel="",sectionId="",albumId="",contentId="",scope="library",visibility="",allowedUserIds=null}={}){
+      const job=createUploadJob(file,scope);let session=null;const defaultChoice=visibilityPayload("asset-upload-visibility","asset-upload-user-picker");const uploadVisibility=visibility||defaultChoice.visibility;const uploadAudience=allowedUserIds??defaultChoice.allowedUserIds;
       try{
-        job.update(0,"正在建立上传会话…");session=await api("/api/admin/asset-uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({assetId,variantLabel,folderId,sectionId,albumId,filename:file.name,displayName:file.name,mimeType:file.type||"application/octet-stream",sizeBytes:file.size,relativePath,visibility:document.getElementById("asset-upload-visibility").value,downloadPolicy:document.getElementById("asset-download-policy").value})});
+        job.update(0,"正在建立上传会话…");session=await api("/api/admin/asset-uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({assetId,variantLabel,folderId,sectionId,albumId,contentId,scope,filename:file.name,displayName:file.name,mimeType:file.type||"application/octet-stream",sizeBytes:file.size,relativePath,visibility:uploadVisibility,allowedUserIds:uploadAudience,downloadPolicy:document.getElementById("asset-download-policy").value})});
         const parts=[];const count=Math.ceil(file.size/session.partSize);if(count>session.maxParts)throw new Error("文件分片数超过 R2 上限");
         for(let index=0;index<count;index+=1){const start=index*session.partSize;const end=Math.min(file.size,start+session.partSize);job.update(start/file.size*100,`上传第 ${index+1}/${count} 片…`);const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${index+1}`,file.slice(start,end));parts.push(result);job.update(end/file.size*100,`已上传 ${formatBytes(end)} / ${formatBytes(file.size)}`)}
         job.update(100,"正在合并并校验…");await api(`/api/admin/asset-uploads/${session.sessionId}/complete`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({parts})});job.update(100,"上传完成");return session.assetId;
       }catch(error){job.fail(`失败：${error.message}`);if(session?.sessionId)await api(`/api/admin/asset-uploads/${session.sessionId}`,{method:"DELETE"}).catch(()=>null);throw error}
     }
-    async function ensureFolderPath(parts,parentId){
-      let current=parentId||null;for(const rawName of parts){const name=rawName.trim();if(!name)continue;let folder=app.assetFolders.find(item=>(item.parent_id||null)===current&&item.name===name);if(!folder){const result=await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,parentId:current,visibility:document.getElementById("asset-upload-visibility").value})});folder={id:result.id,parent_id:current,name,description:"",visibility:document.getElementById("asset-upload-visibility").value,sort_order:0,folder_count:0,asset_count:0};app.assetFolders.push(folder)}current=folder.id}return current;
+    async function ensureFolderPath(parts,parentId,choice){
+      let current=parentId||null;for(const rawName of parts){const name=rawName.trim();if(!name)continue;let folder=app.assetFolders.find(item=>(item.parent_id||null)===current&&item.name===name);if(!folder){const result=await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,parentId:current,...choice})});folder={id:result.id,parent_id:current,name,description:"",visibility:choice.visibility,allowed_user_ids:choice.allowedUserIds,sort_order:0,folder_count:0,asset_count:0};app.assetFolders.push(folder)}current=folder.id}return current;
     }
-    async function runAssetUpload(files,{folderMode=false,sectionId="",albumId=""}={}){
+    async function runAssetUpload(files,{folderMode=false,sectionId="",albumId="",contentId="",scope="library",visibility="",allowedUserIds=null}={}){
       if(!files.length)return;const notice=document.getElementById("asset-notice");notice.textContent=`准备上传 ${files.length} 个文件…`;
-      let completed=0;for(const file of files){try{let folderId=app.currentAssetFolder;const relativePath=file.webkitRelativePath||file.name;if(folderMode){const parts=relativePath.split("/").slice(0,-1);folderId=await ensureFolderPath(parts,app.currentAssetFolder)}await uploadAssetFile(file,{folderId,relativePath,sectionId,albumId});completed+=1;notice.textContent=`已完成 ${completed}/${files.length}`;}catch(error){notice.textContent=`${file.name} 上传失败：${error.message}`;break}}
+      const choice=visibility?{visibility,allowedUserIds:allowedUserIds||[]}:visibilityPayload("asset-upload-visibility","asset-upload-user-picker");
+      let completed=0;for(const file of files){try{let folderId=scope==="library"?app.currentAssetFolder:"";const relativePath=file.webkitRelativePath||file.name;if(folderMode){const parts=relativePath.split("/").slice(0,-1);folderId=await ensureFolderPath(parts,app.currentAssetFolder,choice)}await uploadAssetFile(file,{folderId,relativePath,sectionId,albumId,contentId,scope,...choice});completed+=1;notice.textContent=`已完成 ${completed}/${files.length}`;}catch(error){notice.textContent=`${file.name} 上传失败：${error.message}`;break}}
       await Promise.all([loadAssets(),loadDashboard()]);
     }
     function chooseAssetVariant(item,fixedLabel=""){
@@ -1094,10 +1170,11 @@
     function renderResourcePicker(){
       const list=document.getElementById("resource-picker-list");if(!list)return;clear(list);
       const add=(type,id,label,meta)=>{const row=document.createElement("div");row.className="resource-picker-item";const copy=document.createElement("div");const title=document.createElement("strong");title.textContent=label;const small=document.createElement("div");small.className="list-meta";small.textContent=meta;copy.append(title,small);const insert=button("插入正文","btn small");insert.addEventListener("click",()=>insertResourceEmbed(type,id,label));row.append(copy,insert);list.append(row)};
-      app.assetFolders.forEach(item=>add("folder",item.id,`📁 ${assetFolderPath(item.id)}`,visibilityLabels[item.visibility]||item.visibility));
-      app.assets.filter(item=>item.status==="ready").forEach(item=>add("asset",item.id,`${item.kind==="video"?"🎬":"📄"} ${item.display_name}`,`${item.kind.toUpperCase()} · ${formatBytes(item.size_bytes)}`));
+      const contentId=document.getElementById("content-id").value;
+      app.assets.filter(item=>item.scope==="article"&&item.content_id===contentId&&item.status==="ready").forEach(item=>add("asset",item.id,`${item.kind==="video"?"🎬":"📄"} ${item.display_name}`,`${item.kind.toUpperCase()} · ${formatBytes(item.size_bytes)}`));
       if(!list.children.length){const p=document.createElement("p");p.className="status";p.textContent="还没有可插入的文件。";list.append(p)}
     }
+    function renderArticleAssets(){const host=document.getElementById("article-assets-list");if(!host)return;clear(host);const contentId=document.getElementById("content-id").value;const items=app.assets.filter(item=>item.scope==="article"&&item.content_id===contentId);items.forEach(item=>host.append(createAssetRow(item)));if(contentId&&!items.length){const empty=document.createElement("p");empty.className="status";empty.textContent="这篇文章还没有上传附件。";host.append(empty)}}
     function insertResourceEmbed(type,id,label){
       const editor=document.getElementById("content-editor");editor.focus();const selection=getSelection();if(app.editorRange){selection.removeAllRanges();selection.addRange(app.editorRange)}
       const embed=document.createElement("div");embed.className="resource-embed";embed.dataset.resourceType=type;embed.dataset.resourceId=id;embed.textContent=`已插入：${label}`;
@@ -1105,7 +1182,7 @@
       document.getElementById("resource-picker").close();document.getElementById("content-notice").textContent="资源已插入正文，保存文章后生效。";
     }
 
-    async function loadComments(){app.comments=await api("/api/admin/comments");renderAdminComments()}
+    async function loadComments(){app.comments=await api("/api/admin/comments");renderAdminComments();renderCurrentContentComments()}
     function renderAdminComments(){
       const list=document.getElementById("comment-admin-list");clear(list);
       if(!app.comments.length){const p=document.createElement("p");p.className="status";p.textContent="暂无评论。";list.append(p);return}
@@ -1113,15 +1190,19 @@
         const row=document.createElement("article");row.className="comment-row";
         const head=document.createElement("strong");head.textContent=`${item.guest_name} · ${item.content_title||"内容已删除"}`;
         if(Number(item.is_admin)){const badge=document.createElement("span");badge.className="admin-badge";badge.textContent="站长";head.append(" ",badge)}
-        const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)} · ${item.status==="hidden"?"已隐藏":"公开"}`;
+        const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)} · ${item.status==="hidden"?"已隐藏":"公开"}${Number(item.is_pinned)?" · 已置顶":""}${Number(item.author_liked)?" · 作者已赞":""}`;
         const body=document.createElement("p");body.textContent=item.body;
         const actions=document.createElement("div");actions.className="list-actions";
         const toggle=button(item.status==="hidden"?"恢复显示":"隐藏");toggle.addEventListener("click",()=>toggleComment(item));
         const reply=button("站长回复","btn small");reply.addEventListener("click",()=>replyCommentAsOwner(item));
+        const pin=button(Number(item.is_pinned)?"取消置顶":"置顶");pin.addEventListener("click",()=>setCommentFlag(item,"pin",!Number(item.is_pinned)));
+        const authorLike=button(Number(item.author_liked)?"取消作者赞":"作者点赞");authorLike.addEventListener("click",()=>setCommentFlag(item,"author-like",!Number(item.author_liked)));
         const del=button("删除","btn small danger");del.addEventListener("click",()=>deleteComment(item));
-        actions.append(reply,toggle,del);row.append(head,document.createElement("br"),meta,body,actions);list.append(row);
+        actions.append(reply,pin,authorLike,toggle,del);row.append(head,document.createElement("br"),meta,body,actions);list.append(row);
       });
     }
+    function renderCurrentContentComments(){const host=document.getElementById("current-content-comments");if(!host)return;clear(host);const contentId=document.getElementById("content-id").value;if(!contentId)return;const comments=app.comments.filter(item=>item.content_id===contentId);if(!comments.length){const p=document.createElement("p");p.className="status";p.textContent="这篇文章暂无评论。";host.append(p);return}comments.forEach(item=>{const row=document.createElement("article");row.className="comment-row";const head=document.createElement("strong");head.textContent=`${item.guest_name}${Number(item.is_admin)?" · 站长":""}`;const meta=document.createElement("small");meta.textContent=`${formatDate(item.created_at)}${Number(item.is_pinned)?" · 已置顶":""}${Number(item.author_liked)?" · 作者已赞":""}`;const body=document.createElement("p");body.textContent=item.body;const actions=document.createElement("div");actions.className="list-actions";const reply=button("回复");reply.addEventListener("click",()=>replyCommentAsOwner(item));const pin=button(Number(item.is_pinned)?"取消置顶":"置顶");pin.addEventListener("click",()=>setCommentFlag(item,"pin",!Number(item.is_pinned)));const like=button(Number(item.author_liked)?"取消作者赞":"作者点赞");like.addEventListener("click",()=>setCommentFlag(item,"author-like",!Number(item.author_liked)));actions.append(reply,pin,like);row.append(head,document.createElement("br"),meta,body,actions);host.append(row)})}
+    async function setCommentFlag(item,action,value){await api(`/api/admin/comments/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,value})});await loadComments()}
     async function replyCommentAsOwner(item){const body=prompt(`以站长身份回复 ${item.guest_name}`);if(!body?.trim())return;await api(`/api/admin/comments/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"reply",body})});await loadComments()}
 
     async function loadStudioMessages(){const data=await api("/api/admin/messages");app.messageOwner=data.owner;app.messageContacts=data.contacts||[];renderStudioMessageContacts()}
@@ -1136,9 +1217,11 @@
      */
     function renderAdminFeedback(){
       const list=document.getElementById("feedback-admin-list");clear(list);
-      if(!app.feedback.length){const p=document.createElement("p");p.className="status";p.textContent="暂无留言。";list.append(p);return}
+      const filtered=app.feedback.filter(item=>app.feedbackArchive?item.status==="resolved":item.status!=="resolved");
+      document.getElementById("feedback-open-tab").classList.toggle("active",!app.feedbackArchive);document.getElementById("feedback-open-tab").classList.toggle("ghost",app.feedbackArchive);document.getElementById("feedback-archive-tab").classList.toggle("active",app.feedbackArchive);document.getElementById("feedback-archive-tab").classList.toggle("ghost",!app.feedbackArchive);
+      if(!filtered.length){const p=document.createElement("p");p.className="status";p.textContent=app.feedbackArchive?"已解决信箱为空。":"暂无待处理留言。";list.append(p);return}
       const labels={message:"留言",bug:"网站问题",suggestion:"功能建议"};
-      app.feedback.forEach(item=>{
+      filtered.forEach(item=>{
         const row=document.createElement("article");row.className=`feedback-admin-row${item.status==="new"?" unread":""}`;
         const title=document.createElement("strong");title.textContent=`${labels[item.category]||"留言"} · ${item.guest_name}`;
         const meta=document.createElement("div");meta.className="list-meta";
@@ -1349,12 +1432,12 @@
     }
 
     function refreshOwnerOptions(){const select=document.getElementById("setting-owner-user");const current=app.settings.owner_user_id||select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="尚未绑定";select.append(none);approvedAudienceUsers().forEach(user=>{const option=document.createElement("option");option.value=user.id;option.textContent=`${user.nickname}（@${user.username}）`;select.append(option)});if([...select.options].some(option=>option.value===current))select.value=current}
-    async function loadSettings(){app.settings=await api("/api/admin/settings");document.getElementById("setting-site-title").value=app.settings.site_title||"";document.getElementById("setting-owner-name").value=app.settings.owner_name||"";document.getElementById("setting-site-version").value=app.settings.site_version||"";document.getElementById("setting-school").value=app.settings.school||"";document.getElementById("setting-intro").value=app.settings.intro||"";document.getElementById("setting-usage-guide").value=app.settings.usage_guide||"";document.getElementById("setting-email").value=app.settings.contact_email||"";refreshOwnerOptions()}
+    async function loadSettings(){app.settings=await api("/api/admin/settings");const values={"setting-site-title":"site_title","setting-owner-name":"owner_name","setting-site-version":"site_version","setting-school":"school","setting-intro":"intro","setting-usage-guide":"usage_guide","setting-email":"contact_email","setting-guest-limit":"guest_daily_limit","setting-about-heading":"about_heading","setting-about-intro":"about_intro","setting-about-school-label":"about_school_label","setting-about-learning-title":"about_learning_title","setting-about-learning-items":"about_learning_items","setting-about-contact-title":"about_contact_title","setting-email-label":"contact_email_label","setting-email-intl":"contact_email_intl","setting-email-intl-label":"contact_email_intl_label"};Object.entries(values).forEach(([id,key])=>{document.getElementById(id).value=app.settings[key]||""});refreshOwnerOptions()}
 
     async function uploadInline(file) {
       const visibility = document.getElementById("content-visibility").value;
       const allowedUserIds = selectedAudienceIds("content-user-picker");
-      if (visibility === "selected" && !allowedUserIds.length) {
+      if (visibilityUsesAudience(visibility) && !allowedUserIds.length) {
         throw new Error("插入图片前，请至少勾选一个能够查看本文的已审核账号");
       }
       const form = new FormData();
@@ -1398,7 +1481,7 @@
       const previous = item.visibility || "public";
       const next = control.value;
       const allowedUserIds = selectedAudienceIds(audiencePicker);
-      if (next === "selected" && !allowedUserIds.length) { alert("请至少勾选一个已审核账号"); return; }
+      if (visibilityUsesAudience(next) && !allowedUserIds.length) { alert("请至少勾选一个已审核账号"); return; }
       control.disabled = true; saveButton.disabled = true;
       try {
         await api(`/api/admin/media/${item.id}`, {
@@ -1414,17 +1497,17 @@
           }),
         });
         item.visibility = next;
-        item.allowed_user_ids = next === "selected" ? allowedUserIds : [];
+        item.allowed_user_ids = visibilityUsesAudience(next) ? allowedUserIds : [];
         renderMedia();
       } catch (error) {
         control.value = previous;
-        audiencePicker.classList.toggle("hidden", previous !== "selected");
+        audiencePicker.classList.toggle("hidden", !visibilityUsesAudience(previous));
         control.disabled = false; saveButton.disabled = false;
         alert(`可见范围保存失败：${error.message}`);
       }
     }
     async function deleteMedia(item){if(!confirm(`确定删除“${item.filename}”吗？原图将同时删除。`))return;await api(`/api/admin/media/${item.id}`,{method:"DELETE"});await loadAlbumsAndMedia();await loadDashboard()}
-    async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null)return;const description=prompt("相册说明",album.description||"");if(description===null)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value})});await loadAlbumsAndMedia()}
+    async function editAlbum(album){const name=prompt("相册名称",album.name);if(name===null||!name.trim())return;const description=prompt("相册说明",album.description||"");if(description===null)return;const choice=await openVisibilityEditor(`设置相册“${name}”的权限`,album.visibility,album.allowed_user_ids||[]);if(!choice)return;await api(`/api/admin/albums/${album.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sortOrder:album.sort_order,sectionId:document.getElementById("media-section").value,...choice})});await loadAlbumsAndMedia()}
     async function deleteAlbum(album){if(!confirm(`确定删除相册“${album.name}”吗？相册内图片会保留为未分类。`))return;await api(`/api/admin/albums/${album.id}`,{method:"DELETE"});await loadAlbumsAndMedia()}
     async function toggleComment(item){await api(`/api/admin/comments/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:item.status==="hidden"?"active":"hidden"})});await loadComments()}
     async function deleteComment(item){if(!confirm("确定删除这条评论及其回复吗？"))return;await api(`/api/admin/comments/${item.id}`,{method:"DELETE"});await loadComments();await loadDashboard()}
@@ -1433,30 +1516,30 @@
     document.querySelectorAll(".side-nav button").forEach(b=>b.addEventListener("click",()=>switchView(b.dataset.view)));
     document.getElementById("logout").addEventListener("click",async()=>{await api("/api/admin/logout",{method:"POST"});location.reload()});
     document.getElementById("new-section").addEventListener("click",resetSectionForm);document.getElementById("refresh-sections").addEventListener("click",loadSections);
-    document.getElementById("section-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("section-id").value;const notice=document.getElementById("section-notice");notice.textContent="正在保存…";try{await api(id?`/api/admin/sections/${id}`:"/api/admin/sections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(sectionPayload())});notice.textContent="板块已保存。";resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
+    document.getElementById("section-visibility").addEventListener("change",()=>syncAudiencePicker("section-visibility","section-user-picker",selectedAudienceIds("section-user-picker")));
+    document.getElementById("section-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("section-id").value;const notice=document.getElementById("section-notice");const payload=sectionPayload();if(!validateVisibilityChoice(payload,notice))return;notice.textContent="正在保存…";try{await api(id?`/api/admin/sections/${id}`:"/api/admin/sections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});notice.textContent="板块已保存。";resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadDashboard()}catch(error){notice.textContent=error.message}});
     document.getElementById("delete-section").addEventListener("click",async()=>{const id=document.getElementById("section-id").value;const item=app.sections.find(s=>s.id===id);if(!item)return;const warning=`确定删除大板块“${item.name}”吗？\n\n该板块内的文章、评论、相册、图片和 R2 原文件都会一并永久删除，此操作不可撤销。`;if(!confirm(warning))return;await api(`/api/admin/sections/${id}`,{method:"DELETE"});resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadComments();await loadDashboard()});
     document.getElementById("new-subsection").addEventListener("click",resetSubsectionForm);document.getElementById("refresh-subsections").addEventListener("click",loadSubsections);
-    document.getElementById("subsection-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("subsection-id").value;const notice=document.getElementById("subsection-notice");try{await api(id?`/api/admin/subsections/${id}`:"/api/admin/subsections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sectionId:document.getElementById("subsection-section").value,name:document.getElementById("subsection-name").value,description:document.getElementById("subsection-description").value,sortOrder:Number(document.getElementById("subsection-sort").value||0)})});notice.textContent="小板块已保存。";resetSubsectionForm();await loadSubsections()}catch(error){notice.textContent=error.message}});
+    document.getElementById("subsection-visibility").addEventListener("change",()=>syncAudiencePicker("subsection-visibility","subsection-user-picker",selectedAudienceIds("subsection-user-picker")));
+    document.getElementById("subsection-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("subsection-id").value;const notice=document.getElementById("subsection-notice");const access=visibilityPayload("subsection-visibility","subsection-user-picker");if(!validateVisibilityChoice(access,notice))return;try{await api(id?`/api/admin/subsections/${id}`:"/api/admin/subsections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sectionId:document.getElementById("subsection-section").value,name:document.getElementById("subsection-name").value,description:document.getElementById("subsection-description").value,sortOrder:Number(document.getElementById("subsection-sort").value||0),...access})});notice.textContent="小板块已保存。";resetSubsectionForm();await loadSubsections()}catch(error){notice.textContent=error.message}});
     document.getElementById("delete-subsection").addEventListener("click",async()=>{const id=document.getElementById("subsection-id").value;if(!id||!confirm("删除后，原有文章会保留并变为未分类。确定继续吗？"))return;await api(`/api/admin/subsections/${id}`,{method:"DELETE"});resetSubsectionForm();await loadSubsections();await loadContent()});
     document.getElementById("new-content").addEventListener("click",resetContentForm);document.getElementById("refresh-content").addEventListener("click",loadContent);
     document.getElementById("content-section").addEventListener("change",event=>refreshContentSubsectionOptions(event.target.value));
     document.getElementById("content-visibility").addEventListener("change",()=>{
       const picker=document.getElementById("content-user-picker");
-      picker.classList.toggle("hidden",document.getElementById("content-visibility").value!=="selected");
+      picker.classList.toggle("hidden",!visibilityUsesAudience(document.getElementById("content-visibility").value));
     });
+    document.getElementById("content-cover").addEventListener("change",updateCoverPreview);
     document.getElementById("content-form").addEventListener("submit",async event=>{
       event.preventDefault();
       const id=document.getElementById("content-id").value;
       const notice=document.getElementById("content-notice");
       const payload=contentPayload();
-      if(payload.visibility==="selected"&&!payload.allowedUserIds.length){
-        notice.textContent="选择“仅指定用户”时，请至少勾选一个已审核账号。";
-        return;
-      }
+      if(!validateVisibilityChoice(payload,notice))return;
       notice.textContent="正在保存…";
       try{
-        await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-        notice.textContent="已保存。";await loadContent();await loadDashboard();if(!id)resetContentForm();
+        const result=await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+        notice.textContent="已保存。";await loadContent();await loadDashboard();const saved=app.content.find(item=>item.id===(id||result.id));if(saved)editContent(saved);
       }catch(error){notice.textContent=error.message}
     });
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
@@ -1466,16 +1549,21 @@
      * 把选中的文字设为链接。这里只接受 http/https，拒绝 javascript: 等协议。
      */
     document.getElementById("insert-link").addEventListener("click",()=>{
+      const editor=document.getElementById("content-editor");const selection=getSelection();const savedRange=selection.rangeCount&&editor.contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;
       const value=prompt("链接地址（以 http:// 或 https:// 开头）");
       if(!value)return;
       try{
         const url=new URL(value.trim());
         if(!["http:","https:"].includes(url.protocol)||url.username||url.password)throw new Error();
-        document.execCommand("createLink",false,url.href);
+        editor.focus();if(savedRange){selection.removeAllRanges();selection.addRange(savedRange)}
+        if(savedRange&&!savedRange.collapsed)document.execCommand("createLink",false,url.href);
+        else{const anchor=document.createElement("a");anchor.href=url.href;anchor.textContent=url.href;anchor.target="_blank";anchor.rel="noopener noreferrer";const range=savedRange||document.createRange();if(!savedRange)range.selectNodeContents(editor);range.collapse(false);range.insertNode(anchor);range.setStartAfter(anchor);range.collapse(true);selection.removeAllRanges();selection.addRange(range)}
       }catch{alert("网址格式不正确，请填写完整的 http:// 或 https:// 地址。");}
     });document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
     document.getElementById("insert-resource").addEventListener("click",()=>{const selection=getSelection();app.editorRange=selection.rangeCount&&document.getElementById("content-editor").contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;renderResourcePicker();document.getElementById("resource-picker").showModal()});
     document.getElementById("resource-picker-close").addEventListener("click",()=>document.getElementById("resource-picker").close());
+    document.getElementById("content-editor").addEventListener("click",event=>{document.querySelectorAll("#content-editor .resource-embed.is-selected").forEach(node=>node.classList.remove("is-selected"));event.target.closest?.(".resource-embed")?.classList.add("is-selected")});
+    document.getElementById("remove-editor-resource").addEventListener("click",()=>{const selected=document.querySelector("#content-editor .resource-embed.is-selected");if(!selected){alert("请先点击正文中要删除的文件卡片。");return}selected.remove();document.getElementById("content-notice").textContent="资源已从正文移除，保存文章后生效。"});
     document.getElementById("inline-image-input").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;const notice=document.getElementById("content-notice");notice.textContent="正在上传插图…";try{const item=await uploadInline(file);document.getElementById("content-editor").focus();document.execCommand("insertImage",false,item.url);notice.textContent="插图已插入正文。"}catch(error){notice.textContent=error.message}event.target.value=""});
 
     document.getElementById("changelog-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("changelog-id").value;const notice=document.getElementById("changelog-notice");const date=document.getElementById("changelog-date").value;try{await api(id?`/api/admin/changelogs/${id}`:"/api/admin/changelogs",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:document.getElementById("changelog-version").value,title:document.getElementById("changelog-title").value,body:document.getElementById("changelog-body").value,publishedAt:date?new Date(date).toISOString():new Date().toISOString(),sortOrder:Number(document.getElementById("changelog-sort").value||0)})});notice.textContent="更新记录已保存，精确时间、顺序和网页版本号已同步。";resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()}catch(error){notice.textContent=error.message}});
@@ -1484,9 +1572,9 @@
     document.getElementById("media-section").addEventListener("change",()=>{renderAlbums();renderMedia()});
     document.getElementById("media-visibility").addEventListener("change",()=>{
       const picker=document.getElementById("media-user-picker");
-      picker.classList.toggle("hidden",document.getElementById("media-visibility").value!=="selected");
+      picker.classList.toggle("hidden",!visibilityUsesAudience(document.getElementById("media-visibility").value));
     });
-    document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId})});await loadAlbumsAndMedia()});
+    document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新相册名称");if(!name)return;const description=prompt("相册说明")||"";const parent=app.sections.find(item=>item.id===sectionId);const choice=await openVisibilityEditor(`设置相册“${name}”的权限`,parent?.visibility||"public",parent?.allowed_user_ids||[]);if(!choice)return;await api("/api/admin/albums",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId,...choice})});await loadAlbumsAndMedia()});
     document.getElementById("media-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       // currentTarget 只在事件派发期间可靠；异步压缩/上传后它可能已变为 null。
@@ -1498,10 +1586,7 @@
       if (!file) return;
       const visibility = document.getElementById("media-visibility").value;
       const allowedUserIds = selectedAudienceIds("media-user-picker");
-      if (visibility === "selected" && !allowedUserIds.length) {
-        notice.textContent = "选择“仅指定用户”时，请至少勾选一个已审核账号。";
-        return;
-      }
+      if (!validateVisibilityChoice({visibility,allowedUserIds},notice)) return;
       submit.disabled = true;
       try {
         const form = new FormData();
@@ -1525,22 +1610,32 @@
       }
     });
     document.getElementById("asset-current-folder").addEventListener("change",event=>{app.currentAssetFolder=event.target.value;renderAssetBrowser()});
+    document.getElementById("asset-upload-visibility").addEventListener("change",()=>syncAudiencePicker("asset-upload-visibility","asset-upload-user-picker",selectedAudienceIds("asset-upload-user-picker")));
     document.getElementById("asset-refresh").addEventListener("click",loadAssets);
-    document.getElementById("asset-new-folder").addEventListener("click",async()=>{const name=prompt("新文件夹名称");if(!name||!name.trim())return;const description=prompt("文件夹说明（选填）")||"";await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:app.currentAssetFolder||null,visibility:document.getElementById("asset-upload-visibility").value})});await loadAssets()});
-    document.getElementById("asset-upload-file").addEventListener("click",()=>{app.assetUploadContext=null;document.getElementById("asset-file-input").click()});
-    document.getElementById("media-upload-video").addEventListener("click",()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先选择图片类大板块");return}app.assetUploadContext={sectionId,albumId:document.getElementById("media-album").value};const input=document.getElementById("asset-file-input");input.accept="video/mp4,video/webm,video/quicktime";input.click()});
-    document.getElementById("asset-upload-folder").addEventListener("click",()=>document.getElementById("asset-folder-input").click());
+    document.getElementById("asset-new-folder").addEventListener("click",async()=>{const name=prompt("新文件夹名称");if(!name||!name.trim())return;const description=prompt("文件夹说明（选填）")||"";const choice=visibilityPayload("asset-upload-visibility","asset-upload-user-picker");if(!validateVisibilityChoice(choice))return;await api("/api/admin/asset-folders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,parentId:app.currentAssetFolder||null,...choice})});await loadAssets()});
+    document.getElementById("asset-upload-file").addEventListener("click",()=>{const choice=visibilityPayload("asset-upload-visibility","asset-upload-user-picker");if(!validateVisibilityChoice(choice))return;app.assetUploadContext={scope:"library",...choice};document.getElementById("asset-file-input").click()});
+    document.getElementById("media-upload-video").addEventListener("click",()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先选择图片类大板块");return}const choice=visibilityPayload("media-visibility","media-user-picker");if(!validateVisibilityChoice(choice))return;app.assetUploadContext={scope:"gallery",sectionId,albumId:document.getElementById("media-album").value,...choice};const input=document.getElementById("asset-file-input");input.accept="video/mp4,video/webm,video/quicktime";input.click()});
+    document.getElementById("article-upload-file").addEventListener("click",()=>{const contentId=document.getElementById("content-id").value;if(!contentId){alert("请先保存文章草稿");return}const choice=visibilityPayload("content-visibility","content-user-picker");if(!validateVisibilityChoice(choice))return;const input=document.getElementById("article-file-input");app.assetUploadContext={scope:"article",contentId,...choice};input.click()});
+    document.getElementById("article-file-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";await runAssetUpload(files,context)});
+    document.getElementById("asset-upload-folder").addEventListener("click",()=>{const choice=visibilityPayload("asset-upload-visibility","asset-upload-user-picker");if(!validateVisibilityChoice(choice))return;app.assetUploadContext={scope:"library",folderMode:true,...choice};document.getElementById("asset-folder-input").click()});
     document.getElementById("asset-file-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";event.target.accept="";await runAssetUpload(files,context)});
-    document.getElementById("asset-folder-input").addEventListener("change",async event=>{const files=[...event.target.files];event.target.value="";await runAssetUpload(files,{folderMode:true})});
+    document.getElementById("asset-folder-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{scope:"library",folderMode:true};app.assetUploadContext=null;event.target.value="";await runAssetUpload(files,context)});
     document.getElementById("asset-variant-input").addEventListener("change",async event=>{const file=event.target.files[0];event.target.value="";const target=app.variantTarget;app.variantTarget=null;if(!file||!target)return;try{await uploadAssetFile(file,{assetId:target.item.id,variantLabel:target.label});await loadAssets()}catch(error){document.getElementById("asset-notice").textContent=`版本上传失败：${error.message}`}});
+    document.getElementById("asset-poster-input").addEventListener("change",async event=>{const file=event.target.files[0];const target=app.posterTarget;event.target.value="";app.posterTarget=null;if(!file||!target)return;const form=new FormData();form.append("poster",file,file.name);try{await api(`/api/admin/assets/${target.id}/poster`,{method:"POST",body:form});await loadAssets()}catch(error){alert(`视频封面保存失败：${error.message}`)}});
+    document.getElementById("visibility-editor-mode").addEventListener("change",()=>syncAudiencePicker("visibility-editor-mode","visibility-editor-users",selectedAudienceIds("visibility-editor-users")));
+    document.getElementById("visibility-editor-form").addEventListener("submit",event=>{event.preventDefault();const dialog=document.getElementById("visibility-editor-dialog");const editor=app.visibilityEditor;if(!editor)return;if(event.submitter?.value==="cancel"){app.visibilityEditor=null;dialog.close("cancel");editor.resolve(null);return}const choice=visibilityPayload("visibility-editor-mode","visibility-editor-users");if(!validateVisibilityChoice(choice))return;app.visibilityEditor=null;dialog.close("save");editor.resolve(choice)});
+    document.getElementById("visibility-editor-dialog").addEventListener("cancel",event=>{event.preventDefault();const editor=app.visibilityEditor;app.visibilityEditor=null;event.currentTarget.close("cancel");editor?.resolve(null)});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
+    document.getElementById("author-comment-form").addEventListener("submit",async event=>{event.preventDefault();const contentId=document.getElementById("content-id").value;const input=document.getElementById("author-comment-body");if(!contentId||!input.value.trim())return;await api("/api/admin/comments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contentId,body:input.value})});input.value="";await loadComments();await loadDashboard()});
     document.getElementById("refresh-feedback").addEventListener("click",loadFeedback);
+    document.getElementById("feedback-open-tab").addEventListener("click",()=>{app.feedbackArchive=false;renderAdminFeedback()});
+    document.getElementById("feedback-archive-tab").addEventListener("click",()=>{app.feedbackArchive=true;renderAdminFeedback()});
     document.getElementById("refresh-visitors").addEventListener("click",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
     document.getElementById("visitor-days").addEventListener("change",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
     document.getElementById("visitor-day").addEventListener("change",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
     document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});
     document.getElementById("studio-message-form").addEventListener("submit",async event=>{event.preventDefault();const input=document.getElementById("studio-message-input");if(!app.messagePeer||!input.value.trim())return;await api("/api/admin/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipientUserId:app.messagePeer.id,body:input.value})});input.value="";await openStudioMessage(app.messagePeer.id);await loadStudioMessages()});
-    document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,usage_guide:document.getElementById("setting-usage-guide").value,contact_email:document.getElementById("setting-email").value,owner_user_id:document.getElementById("setting-owner-user").value})});notice.textContent="网站设置已保存，主页使用说明与站长账号已同步。"}catch(error){notice.textContent=error.message}});
+    document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,usage_guide:document.getElementById("setting-usage-guide").value,contact_email:document.getElementById("setting-email").value,guest_daily_limit:document.getElementById("setting-guest-limit").value,about_heading:document.getElementById("setting-about-heading").value,about_intro:document.getElementById("setting-about-intro").value,about_school_label:document.getElementById("setting-about-school-label").value,about_learning_title:document.getElementById("setting-about-learning-title").value,about_learning_items:document.getElementById("setting-about-learning-items").value,about_contact_title:document.getElementById("setting-about-contact-title").value,contact_email_label:document.getElementById("setting-email-label").value,contact_email_intl:document.getElementById("setting-email-intl").value,contact_email_intl_label:document.getElementById("setting-email-intl-label").value,owner_user_id:document.getElementById("setting-owner-user").value})});notice.textContent="网站设置已保存。"}catch(error){notice.textContent=error.message}});
 
     // 用户在线状态每60秒更新一次；未登录后台时不会发起刷新请求。
     window.setInterval(()=>{if(!document.getElementById("studio").classList.contains("hidden"))loadUsers().catch(()=>null)},60_000);

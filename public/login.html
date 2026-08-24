@@ -18,6 +18,7 @@
   <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
+  <script src="/i18n.js" defer></script>
   <!-- 注册与找回密码卡片使用和主页入口相同的动态背景折射层。 -->
   <script src="/liquid-glass.js"></script>
   <style>
@@ -395,6 +396,7 @@
       <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
       <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
       <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
+      <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
     </div>
   </div>
   <main class="auth-page">
@@ -421,10 +423,10 @@
             </div>
 
             <div class="register-step" data-register-step="2" hidden>
-              <div class="field"><label for="register-display-name">真实姓名或常用称呼</label><input id="register-display-name" required maxlength="60" placeholder="便于站长确认你的身份"></div>
+              <div class="field"><label for="register-display-name">真实姓名或常用昵称（写社交平台昵称亦可）</label><input id="register-display-name" required maxlength="60" placeholder="便于站长确认你的身份"></div>
               <div class="two-fields">
-                <div class="field"><label for="register-contact-type">联系方式类型</label><select id="register-contact-type"><option value="qq">QQ</option><option value="wechat">微信</option><option value="email">邮箱</option><option value="phone">手机号</option><option value="other">其他</option></select></div>
-                <div class="field"><label for="register-contact">联系方式</label><input id="register-contact" required maxlength="160" placeholder="填写可联系到你的账号"></div>
+                <div class="field"><label for="register-contact-type">联系方式类型（选填）</label><select id="register-contact-type"><option value="other">不填写</option><option value="qq">QQ</option><option value="wechat">微信</option><option value="email">邮箱</option><option value="phone">手机号</option></select></div>
+                <div class="field"><label for="register-contact">联系方式（选填）</label><input id="register-contact" maxlength="160" placeholder="可以留空"></div>
               </div>
               <div class="field"><label for="register-note">备注（选填）</label><textarea id="register-note" maxlength="800" placeholder="主要面向与站长不认识的申请人，可简单说明身份、认识途径或注册原因"></textarea></div>
               <div class="field"><label for="register-invite">邀请码（选填）</label><input id="register-invite" maxlength="80" placeholder="没有邀请码可以留空"></div>
@@ -702,7 +704,7 @@
     function validateRegisterStep() {
       const ids = registerStep === 1
         ? ["register-username", "register-nickname", "register-password", "register-password-confirm"]
-        : ["register-display-name", "register-contact"];
+        : ["register-display-name"];
       for (const id of ids) {
         const input = document.getElementById(id);
         if (!input.reportValidity()) return false;
@@ -725,7 +727,9 @@
         ["登录用户名", document.getElementById("register-username").value],
         ["昵称", document.getElementById("register-nickname").value],
         ["姓名或称呼", document.getElementById("register-display-name").value],
-        ["联系方式", `${labels[document.getElementById("register-contact-type").value]} · ${document.getElementById("register-contact").value}`],
+        ["联系方式", document.getElementById("register-contact").value
+          ? `${labels[document.getElementById("register-contact-type").value]} · ${document.getElementById("register-contact").value}`
+          : "未填写"],
         ["备注", document.getElementById("register-note").value || "未填写"],
         ["邀请码", document.getElementById("register-invite").value || "未填写"],
       ];

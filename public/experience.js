@@ -109,63 +109,10 @@
     window.setInterval(refresh, 60_000);
   }
 
-  const languageLabels = {
-    "zh-CN": {
-      "button[data-section='home'] .nav-label": "主页",
-      "button[data-section='portfolio'] .nav-label": "个人空间",
-      "button[data-section='about'] .nav-label": "关于我",
-      "button[data-section='feedback'] .nav-label": "留言与反馈",
-      "button[data-section='ai-helper'] .nav-label": "AI 助手",
-      "button[data-section='settings'] .nav-label": "设置",
-      "#portfolio > .section-inner > h1": "个人空间",
-      "#about h1": "关于我",
-      "#feedback h1": "留言与反馈",
-      "#ai-helper h1": "AI 助手",
-      "#settings h1": "设置",
-    },
-    "zh-TW": {
-      "button[data-section='home'] .nav-label": "主頁",
-      "button[data-section='portfolio'] .nav-label": "個人空間",
-      "button[data-section='about'] .nav-label": "關於我",
-      "button[data-section='feedback'] .nav-label": "留言與回饋",
-      "button[data-section='ai-helper'] .nav-label": "AI 助手",
-      "button[data-section='settings'] .nav-label": "設定",
-      "#portfolio > .section-inner > h1": "個人空間",
-      "#about h1": "關於我",
-      "#feedback h1": "留言與回饋",
-      "#ai-helper h1": "AI 助手",
-      "#settings h1": "設定",
-    },
-    en: {
-      "button[data-section='home'] .nav-label": "Home",
-      "button[data-section='portfolio'] .nav-label": "Space",
-      "button[data-section='about'] .nav-label": "About",
-      "button[data-section='feedback'] .nav-label": "Feedback",
-      "button[data-section='ai-helper'] .nav-label": "AI Assistant",
-      "button[data-section='settings'] .nav-label": "Settings",
-      "#portfolio > .section-inner > h1": "Personal Space",
-      "#about h1": "About Me",
-      "#feedback h1": "Feedback",
-      "#ai-helper h1": "AI Assistant",
-      "#settings h1": "Settings",
-    },
-  };
-
-  function applyLanguage(language) {
-    const normalized = languageLabels[language] ? language : "zh-CN";
-    document.documentElement.lang = normalized;
-    Object.entries(languageLabels[normalized]).forEach(([selector, value]) => {
-      document.querySelectorAll(selector).forEach((node) => { node.textContent = value; });
-    });
-    localStorage.setItem("xyj_language", normalized);
-  }
-
   function installLanguageSetting() {
     const select = document.getElementById("site-language");
     if (!select) return;
     select.value = localStorage.getItem("xyj_language") || "zh-CN";
-    applyLanguage(select.value);
-    select.addEventListener("change", () => applyLanguage(select.value));
   }
 
   function installMobileScrollHeader() {
@@ -202,8 +149,40 @@
     window.addEventListener("resize", () => { headerHeight = Math.max(64, sidebar.offsetHeight); if (!mobile.matches) reset(); }, { passive: true });
   }
 
+  /* 触屏从卡片上起手滚动时，位移优先解释为滚动，不再误触卡片的 click。 */
+  function installTouchScrollIntentGuard() {
+    const selector = ".content-card, .photo-card, .resource-card, .usage-guide, .updates, .list-item, .asset-row.folder, .album-chip, [role='button']";
+    let gesture = null;
+    let suppress = null;
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType !== "touch") return;
+      const target = event.target instanceof Element ? event.target.closest(selector) : null;
+      if (!target) return;
+      gesture = { pointerId: event.pointerId, target, x: event.clientX, y: event.clientY, moved: false };
+    }, true);
+    document.addEventListener("pointermove", (event) => {
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 9) gesture.moved = true;
+    }, { capture: true, passive: true });
+    document.addEventListener("pointerup", (event) => {
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      if (gesture.moved) suppress = { target: gesture.target, until: performance.now() + 500 };
+      gesture = null;
+    }, true);
+    document.addEventListener("pointercancel", () => { gesture = null; }, true);
+    document.addEventListener("click", (event) => {
+      if (!suppress || performance.now() > suppress.until) { suppress = null; return; }
+      if (event.target instanceof Node && suppress.target.contains(event.target)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        suppress = null;
+      }
+    }, true);
+  }
+
   installUsageGuideDialog();
   installAccountSettings();
   installLanguageSetting();
   installMobileScrollHeader();
+  installTouchScrollIntentGuard();
 })();

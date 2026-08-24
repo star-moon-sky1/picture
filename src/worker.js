@@ -10,6 +10,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_COOKIE = "xyj_user";
 const USER_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_REMEMBER_TTL_SECONDS = 60 * 60 * 24 * 30;
+const RESOURCE_SECTION_ID = "section-resources";
 const GUEST_SESSION_COOKIE = "xyj_guest";
 const GUEST_SESSION_TTL_SECONDS = 60 * 60 * 24;
 const GUEST_ANALYTICS_RETENTION_DAYS = 90;
@@ -136,23 +137,37 @@ function clampText(value, maxLength) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
 
+function clampMultilineText(value, maxLength) {
+  return String(value ?? "").replace(/\u0000/g, "").replace(/\r\n?/g, "\n").slice(0, maxLength);
+}
+
 function validId(value) {
   return /^[a-zA-Z0-9_-]{1,80}$/.test(String(value ?? ""));
 }
 
 /*
- * 内容和照片统一使用四级可见范围：
+ * 全站内容统一使用五级可见范围：
  * public  = 游客与用户均可访问；member = 所有审核通过的用户；
- * selected = 仅白名单用户；private = 仅 Studio。
+ * selected = 仅白名单用户；excluded = 除黑名单外均可访问；
+ * private = 仅站长本人及 Studio。
  * 所有未知值都回退到 public，避免旧版本或手工请求写入无法判断的状态。
  */
 function normalizedVisibility(value) {
-  return value === "member" || value === "selected" || value === "private" ? value : "public";
+  return ["member", "selected", "excluded", "private"].includes(value) ? value : "public";
 }
 
-/* 文件资源目前仍保持公开/全体会员/私密三级权限，避免写入表结构不支持的值。 */
+/*
+ * 旧 assets / asset_folders 表的 visibility 字段带三级 CHECK 约束，不能直接
+ * 写入 selected / excluded。新版本把完整五级权限保存在 access_mode，旧字段
+ * 只作为兼容镜像；这样生产 D1 无需破坏性重建表。
+ */
 function normalizedAssetVisibility(value) {
-  return value === "member" || value === "private" ? value : "public";
+  return normalizedVisibility(value);
+}
+
+function legacyAssetVisibility(value) {
+  const mode = normalizedVisibility(value);
+  return mode === "member" ? "member" : (mode === "private" ? "private" : "public");
 }
 
 function normalizedDownloadPolicy(value) {
@@ -194,10 +209,13 @@ function safeRelativePath(value) {
     .slice(0, 900);
 }
 
-function visibleToWebsite(visibility, fullAccess, selectedAccess = false) {
-  return visibility === "public"
-    || (visibility === "member" && fullAccess)
-    || (visibility === "selected" && fullAccess && selectedAccess);
+function visibleToWebsite(visibility, fullAccess, selectedAccess = false, ownerAccess = false) {
+  const mode = normalizedVisibility(visibility);
+  return mode === "public"
+    || (mode === "member" && fullAccess)
+    || (mode === "selected" && fullAccess && selectedAccess)
+    || (mode === "excluded" && !selectedAccess)
+    || (mode === "private" && ownerAccess);
 }
 
 function slugify(value) {
@@ -298,9 +316,10 @@ async function readJson(request) {
 }
 
 class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = "") {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -525,6 +544,56 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS section_access_users (
+      section_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(section_id, user_id),
+      FOREIGN KEY(section_id) REFERENCES portfolio_sections(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS subsection_access_users (
+      subsection_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(subsection_id, user_id),
+      FOREIGN KEY(subsection_id) REFERENCES portfolio_subsections(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS album_access_users (
+      album_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(album_id, user_id),
+      FOREIGN KEY(album_id) REFERENCES albums(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_folder_access_users (
+      folder_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(folder_id, user_id),
+      FOREIGN KEY(folder_id) REFERENCES asset_folders(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_access_users (
+      asset_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(asset_id, user_id),
+      FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS user_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -702,6 +771,16 @@ async function initializeSchema(env) {
       FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS translations (
+      source_hash TEXT NOT NULL,
+      language TEXT NOT NULL,
+      source_text TEXT NOT NULL,
+      translated_text TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(source_hash, language)
+    )
+    `,
     "CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at)",
     "CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
@@ -709,6 +788,11 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_users_status ON users(status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_content_access_user ON content_access_users(user_id, content_id)",
     "CREATE INDEX IF NOT EXISTS idx_media_access_user ON media_access_users(user_id, media_id)",
+    "CREATE INDEX IF NOT EXISTS idx_section_access_user ON section_access_users(user_id, section_id)",
+    "CREATE INDEX IF NOT EXISTS idx_subsection_access_user ON subsection_access_users(user_id, subsection_id)",
+    "CREATE INDEX IF NOT EXISTS idx_album_access_user ON album_access_users(user_id, album_id)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_folder_access_user ON asset_folder_access_users(user_id, folder_id)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_access_user ON asset_access_users(user_id, asset_id)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_seen ON user_sessions(last_seen_at, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, created_at)",
@@ -735,13 +819,22 @@ async function initializeSchema(env) {
   await ensureColumn(env, "media", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "media", "preview_object_key", "TEXT");
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "portfolio_subsections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "albums", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "subsection_id", "TEXT");
   await ensureColumn(env, "comments", "author_user_id", "TEXT");
   await ensureColumn(env, "comments", "is_admin", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env, "comments", "is_pinned", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(env, "comments", "author_liked", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(env, "changelogs", "sort_order", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(env, "assets", "section_id", "TEXT");
   await ensureColumn(env, "assets", "album_id", "TEXT");
+  await ensureColumn(env, "assets", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "assets", "scope", "TEXT NOT NULL DEFAULT 'library'");
+  await ensureColumn(env, "assets", "content_id", "TEXT");
+  await ensureColumn(env, "assets", "poster_object_key", "TEXT");
+  await ensureColumn(env, "asset_folders", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
   await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "feedback", "admin_replied_at", "TEXT");
@@ -755,6 +848,8 @@ async function initializeSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_content_subsection ON content(subsection_id, published_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author_user_id, created_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_assets_gallery ON assets(section_id, album_id, status, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_assets_scope ON assets(scope, content_id, status, created_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_comments_pinned ON comments(content_id, is_pinned, created_at)"),
   ]);
 
   /*
@@ -790,6 +885,41 @@ async function initializeSchema(env) {
       .bind("contact_email", "1598116329@qq.com", timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("owner_user_id", "", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("guest_daily_limit", "20", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_heading", "关于我", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_intro", "", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_school_label", "就读院校与专业", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_learning_title", "目前学习方向", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_learning_items", "Python\nC\nHTML / CSS / JavaScript\nOpenHarmony开发", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("about_contact_title", "联系方式", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("contact_email_label", "国内邮箱", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("contact_email_intl", "xingyueji8@gmail.com", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
+      .bind("contact_email_intl_label", "国际邮箱", timestamp),
+  ]);
+
+  /* 兼容旧资源：已关联图片板块的视频归入 gallery，其余保持独立文件库。 */
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE assets SET access_mode = visibility
+      WHERE access_mode IS NULL OR access_mode = ''
+        OR (access_mode = 'public' AND visibility IN ('member', 'private'))
+    `),
+    env.DB.prepare(`
+      UPDATE asset_folders SET access_mode = visibility
+      WHERE access_mode IS NULL OR access_mode = ''
+        OR (access_mode = 'public' AND visibility IN ('member', 'private'))
+    `),
+    env.DB.prepare("UPDATE assets SET scope = 'gallery' WHERE section_id IS NOT NULL AND (scope IS NULL OR scope = 'library')"),
   ]);
 
   /*
@@ -829,6 +959,13 @@ async function initializeSchema(env) {
         .bind(timestamp),
     ]);
   }
+
+  /* 文件资源是个人空间中的固定大板块，权限与“全部”开关也由同一后台表单管理。 */
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO portfolio_sections
+      (id, name, kind, description, sort_order, show_all, visibility, created_at, updated_at)
+    VALUES (?, '文件资源', 'content', '独立上传的文件、文档与视频', 30, 1, 'public', ?, ?)
+  `).bind(RESOURCE_SECTION_ID, timestamp, timestamp).run();
 
   const albumMarker = await env.DB.prepare("SELECT value FROM settings WHERE key = 'albums_initialized'").first();
   if (!albumMarker) {
@@ -977,6 +1114,11 @@ function rows(result) {
 const ACCESS_TABLES = Object.freeze({
   content: { table: "content_access_users", targetColumn: "content_id" },
   media: { table: "media_access_users", targetColumn: "media_id" },
+  section: { table: "section_access_users", targetColumn: "section_id" },
+  subsection: { table: "subsection_access_users", targetColumn: "subsection_id" },
+  album: { table: "album_access_users", targetColumn: "album_id" },
+  assetFolder: { table: "asset_folder_access_users", targetColumn: "folder_id" },
+  asset: { table: "asset_access_users", targetColumn: "asset_id" },
 });
 
 function normalizedAllowedUserIds(value) {
@@ -989,9 +1131,13 @@ function normalizedAllowedUserIds(value) {
 }
 
 async function validatedAllowedUserIds(env, visibility, value) {
-  if (visibility !== "selected") return [];
+  if (!["selected", "excluded"].includes(visibility)) return [];
   const ids = normalizedAllowedUserIds(value);
-  if (!ids.length) throw new HttpError(400, "选择‘仅指定用户’时，请至少勾选一个已审核账号");
+  if (!ids.length) {
+    throw new HttpError(400, visibility === "selected"
+      ? "选择‘仅指定用户’时，请至少勾选一个已审核账号"
+      : "选择‘不给指定用户看’时，请至少勾选一个已审核账号");
+  }
   const placeholders = ids.map(() => "?").join(",");
   const result = await env.DB.prepare(
     `SELECT id FROM users WHERE status = 'approved' AND id IN (${placeholders})`,
@@ -1036,6 +1182,60 @@ async function userHasSelectedAccess(env, kind, targetId, userId) {
     WHERE ${config.targetColumn} = ? AND user_id = ?
   `).bind(targetId, userId).first();
   return Boolean(match);
+}
+
+async function ownerUserId(env) {
+  const item = await env.DB.prepare("SELECT value FROM settings WHERE key = 'owner_user_id'").first();
+  return validId(item?.value) ? item.value : "";
+}
+
+async function websiteAccessContext(request, env) {
+  const user = await getUserSession(request, env);
+  const admin = await isAdmin(request, env);
+  const ownerId = await ownerUserId(env);
+  return {
+    user,
+    fullAccess: user?.status === "approved",
+    adminAccess: admin,
+    ownerAccess: admin || Boolean(user?.id && ownerId && user.id === ownerId),
+  };
+}
+
+async function canAccessTarget(env, kind, targetId, visibility, context) {
+  const mode = normalizedVisibility(visibility);
+  if (context.adminAccess) return true;
+  const listed = context.user?.id
+    ? await userHasSelectedAccess(env, kind, targetId, context.user.id)
+    : false;
+  return visibleToWebsite(mode, context.fullAccess, listed, context.ownerAccess);
+}
+
+async function validateChildAccessSubset(env, parentKind, parentId, childVisibility, childUserIds) {
+  if (childVisibility !== "selected") return;
+  const config = ACCESS_TABLES[parentKind];
+  if (!config || !validId(parentId)) return;
+  const tableByKind = {
+    content: "content",
+    section: "portfolio_sections",
+    subsection: "portfolio_subsections",
+    album: "albums",
+    assetFolder: "asset_folders",
+  };
+  const visibilityExpression = parentKind === "assetFolder" ? "COALESCE(access_mode, visibility)" : "visibility";
+  const parent = await env.DB.prepare(`SELECT ${visibilityExpression} AS visibility FROM ${tableByKind[parentKind]} WHERE id = ?`)
+    .bind(parentId).first();
+  if (!parent) throw new HttpError(400, "所属上级板块不存在");
+  const parentMode = normalizedVisibility(parent.visibility);
+  if (parentMode === "private") throw new HttpError(400, "仅本人可见的上级板块不能包含指定用户可见的子板块");
+  if (!["selected", "excluded"].includes(parentMode)) return;
+  const result = await env.DB.prepare(
+    `SELECT user_id FROM ${config.table} WHERE ${config.targetColumn} = ?`,
+  ).bind(parentId).all();
+  const parentUsers = new Set(rows(result).map((item) => item.user_id));
+  const invalid = parentMode === "selected"
+    ? childUserIds.some((userId) => !parentUsers.has(userId))
+    : childUserIds.some((userId) => parentUsers.has(userId));
+  if (invalid) throw new HttpError(400, "子板块的指定用户必须属于上级板块实际可见用户的子集");
 }
 
 function mediaDto(row, { includeOriginal = true } = {}) {
@@ -1083,14 +1283,18 @@ function assetDto(row, variants = [], { includeDownload = false } = {}) {
     mime_type: row.mime_type,
     size_bytes: Number(row.size_bytes || 0),
     kind: row.kind,
-    visibility: normalizedAssetVisibility(row.visibility),
+    visibility: normalizedAssetVisibility(row.access_mode || row.visibility),
+    scope: ["library", "article", "gallery"].includes(row.scope) ? row.scope : "library",
+    content_id: row.content_id || null,
     download_policy: normalizedDownloadPolicy(row.download_policy),
     relative_path: row.relative_path || "",
     status: row.status,
     stream_uid: row.stream_uid || "",
     stream_hls_url: row.stream_hls_url || "",
     stream_dash_url: row.stream_dash_url || "",
-    poster_url: row.poster_url || "",
+    poster_url: row.poster_object_key
+      ? `/files/${row.id}?poster=1&v=${encodeURIComponent(String(row.updated_at || "1"))}`
+      : (row.poster_url || ""),
     created_at: row.created_at,
     updated_at: row.updated_at,
     url: `/files/${row.id}`,
@@ -1106,7 +1310,7 @@ function assetDto(row, variants = [], { includeDownload = false } = {}) {
  * member/private，游客也看不到它。这里一次构建 Map 并带循环保护，避免每条
  * 文件记录额外查询 D1，也避免错误的 parent_id 导致死循环。
  */
-function visibleAssetFolderIds(folderRows, fullAccess, adminAccess = false) {
+function visibleAssetFolderIds(folderRows, context, listedFolderIds = new Set()) {
   const folderMap = new Map(folderRows.map((item) => [item.id, item]));
   const memo = new Map();
   const canSee = (id, trail = new Set()) => {
@@ -1114,7 +1318,13 @@ function visibleAssetFolderIds(folderRows, fullAccess, adminAccess = false) {
     if (memo.has(id)) return memo.get(id);
     const folder = folderMap.get(id);
     if (!folder || trail.has(id)) return false;
-    if (!adminAccess && !visibleToWebsite(normalizedAssetVisibility(folder.visibility), fullAccess)) {
+    const visibility = normalizedAssetVisibility(folder.access_mode || folder.visibility);
+    if (!context.adminAccess && !visibleToWebsite(
+      visibility,
+      context.fullAccess,
+      listedFolderIds.has(folder.id),
+      context.ownerAccess,
+    )) {
       memo.set(id, false);
       return false;
     }
@@ -1138,9 +1348,10 @@ async function settingsObject(env) {
 async function publicBootstrap(request, env) {
   const sessionUser = await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
+  const adminAccess = await isAdmin(request, env);
   const [
     changelogs, sections, subsections, content, albums, media, assetFolders, assets, assetVariants, settings,
-    contentAccess, mediaAccess,
+    contentAccess, mediaAccess, sectionAccess, subsectionAccess, albumAccess, folderAccess, assetAccess,
   ] = await Promise.all([
     env.DB.prepare(
       "SELECT id, version, title, body, published_at, sort_order FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC",
@@ -1150,7 +1361,7 @@ async function publicBootstrap(request, env) {
       FROM portfolio_sections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, section_id, name, description, sort_order
+      SELECT id, section_id, name, description, sort_order, visibility
       FROM portfolio_subsections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
@@ -1161,7 +1372,7 @@ async function publicBootstrap(request, env) {
       ORDER BY published_at DESC, created_at DESC
     `).all(),
     env.DB.prepare(`
-      SELECT id, section_id, name, description, sort_order
+      SELECT id, section_id, name, description, sort_order, visibility
       FROM albums ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
@@ -1172,12 +1383,13 @@ async function publicBootstrap(request, env) {
       ORDER BY created_at DESC
     `).all(),
     env.DB.prepare(`
-      SELECT id, parent_id, name, description, visibility, sort_order, archive_asset_id,
+      SELECT id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id,
              created_at, updated_at
       FROM asset_folders ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, folder_id, section_id, album_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+      SELECT id, folder_id, section_id, album_id, content_id, filename, display_name, mime_type, size_bytes, kind,
+             visibility, access_mode, scope, poster_object_key,
              download_policy, relative_path, status, stream_uid, stream_hls_url,
              stream_dash_url, poster_url, created_at, updated_at
       FROM assets WHERE status = 'ready' ORDER BY created_at DESC
@@ -1191,26 +1403,70 @@ async function publicBootstrap(request, env) {
       .bind(sessionUser?.id || "").all(),
     env.DB.prepare("SELECT media_id FROM media_access_users WHERE user_id = ?")
       .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT section_id FROM section_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT subsection_id FROM subsection_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT album_id FROM album_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT folder_id FROM asset_folder_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT asset_id FROM asset_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
   ]);
 
-  const visibleSections = rows(sections).filter((item) => visibleToWebsite(item.visibility, fullAccess));
-  const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
+  const ownerAccess = adminAccess || Boolean(
+    sessionUser?.id && validId(settings.owner_user_id) && sessionUser.id === settings.owner_user_id,
+  );
+  const context = { fullAccess, adminAccess, ownerAccess };
   const allowedContentIds = new Set(rows(contentAccess).map((item) => item.content_id));
   const allowedMediaIds = new Set(rows(mediaAccess).map((item) => item.media_id));
+  const allowedSectionIds = new Set(rows(sectionAccess).map((item) => item.section_id));
+  const allowedSubsectionIds = new Set(rows(subsectionAccess).map((item) => item.subsection_id));
+  const allowedAlbumIds = new Set(rows(albumAccess).map((item) => item.album_id));
+  const allowedFolderIds = new Set(rows(folderAccess).map((item) => item.folder_id));
+  const allowedAssetIds = new Set(rows(assetAccess).map((item) => item.asset_id));
+  const sectionRows = rows(sections).map((item) => (
+    item.id === RESOURCE_SECTION_ID ? { ...item, kind: "resources" } : item
+  ));
+  const visibleSections = sectionRows.filter((item) => (
+    adminAccess || visibleToWebsite(item.visibility, fullAccess, allowedSectionIds.has(item.id), ownerAccess)
+  ));
+  const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
+  const resourceSectionVisible = visibleSectionIds.has(RESOURCE_SECTION_ID);
+  const visibleSubsections = rows(subsections).filter((item) => (
+    visibleSectionIds.has(item.section_id)
+    && (adminAccess || visibleToWebsite(
+      item.visibility, fullAccess, allowedSubsectionIds.has(item.id), ownerAccess,
+    ))
+  ));
+  const visibleSubsectionIds = new Set(visibleSubsections.map((item) => item.id));
   const visibleContent = rows(content).filter((item) => (
     visibleSectionIds.has(item.section_id)
-    && visibleToWebsite(item.visibility, fullAccess, allowedContentIds.has(item.id))
+    && (!item.subsection_id || visibleSubsectionIds.has(item.subsection_id))
+    && (adminAccess || visibleToWebsite(
+      item.visibility, fullAccess, allowedContentIds.has(item.id), ownerAccess,
+    ))
   ));
-  const visibleAlbums = rows(albums).filter((item) => visibleSectionIds.has(item.section_id));
-  const visibleSubsections = rows(subsections).filter((item) => visibleSectionIds.has(item.section_id));
-  // 照片自身和所属大板块都必须对当前身份可见；private 永远不进入普通网站数据。
+  const visibleContentIds = new Set(visibleContent.map((item) => item.id));
+  const visibleAlbums = rows(albums).filter((item) => (
+    visibleSectionIds.has(item.section_id)
+    && (adminAccess || visibleToWebsite(item.visibility, fullAccess, allowedAlbumIds.has(item.id), ownerAccess))
+  ));
+  const visibleAlbumIds = new Set(visibleAlbums.map((item) => item.id));
+  // 照片自身、相册和所属大板块必须同时对当前身份可见。
   const visibleMedia = rows(media).filter((item) => (
     visibleSectionIds.has(item.section_id)
-    && visibleToWebsite(item.visibility, fullAccess, allowedMediaIds.has(item.id))
+    && (!item.album_id || visibleAlbumIds.has(item.album_id))
+    && (adminAccess || visibleToWebsite(
+      item.visibility, fullAccess, allowedMediaIds.has(item.id), ownerAccess,
+    ))
   ));
   const folderRows = rows(assetFolders);
-  const visibleFolderIds = visibleAssetFolderIds(folderRows, fullAccess);
-  const visibleFolders = folderRows.filter((item) => visibleFolderIds.has(item.id));
+  const visibleFolderIds = visibleAssetFolderIds(folderRows, context, allowedFolderIds);
+  const visibleFolders = resourceSectionVisible
+    ? folderRows.filter((item) => visibleFolderIds.has(item.id))
+    : [];
   const variantsByAsset = new Map();
   for (const variant of rows(assetVariants)) {
     if (!variantsByAsset.has(variant.asset_id)) variantsByAsset.set(variant.asset_id, []);
@@ -1219,13 +1475,21 @@ async function publicBootstrap(request, env) {
   const visibleAssets = rows(assets).filter((item) => (
     (!item.folder_id || visibleFolderIds.has(item.folder_id))
     && (!item.section_id || visibleSectionIds.has(item.section_id))
-    && visibleToWebsite(normalizedAssetVisibility(item.visibility), fullAccess)
+    && (!item.album_id || visibleAlbumIds.has(item.album_id))
+    && (!item.content_id || visibleContentIds.has(item.content_id))
+    && (item.scope !== "library" || resourceSectionVisible)
+    && (adminAccess || visibleToWebsite(
+      normalizedAssetVisibility(item.access_mode || item.visibility),
+      fullAccess,
+      allowedAssetIds.has(item.id),
+      ownerAccess,
+    ))
   ));
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
   return {
     settings,
-    access: { authenticated: Boolean(sessionUser), fullAccess },
+    access: { authenticated: Boolean(sessionUser), fullAccess, ownerAccess },
     changelogs: rows(changelogs),
     sections: visibleSections,
     subsections: visibleSubsections,
@@ -1238,15 +1502,26 @@ async function publicBootstrap(request, env) {
     media: visibleMedia.map((item) => mediaDto(item, { includeOriginal: fullAccess })),
     assetFolders: visibleFolders.map((folder) => ({
       ...folder,
+      visibility: normalizedAssetVisibility(folder.access_mode || folder.visibility),
       archive_asset_id: visibleAssetIds.has(folder.archive_asset_id) ? folder.archive_asset_id : null,
     })),
     /*
      * 下载权限在服务端再次核对；这里的 canDownload 只负责让前端正确显示按钮。
      * 公开下载的文件游客可下载，其余文件仅审核通过的登录用户可下载。
      */
-    assets: visibleAssets.map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
+    assets: visibleAssets.filter((item) => item.scope === "library").map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
       includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
     })),
+    galleryAssets: visibleAssets.filter((item) => item.scope === "gallery").map((item) => assetDto(
+      item, variantsByAsset.get(item.id) || [], {
+        includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+      },
+    )),
+    articleAssets: visibleAssets.filter((item) => item.scope === "article").map((item) => assetDto(
+      item, variantsByAsset.get(item.id) || [], {
+        includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+      },
+    )),
   };
 }
 
@@ -1258,7 +1533,9 @@ async function publicEntryBackground(env) {
   const result = await env.DB.prepare(`
     SELECT m.id, m.updated_at, m.created_at
     FROM media m JOIN portfolio_sections s ON s.id = m.section_id
+    LEFT JOIN albums a ON a.id = m.album_id
     WHERE m.kind = 'photo' AND m.visibility = 'public' AND s.visibility = 'public'
+      AND (m.album_id IS NULL OR a.visibility = 'public')
     ORDER BY m.created_at DESC
     LIMIT 40
   `).all();
@@ -1272,26 +1549,27 @@ async function publicEntryBackground(env) {
 
 async function getPublicContent(request, env, id) {
   const item = await env.DB.prepare(`
-    SELECT c.id, c.type, c.section_id, c.title, c.slug, c.excerpt, c.body_html,
+    SELECT c.id, c.type, c.section_id, c.subsection_id, c.title, c.slug, c.excerpt, c.body_html,
            c.cover_media_id, c.published_at, c.created_at, c.updated_at,
            c.like_count, c.dislike_count, c.visibility,
-           s.name AS section_name, s.visibility AS section_visibility
+           s.name AS section_name, s.visibility AS section_visibility,
+           ss.visibility AS subsection_visibility
     FROM content c LEFT JOIN portfolio_sections s ON s.id = c.section_id
+    LEFT JOIN portfolio_subsections ss ON ss.id = c.subsection_id
     WHERE c.id = ? AND c.status = 'published'
   `).bind(id).first();
   if (!item) throw new HttpError(404, "内容不存在或尚未发布");
-  // 私密内容只在 Studio 编辑和预览，不通过普通网站内容接口暴露。
-  if (item.visibility === "private" || item.section_visibility === "private") {
-    throw new HttpError(404, "内容不存在或尚未发布");
-  }
-  if (item.visibility === "selected") {
-    const user = await requireApprovedUser(request, env);
-    if (!(await userHasSelectedAccess(env, "content", item.id, user.id))) {
-      // 不向无权限账号暴露文章是否存在，行为与不存在的文章保持一致。
+  const context = await websiteAccessContext(request, env);
+  const layers = [
+    ["section", item.section_id, item.section_visibility],
+    ...(item.subsection_id ? [["subsection", item.subsection_id, item.subsection_visibility]] : []),
+    ["content", item.id, item.visibility],
+  ];
+  for (const [kind, targetId, visibility] of layers) {
+    if (!(await canAccessTarget(env, kind, targetId, visibility, context))) {
+      // 不向无权限账号暴露文章是否存在，行为与不存在保持一致。
       throw new HttpError(404, "内容不存在或尚未发布");
     }
-  } else if (item.visibility === "member" || item.section_visibility === "member") {
-    await requireApprovedUser(request, env);
   }
   return {
     ...item,
@@ -1304,10 +1582,10 @@ async function listPublicComments(request, env, contentId) {
   await getPublicContent(request, env, contentId);
   const result = await env.DB.prepare(`
     SELECT id, content_id, parent_id, guest_name, body, like_count, dislike_count,
-           author_user_id, is_admin, created_at
+           author_user_id, is_admin, is_pinned, author_liked, created_at
     FROM comments
     WHERE content_id = ? AND status = 'active'
-    ORDER BY created_at ASC
+    ORDER BY is_pinned DESC, created_at ASC
   `).bind(contentId).all();
   return rows(result);
 }
@@ -1340,17 +1618,17 @@ async function clientRateKey(request, scope) {
 }
 
 async function createComment(request, env) {
+  const authorUser = await requireAuthenticatedUser(request, env);
   await consumeRateLimit(env, await clientRateKey(request, "comment"), 20, 60 * 60);
   const body = await readJson(request);
   const contentId = clampText(body.contentId, 80);
   const parentId = clampText(body.parentId, 80) || null;
   const commentBody = clampText(body.body, 1000);
-  const authorUser = await getUserSession(request, env, false);
-  const guestName = authorUser?.nickname || clampText(body.guestName, 30);
+  const guestName = authorUser.nickname;
   let replyNotification = null;
 
   if (!validId(contentId) || !guestName || commentBody.length < 2) {
-    throw new HttpError(400, "请填写游客署名和评论内容");
+    throw new HttpError(400, "请填写评论内容");
   }
   await getPublicContent(request, env, contentId);
 
@@ -1385,7 +1663,7 @@ async function createComment(request, env) {
 
   return {
     id, contentId, parentId, guestName, body: commentBody, like_count: 0, dislike_count: 0,
-    author_user_id: authorUser?.id || null, is_admin: 0, created_at: timestamp,
+    author_user_id: authorUser.id, is_admin: 0, is_pinned: 0, author_liked: 0, created_at: timestamp,
   };
 }
 
@@ -1393,7 +1671,7 @@ async function listPublicFeedback(env) {
   const result = await env.DB.prepare(`
     SELECT id, guest_name, category, body, status, admin_reply, admin_replied_at, created_at
     FROM feedback
-    WHERE is_public = 1
+    WHERE is_public = 1 AND status != 'resolved'
     ORDER BY created_at DESC
     LIMIT 100
   `).all();
@@ -1401,14 +1679,15 @@ async function listPublicFeedback(env) {
 }
 
 async function createFeedback(request, env) {
+  const user = await requireAuthenticatedUser(request, env);
   await consumeRateLimit(env, await clientRateKey(request, "feedback"), 10, 60 * 60);
   const input = await readJson(request);
-  const guestName = clampText(input.guestName, 30);
+  const guestName = user.nickname;
   const contact = clampText(input.contact, 160);
   const category = ["message", "bug", "suggestion"].includes(input.category) ? input.category : "message";
   const body = clampText(input.body, 3000);
   const isPublic = input.isPublic === true ? 1 : 0;
-  if (!guestName || body.length < 2) throw new HttpError(400, "请填写游客署名和留言内容");
+  if (!guestName || body.length < 2) throw new HttpError(400, "请填写留言内容");
 
   const id = crypto.randomUUID();
   const timestamp = nowIso();
@@ -1726,14 +2005,15 @@ async function notifyPasswordResetRequest(env, item) {
 }
 
 async function react(request, env) {
+  const user = await requireAuthenticatedUser(request, env);
   await consumeRateLimit(env, await clientRateKey(request, "reaction"), 120, 60 * 60);
   const body = await readJson(request);
   const targetType = body.targetType === "comment" ? "comment" : body.targetType === "content" ? "content" : "";
   const targetId = clampText(body.targetId, 80);
-  const visitorId = clampText(body.visitorId, 80);
+  const visitorId = `user-${user.id}`;
   const value = Number(body.value);
 
-  if (!targetType || !validId(targetId) || !validId(visitorId) || ![-1, 1].includes(value)) {
+  if (!targetType || !validId(targetId) || ![-1, 1].includes(value)) {
     throw new HttpError(400, "反应参数错误");
   }
 
@@ -2190,6 +2470,20 @@ async function enterGuestWebsite(request, env) {
   if (!validId(visitorId)) throw new HttpError(400, "游客浏览器编号无效，请刷新页面后重试");
   const verification = await verifyGuestTurnstile(request, env, body.turnstileToken);
   const visitorHash = await guestVisitorHash(env, visitorId);
+  const day = analyticsDay(env);
+  const [limitSetting, guestEntryCount] = await Promise.all([
+    env.DB.prepare("SELECT value FROM settings WHERE key = 'guest_daily_limit'").first(),
+    env.DB.prepare("SELECT COALESCE(SUM(entry_count), 0) AS count FROM guest_visits WHERE visit_day = ?")
+      .bind(day).first(),
+  ]);
+  const dailyLimit = Math.max(0, Math.min(100000, Number.parseInt(limitSetting?.value || "20", 10) || 0));
+  if (dailyLimit > 0 && Number(guestEntryCount?.count || 0) >= dailyLimit) {
+    throw new HttpError(
+      429,
+      "本日游客浏览已达流量上限，请注册账号进行浏览",
+      "GUEST_DAILY_LIMIT",
+    );
+  }
   await recordGuestVisit(env, request, visitorHash, { entries: 1, pageViews: 1, section: "home" });
   const session = await makeGuestSession(env, visitorHash);
   return json({ ok: true, protected: verification.protected }, 200, {
@@ -2294,7 +2588,9 @@ async function runtimeSecurityHeartbeat(request, env) {
 
 function userSessionCookie(request, value, maxAge) {
   const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${USER_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+  const hasLifetime = maxAge !== null && maxAge !== undefined && Number.isFinite(Number(maxAge));
+  const lifetime = hasLifetime ? `; Max-Age=${Number(maxAge)}` : "";
+  return `${USER_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
 }
 
 function publicUser(user) {
@@ -2336,7 +2632,8 @@ async function createUserSession(request, env, userId, remember = false) {
       (token_hash, user_id, created_at, last_seen_at, expires_at, revoked_at, ip_hash, ip_hint, user_agent)
     VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)
   `).bind(tokenHash, userId, timestamp, timestamp, expiresAt, meta.ipHash, meta.ipHint, meta.userAgent).run();
-  return { token, ttl };
+  // 未勾选“保持登录”时不写 Max-Age，浏览器关闭后 Cookie 随会话结束。
+  return { token, ttl, cookieMaxAge: remember ? ttl : null };
 }
 
 async function getUserSession(request, env, touch = true) {
@@ -2581,7 +2878,7 @@ async function registerUser(request, env, ctx) {
   const note = clampText(input.note, 800);
   const inviteCode = clampText(input.inviteCode, 80);
   if (!nickname) throw new HttpError(400, "请填写昵称");
-  if (!displayName || !contact) throw new HttpError(400, "请填写真实姓名或常用称呼以及联系方式");
+  if (!displayName) throw new HttpError(400, "请填写真实姓名或常用昵称");
 
   const existing = await env.DB.prepare("SELECT id FROM users WHERE username_normalized = ?")
     .bind(username).first();
@@ -2637,7 +2934,7 @@ async function registerUser(request, env, ctx) {
   }).catch((error) => console.error("Registration notification failed", error));
   if (ctx) ctx.waitUntil(noticeJob); else await noticeJob;
   const responseHeaders = { "Cache-Control": "no-store" };
-  if (session) responseHeaders["Set-Cookie"] = userSessionCookie(request, session.token, session.ttl);
+  if (session) responseHeaders["Set-Cookie"] = userSessionCookie(request, session.token, session.cookieMaxAge);
   return json({ ok: true, user: publicUser(user), authenticated: Boolean(session) }, 201, responseHeaders);
 }
 
@@ -2668,7 +2965,7 @@ async function loginUser(request, env) {
   user.last_seen_at = timestamp;
   await recordLoginEvent(env, request, "login_success", user.id, username);
   return json({ ok: true, user: publicUser(user) }, 200, {
-    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
+    "Set-Cookie": userSessionCookie(request, session.token, session.cookieMaxAge),
     "Cache-Control": "no-store",
   });
 }
@@ -2737,7 +3034,7 @@ async function changeUserPassword(request, env) {
     body: "你的登录密码刚刚完成修改。如非本人操作，请立即联系站长。", targetUrl: "/#settings",
   });
   return json({ ok: true }, 200, {
-    "Set-Cookie": userSessionCookie(request, session.token, session.ttl),
+    "Set-Cookie": userSessionCookie(request, session.token, session.cookieMaxAge),
     "Cache-Control": "no-store",
   });
 }
@@ -2917,6 +3214,105 @@ async function fetchAiJson(url, options, unavailableMessage) {
     throw new HttpError(502, `${unavailableMessage}（返回格式错误）`);
   }
   return result;
+}
+
+function parsedTranslationArray(value) {
+  const source = String(value || "").trim();
+  const match = source.match(/\[[\s\S]*\]/);
+  if (!match) return null;
+  try {
+    const result = JSON.parse(match[0]);
+    return Array.isArray(result) ? result.map((item) => String(item ?? "")) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function translateSiteTexts(request, env) {
+  await consumeRateLimit(env, await clientRateKey(request, "site-translation"), 90, 60 * 60);
+  const input = await readJson(request);
+  const language = input.language === "en" ? "en" : input.language === "zh-TW" ? "zh-TW" : "";
+  if (!language) throw new HttpError(400, "不支持的界面语言");
+  const sourceTexts = Array.isArray(input.texts)
+    ? input.texts.map((item) => clampMultilineText(item, 2000)).filter(Boolean).slice(0, 36)
+    : [];
+  if (!sourceTexts.length) return { translations: [] };
+  if (sourceTexts.reduce((sum, item) => sum + item.length, 0) > 12000) {
+    throw new HttpError(413, "单次翻译文字过多，请缩小批次");
+  }
+
+  const hashes = await Promise.all(sourceTexts.map(sha256));
+  const cached = new Map();
+  if (hashes.length) {
+    const placeholders = hashes.map(() => "?").join(",");
+    const result = await env.DB.prepare(`
+      SELECT source_hash, translated_text FROM translations
+      WHERE language = ? AND source_hash IN (${placeholders})
+    `).bind(language, ...hashes).all();
+    for (const item of rows(result)) cached.set(item.source_hash, item.translated_text);
+  }
+  const missingIndexes = hashes.map((hash, index) => cached.has(hash) ? -1 : index).filter((index) => index >= 0);
+  if (missingIndexes.length) {
+    const missing = missingIndexes.map((index) => sourceTexts[index]);
+    const target = language === "en" ? "natural English" : "繁體中文（保持現代、自然用語）";
+    const prompt = [
+      `Translate every JSON array item into ${target}.`,
+      "Return only one valid JSON array of strings in the same order and length.",
+      "Preserve names, URLs, numbers, emoji, placeholders, line breaks and leading full-width spaces where appropriate.",
+      "Translate all visible prose, labels and messages; do not summarize and do not add explanations.",
+      JSON.stringify(missing),
+    ].join("\n");
+    let result;
+    if (env.DEEPSEEK_API_KEY) {
+      result = await fetchAiJson(
+        `${(env.DEEPSEEK_API_BASE || "https://api.deepseek.com").replace(/\/$/, "")}/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}` },
+          body: JSON.stringify({
+            model: env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+            stream: false,
+            max_tokens: 5000,
+            temperature: 0.1,
+            messages: [{ role: "user", content: prompt }],
+          }),
+          signal: AbortSignal.timeout(40_000),
+        },
+        "全站翻译服务暂时不可用",
+      );
+    } else {
+      result = await fetchAiJson(env.AI_UPSTREAM_URL || "https://qwen-ai.1598116329.workers.dev", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+        signal: AbortSignal.timeout(40_000),
+      }, "全站翻译服务暂时不可用");
+    }
+    const raw = result.choices?.[0]?.message?.content
+      || result.output?.choices?.[0]?.message?.content
+      || result.answer
+      || "";
+    const translated = parsedTranslationArray(raw);
+    if (!translated || translated.length !== missing.length) {
+      throw new HttpError(502, "全站翻译服务返回格式错误，请稍后重试");
+    }
+    const timestamp = nowIso();
+    const statements = [];
+    missingIndexes.forEach((sourceIndex, translatedIndex) => {
+      const value = clampMultilineText(translated[translatedIndex], 4000);
+      cached.set(hashes[sourceIndex], value);
+      statements.push(env.DB.prepare(`
+        INSERT INTO translations (source_hash, language, source_text, translated_text, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(source_hash, language) DO UPDATE SET
+          source_text = excluded.source_text,
+          translated_text = excluded.translated_text,
+          updated_at = excluded.updated_at
+      `).bind(hashes[sourceIndex], language, sourceTexts[sourceIndex], value, timestamp));
+    });
+    if (statements.length) await env.DB.batch(statements);
+  }
+  return { translations: hashes.map((hash) => cached.get(hash) || "") };
 }
 
 // 读取问题、执行限流并构造站内知识上下文；流式与非流式接口共用这一步。
@@ -3121,9 +3517,11 @@ async function askAiStream(request, env, sessionUser) {
 async function serveMedia(request, env, id) {
   if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
   const media = await env.DB.prepare(`
-    SELECT m.object_key, m.preview_object_key, m.filename, m.mime_type, m.kind,
-           m.visibility AS media_visibility, s.visibility AS section_visibility
+    SELECT m.id, m.section_id, m.album_id, m.object_key, m.preview_object_key,
+           m.filename, m.mime_type, m.kind, m.visibility AS media_visibility,
+           s.visibility AS section_visibility, a.visibility AS album_visibility
     FROM media m LEFT JOIN portfolio_sections s ON s.id = m.section_id
+    LEFT JOIN albums a ON a.id = m.album_id
     WHERE m.id = ?
   `).bind(id).first();
   if (!media) throw new HttpError(404, "图片不存在");
@@ -3136,26 +3534,23 @@ async function serveMedia(request, env, id) {
    */
   const isPublicBackground = params.get("background") === "1";
   const requestsOriginal = wantsDownload || (params.get("preview") !== "1" && !isPublicBackground);
-  const isPrivate = media.section_visibility === "private" || media.media_visibility === "private";
-  const isSelected = media.media_visibility === "selected";
-  const isProtected = isPrivate || isSelected
-    || media.section_visibility === "member" || media.media_visibility === "member";
+  const modes = [media.section_visibility, ...(media.album_id ? [media.album_visibility] : []), media.media_visibility]
+    .map(normalizedVisibility);
+  const isProtected = modes.some((mode) => mode !== "public");
   if (isPublicBackground && isProtected) throw new HttpError(404, "图片不存在");
-  // 受保护图片或原片请求只验证一次 Studio 会话，避免重复读取/校验 Cookie。
-  const adminAccess = (isProtected || requestsOriginal) ? await isAdmin(request, env) : false;
-  // 私密图片只允许带有效 Studio 管理会话的请求读取。
-  if (isPrivate && !adminAccess) throw new HttpError(404, "图片不存在");
-  let approvedUser = null;
-  if (isSelected && !adminAccess) {
-    approvedUser = await requireApprovedUser(request, env);
-    if (!(await userHasSelectedAccess(env, "media", id, approvedUser.id))) {
+  const context = await websiteAccessContext(request, env);
+  const layers = [
+    ["section", media.section_id, media.section_visibility],
+    ...(media.album_id ? [["album", media.album_id, media.album_visibility]] : []),
+    ["media", id, media.media_visibility],
+  ];
+  for (const [kind, targetId, visibility] of layers) {
+    if (!(await canAccessTarget(env, kind, targetId, visibility, context))) {
       throw new HttpError(404, "图片不存在");
     }
-  } else if (isProtected && !adminAccess) {
-    approvedUser = await requireApprovedUser(request, env);
   }
   // 即使图片本身是公开的，读取或下载原片也只开放给审核通过的登录用户。
-  if (requestsOriginal && !adminAccess && !approvedUser) {
+  if (requestsOriginal && !context.adminAccess && !context.ownerAccess && !context.fullAccess) {
     await requireApprovedUser(request, env);
   }
   // 下载操作永远使用 object_key；只有普通展示请求才允许读取 WebP 预览件。
@@ -3204,37 +3599,64 @@ function parseByteRange(header, totalSize) {
 
 async function assetAccessContext(request, env, asset) {
   const folderResult = await env.DB.prepare(`
-    SELECT id, parent_id, visibility FROM asset_folders
+    SELECT id, parent_id, visibility, access_mode FROM asset_folders
   `).all();
   const folderMap = new Map(rows(folderResult).map((item) => [item.id, item]));
   let folder = asset.folder_id ? folderMap.get(asset.folder_id) : null;
-  let inheritedVisibility = normalizedAssetVisibility(asset.visibility);
+  const context = await websiteAccessContext(request, env);
+  let isPublicChain = normalizedAssetVisibility(asset.access_mode || asset.visibility) === "public";
+  if ((asset.scope || "library") === "library") {
+    const resourceSection = await env.DB.prepare("SELECT id, visibility FROM portfolio_sections WHERE id = ?")
+      .bind(RESOURCE_SECTION_ID).first();
+    if (!resourceSection || !(await canAccessTarget(
+      env, "section", RESOURCE_SECTION_ID, resourceSection.visibility, context,
+    ))) {
+      throw new HttpError(404, "文件不存在");
+    }
+    isPublicChain = isPublicChain && normalizedVisibility(resourceSection.visibility) === "public";
+  }
   const visited = new Set();
   while (folder) {
     if (visited.has(folder.id)) throw new HttpError(500, "文件夹层级存在循环，请在后台修复");
     visited.add(folder.id);
-    const folderVisibility = normalizedAssetVisibility(folder.visibility);
-    if (folderVisibility === "private") inheritedVisibility = "private";
-    else if (folderVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
+    const folderVisibility = normalizedAssetVisibility(folder.access_mode || folder.visibility);
+    isPublicChain = isPublicChain && folderVisibility === "public";
+    if (!(await canAccessTarget(env, "assetFolder", folder.id, folderVisibility, context))) {
+      throw new HttpError(404, "文件不存在");
+    }
     folder = folder.parent_id ? folderMap.get(folder.parent_id) : null;
   }
   if (asset.section_id) {
-    const section = await env.DB.prepare("SELECT visibility FROM portfolio_sections WHERE id = ?")
+    const section = await env.DB.prepare("SELECT id, visibility FROM portfolio_sections WHERE id = ?")
       .bind(asset.section_id).first();
-    const sectionVisibility = normalizedVisibility(section?.visibility);
-    if (sectionVisibility === "private") inheritedVisibility = "private";
-    else if (sectionVisibility === "member" && inheritedVisibility === "public") inheritedVisibility = "member";
+    if (!section || !(await canAccessTarget(env, "section", section.id, section.visibility, context))) {
+      throw new HttpError(404, "文件不存在");
+    }
+    isPublicChain = isPublicChain && normalizedVisibility(section.visibility) === "public";
+  }
+  if (asset.album_id) {
+    const album = await env.DB.prepare("SELECT id, visibility FROM albums WHERE id = ?").bind(asset.album_id).first();
+    if (!album || !(await canAccessTarget(env, "album", album.id, album.visibility, context))) {
+      throw new HttpError(404, "文件不存在");
+    }
+    isPublicChain = isPublicChain && normalizedVisibility(album.visibility) === "public";
+  }
+  if (asset.content_id) {
+    await getPublicContent(request, env, asset.content_id);
+    const content = await env.DB.prepare("SELECT visibility FROM content WHERE id = ?").bind(asset.content_id).first();
+    isPublicChain = isPublicChain && normalizedVisibility(content?.visibility) === "public";
+  }
+  const assetVisibility = normalizedAssetVisibility(asset.access_mode || asset.visibility);
+  if (!(await canAccessTarget(env, "asset", asset.id, assetVisibility, context))) {
+    throw new HttpError(404, "文件不存在");
   }
 
   const wantsDownload = new URL(request.url).searchParams.get("download") === "1" || asset.kind === "archive";
-  const needsAdminCheck = inheritedVisibility !== "public" || wantsDownload;
-  const adminAccess = needsAdminCheck ? await isAdmin(request, env) : false;
-  if (inheritedVisibility === "private" && !adminAccess) throw new HttpError(404, "文件不存在");
-  if (inheritedVisibility === "member" && !adminAccess) await requireApprovedUser(request, env);
-  if (wantsDownload && normalizedDownloadPolicy(asset.download_policy) !== "public" && !adminAccess) {
+  if (wantsDownload && normalizedDownloadPolicy(asset.download_policy) !== "public"
+    && !context.adminAccess && !context.ownerAccess) {
     await requireApprovedUser(request, env);
   }
-  return { inheritedVisibility, adminAccess, wantsDownload };
+  return { inheritedVisibility: isPublicChain ? "public" : "protected", adminAccess: context.adminAccess, wantsDownload };
 }
 
 /*
@@ -3248,10 +3670,16 @@ async function serveAsset(request, env, id) {
   if (!asset) throw new HttpError(404, "文件不存在或尚未上传完成");
   const params = new URL(request.url).searchParams;
   const variantLabel = params.get("variant") || "";
+  const wantsPoster = params.get("poster") === "1";
   let objectKey = asset.object_key;
   let mimeType = asset.mime_type || "application/octet-stream";
   let filename = asset.filename;
-  if (variantLabel) {
+  if (wantsPoster) {
+    if (!asset.poster_object_key) throw new HttpError(404, "视频封面不存在");
+    objectKey = asset.poster_object_key;
+    mimeType = "image/jpeg";
+    filename = `${asset.display_name || asset.filename}-poster.jpg`;
+  } else if (variantLabel) {
     if (!ASSET_VARIANT_LABELS.has(variantLabel)) throw new HttpError(400, "文件版本参数错误");
     const variant = await env.DB.prepare(`
       SELECT object_key, mime_type, size_bytes FROM asset_variants
@@ -3269,6 +3697,7 @@ async function serveAsset(request, env, id) {
   const access = await assetAccessContext(request, env, asset);
   const head = await env.BUCKET.head(objectKey);
   if (!head) throw new HttpError(404, "R2 中的文件对象不存在");
+  if (wantsPoster && head.httpMetadata?.contentType) mimeType = head.httpMetadata.contentType;
   const rangeHeader = request.headers.get("Range");
   const range = rangeHeader ? parseByteRange(rangeHeader, head.size) : null;
   if (rangeHeader && !range) {
@@ -3304,8 +3733,8 @@ async function contentSectionId(env, requestedId, legacyType = "article") {
   const fallback = legacyType === "guide" ? "section-guides" : "section-essays";
   const sectionId = validId(requestedId) ? String(requestedId) : fallback;
   const section = await env.DB.prepare(
-    "SELECT id FROM portfolio_sections WHERE id = ? AND kind = 'content'",
-  ).bind(sectionId).first();
+    "SELECT id FROM portfolio_sections WHERE id = ? AND kind = 'content' AND id <> ?",
+  ).bind(sectionId, RESOURCE_SECTION_ID).first();
   if (!section) throw new HttpError(400, "请选择有效的文章类板块");
   return sectionId;
 }
@@ -3321,6 +3750,10 @@ async function gallerySectionId(env, requestedId, allowEmpty = false) {
 }
 
 async function deleteContentCascade(env, id) {
+  const articleAssets = rows(await env.DB.prepare(
+    "SELECT id FROM assets WHERE scope = 'article' AND content_id = ?",
+  ).bind(id).all());
+  for (const asset of articleAssets) await deleteAssetObjects(env, asset.id);
   const commentIds = rows(await env.DB.prepare("SELECT id FROM comments WHERE content_id = ?").bind(id).all());
   const statements = [
     env.DB.prepare("DELETE FROM reactions WHERE target_type = 'content' AND target_id = ?").bind(id),
@@ -3355,31 +3788,45 @@ async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserI
   `).bind(visibility, timestamp, mediaId)));
   // 文章内图片沿用文章白名单，防止通过复制 /media/:id 地址绕过正文权限。
   for (const mediaId of mediaIds) {
-    await replaceAllowedUsers(env, "media", mediaId, visibility === "selected" ? allowedUserIds : [], timestamp);
+    await replaceAllowedUsers(
+      env,
+      "media",
+      mediaId,
+      ["selected", "excluded"].includes(visibility) ? allowedUserIds : [],
+      timestamp,
+    );
   }
 }
 
 /* ---------- 个人空间大板块：新增、改名、排序、删除。 ---------- */
 async function adminSections(request, env, id) {
   if (request.method === "GET") {
-    return rows(await env.DB.prepare(`
+    const items = rows(await env.DB.prepare(`
       SELECT s.*,
         (SELECT COUNT(*) FROM content c WHERE c.section_id = s.id) AS content_count,
         (SELECT COUNT(*) FROM albums a WHERE a.section_id = s.id) AS album_count,
-        (SELECT COUNT(*) FROM media m WHERE m.section_id = s.id AND m.kind = 'photo') AS media_count
+        (SELECT COUNT(*) FROM media m WHERE m.section_id = s.id AND m.kind = 'photo') AS media_count,
+        (SELECT COUNT(*) FROM assets a WHERE a.scope = 'library') AS resource_count
       FROM portfolio_sections s
       ORDER BY s.sort_order ASC, s.created_at ASC
     `).all());
+    const withAccess = await attachAllowedUserIds(env, "section", items);
+    return withAccess.map((item) => item.id === RESOURCE_SECTION_ID ? { ...item, kind: "resources" } : item);
   }
 
   if (request.method === "POST" || request.method === "PUT") {
     const input = await readJson(request);
     const name = clampText(input.name, 80);
-    const kind = input.kind === "gallery" ? "gallery" : "content";
+    const resourceSection = id === RESOURCE_SECTION_ID;
+    if (input.kind === "resources" && !resourceSection) {
+      throw new HttpError(400, "文件资源板块为固定板块，不能重复新建");
+    }
+    const kind = resourceSection ? "content" : (input.kind === "gallery" ? "gallery" : "content");
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
-    const showAll = input.showAll === false ? 0 : 1;
-    const visibility = input.visibility === "member" ? "member" : "public";
+    const showAll = input.showAll === true ? 1 : 0;
+    const visibility = normalizedVisibility(input.visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, input.allowedUserIds);
     if (!name) throw new HttpError(400, "板块名称不能为空");
     const timestamp = nowIso();
 
@@ -3390,7 +3837,8 @@ async function adminSections(request, env, id) {
           (id, name, kind, description, sort_order, show_all, visibility, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(newId, name, kind, description, sortOrder, showAll, visibility, timestamp, timestamp).run();
-      return { id: newId };
+      await replaceAllowedUsers(env, "section", newId, allowedUserIds, timestamp);
+      return { id: newId, allowed_user_ids: allowedUserIds };
     }
 
     if (!validId(id)) throw new HttpError(400, "板块 ID 错误");
@@ -3410,11 +3858,13 @@ async function adminSections(request, env, id) {
       SET name = ?, kind = ?, description = ?, sort_order = ?, show_all = ?, visibility = ?, updated_at = ?
       WHERE id = ?
     `).bind(name, kind, description, sortOrder, showAll, visibility, timestamp, id).run();
-    return { id };
+    await replaceAllowedUsers(env, "section", id, allowedUserIds, timestamp);
+    return { id, allowed_user_ids: allowedUserIds };
   }
 
   if (request.method === "DELETE") {
     if (!validId(id)) throw new HttpError(400, "板块 ID 错误");
+    if (id === RESOURCE_SECTION_ID) throw new HttpError(409, "文件资源是固定板块，不能删除；可改为仅本人可见");
     const section = await env.DB.prepare("SELECT id FROM portfolio_sections WHERE id = ?").bind(id).first();
     if (!section) throw new HttpError(404, "板块不存在");
 
@@ -3440,6 +3890,7 @@ async function adminSections(request, env, id) {
       env.DB.prepare("DELETE FROM media WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM albums WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM portfolio_subsections WHERE section_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM section_access_users WHERE section_id = ?").bind(id),
       env.DB.prepare("DELETE FROM portfolio_sections WHERE id = ?").bind(id),
     );
     await env.DB.batch(statements);
@@ -3451,12 +3902,13 @@ async function adminSections(request, env, id) {
 
 async function adminSubsections(request, env, id) {
   if (request.method === "GET") {
-    return rows(await env.DB.prepare(`
+    const items = rows(await env.DB.prepare(`
       SELECT ss.*,
         (SELECT COUNT(*) FROM content c WHERE c.subsection_id = ss.id) AS content_count
       FROM portfolio_subsections ss
       ORDER BY ss.sort_order ASC, ss.created_at ASC
     `).all());
+    return attachAllowedUserIds(env, "subsection", items);
   }
   if (request.method === "POST" || request.method === "PUT") {
     const input = await readJson(request);
@@ -3464,16 +3916,20 @@ async function adminSubsections(request, env, id) {
     const name = clampText(input.name, 80);
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
+    const visibility = normalizedVisibility(input.visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, input.allowedUserIds);
+    await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
     if (!name) throw new HttpError(400, "小板块名称不能为空");
     const timestamp = nowIso();
     if (request.method === "POST") {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
         INSERT INTO portfolio_subsections
-          (id, section_id, name, description, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, sectionId, name, description, sortOrder, timestamp, timestamp).run();
-      return { id: newId };
+          (id, section_id, name, description, sort_order, visibility, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, sectionId, name, description, sortOrder, visibility, timestamp, timestamp).run();
+      await replaceAllowedUsers(env, "subsection", newId, allowedUserIds, timestamp);
+      return { id: newId, allowed_user_ids: allowedUserIds };
     }
     if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
     const existing = await env.DB.prepare("SELECT id FROM portfolio_subsections WHERE id = ?").bind(id).first();
@@ -3481,19 +3937,21 @@ async function adminSubsections(request, env, id) {
     await env.DB.batch([
       env.DB.prepare(`
         UPDATE portfolio_subsections
-        SET section_id = ?, name = ?, description = ?, sort_order = ?, updated_at = ?
+        SET section_id = ?, name = ?, description = ?, sort_order = ?, visibility = ?, updated_at = ?
         WHERE id = ?
-      `).bind(sectionId, name, description, sortOrder, timestamp, id),
+      `).bind(sectionId, name, description, sortOrder, visibility, timestamp, id),
       // 小板块换到另一文章板块时，其下文章必须一起移动，避免产生跨板块孤儿分类。
       env.DB.prepare("UPDATE content SET section_id = ?, updated_at = ? WHERE subsection_id = ?")
         .bind(sectionId, timestamp, id),
     ]);
-    return { id };
+    await replaceAllowedUsers(env, "subsection", id, allowedUserIds, timestamp);
+    return { id, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
     await env.DB.batch([
       env.DB.prepare("UPDATE content SET subsection_id = NULL WHERE subsection_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM subsection_access_users WHERE subsection_id = ?").bind(id),
       env.DB.prepare("DELETE FROM portfolio_subsections WHERE id = ?").bind(id),
     ]);
     return { ok: true };
@@ -3530,6 +3988,10 @@ async function adminContent(request, env, id) {
     const status = body.status === "published" ? "published" : "draft";
     const visibility = normalizedVisibility(body.visibility);
     const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
+    await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
+    if (subsectionId) {
+      await validateChildAccessSubset(env, "subsection", subsectionId, visibility, allowedUserIds);
+    }
     if (!title) throw new HttpError(400, "标题不能为空");
     const timestamp = nowIso();
 
@@ -3635,11 +4097,12 @@ async function adminChangelogs(request, env, id) {
 
 async function adminAlbums(request, env, id) {
   if (request.method === "GET") {
-    return rows(await env.DB.prepare(`
+    const items = rows(await env.DB.prepare(`
       SELECT a.*, COUNT(m.id) AS media_count
       FROM albums a LEFT JOIN media m ON m.album_id = a.id
       GROUP BY a.id ORDER BY a.sort_order ASC, a.created_at ASC
     `).all());
+    return attachAllowedUserIds(env, "album", items);
   }
   if (request.method === "POST" || request.method === "PUT") {
     const body = await readJson(request);
@@ -3647,31 +4110,37 @@ async function adminAlbums(request, env, id) {
     const description = clampText(body.description, 500);
     const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
     const sectionId = await gallerySectionId(env, body.sectionId);
+    const visibility = normalizedVisibility(body.visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
+    await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
     if (!name) throw new HttpError(400, "相册名称不能为空");
     const timestamp = nowIso();
     if (request.method === "POST") {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
-        INSERT INTO albums (id, name, description, sort_order, created_at, updated_at, section_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, name, description, sortOrder, timestamp, timestamp, sectionId).run();
-      return { id: newId };
+        INSERT INTO albums (id, name, description, sort_order, created_at, updated_at, section_id, visibility)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, name, description, sortOrder, timestamp, timestamp, sectionId, visibility).run();
+      await replaceAllowedUsers(env, "album", newId, allowedUserIds, timestamp);
+      return { id: newId, allowed_user_ids: allowedUserIds };
     }
     await env.DB.batch([
       env.DB.prepare(`
-        UPDATE albums SET name = ?, description = ?, sort_order = ?, section_id = ?, updated_at = ? WHERE id = ?
-      `).bind(name, description, sortOrder, sectionId, timestamp, id),
+        UPDATE albums SET name = ?, description = ?, sort_order = ?, section_id = ?, visibility = ?, updated_at = ? WHERE id = ?
+      `).bind(name, description, sortOrder, sectionId, visibility, timestamp, id),
       env.DB.prepare("UPDATE media SET section_id = ?, updated_at = ? WHERE album_id = ?")
         .bind(sectionId, timestamp, id),
       env.DB.prepare("UPDATE assets SET section_id = ?, updated_at = ? WHERE album_id = ?")
         .bind(sectionId, timestamp, id),
     ]);
-    return { id };
+    await replaceAllowedUsers(env, "album", id, allowedUserIds, timestamp);
+    return { id, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     await env.DB.batch([
       env.DB.prepare("UPDATE media SET album_id = NULL WHERE album_id = ?").bind(id),
       env.DB.prepare("UPDATE assets SET album_id = NULL WHERE album_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM album_access_users WHERE album_id = ?").bind(id),
       env.DB.prepare("DELETE FROM albums WHERE id = ?").bind(id),
     ]);
     return { ok: true };
@@ -3681,12 +4150,16 @@ async function adminAlbums(request, env, id) {
 
 async function adminAssetFolders(request, env, id) {
   if (request.method === "GET") {
-    return rows(await env.DB.prepare(`
+    const items = rows(await env.DB.prepare(`
       SELECT f.*,
         (SELECT COUNT(*) FROM asset_folders child WHERE child.parent_id = f.id) AS folder_count,
         (SELECT COUNT(*) FROM assets a WHERE a.folder_id = f.id) AS asset_count
       FROM asset_folders f ORDER BY f.sort_order ASC, f.created_at ASC
     `).all());
+    return attachAllowedUserIds(env, "assetFolder", items.map((item) => ({
+      ...item,
+      visibility: normalizedAssetVisibility(item.access_mode || item.visibility),
+    })));
   }
 
   if (request.method === "POST" || request.method === "PUT") {
@@ -3695,12 +4168,17 @@ async function adminAssetFolders(request, env, id) {
     const description = clampText(body.description, 800);
     const parentId = validId(body.parentId) ? String(body.parentId) : null;
     const visibility = normalizedAssetVisibility(body.visibility);
+    const legacyVisibility = legacyAssetVisibility(visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
     const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
     const archiveAssetId = validId(body.archiveAssetId) ? String(body.archiveAssetId) : null;
     if (!name) throw new HttpError(400, "文件夹名称不能为空");
     if (parentId) {
       const parent = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(parentId).first();
       if (!parent) throw new HttpError(400, "上级文件夹不存在");
+      await validateChildAccessSubset(env, "assetFolder", parentId, visibility, allowedUserIds);
+    } else {
+      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
     }
     if (archiveAssetId) {
       const archive = await env.DB.prepare("SELECT id, kind FROM assets WHERE id = ?").bind(archiveAssetId).first();
@@ -3711,10 +4189,14 @@ async function adminAssetFolders(request, env, id) {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
         INSERT INTO asset_folders
-          (id, parent_id, name, description, visibility, sort_order, archive_asset_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, parentId, name, description, visibility, sortOrder, archiveAssetId, timestamp, timestamp).run();
-      return { id: newId };
+          (id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        newId, parentId, name, description, legacyVisibility, visibility,
+        sortOrder, archiveAssetId, timestamp, timestamp,
+      ).run();
+      await replaceAllowedUsers(env, "assetFolder", newId, allowedUserIds, timestamp);
+      return { id: newId, allowed_user_ids: allowedUserIds };
     }
 
     if (!validId(id)) throw new HttpError(400, "文件夹 ID 错误");
@@ -3731,10 +4213,14 @@ async function adminAssetFolders(request, env, id) {
       cursor = parent?.parent_id || null;
     }
     await env.DB.prepare(`
-      UPDATE asset_folders SET parent_id = ?, name = ?, description = ?, visibility = ?,
+      UPDATE asset_folders SET parent_id = ?, name = ?, description = ?, visibility = ?, access_mode = ?,
         sort_order = ?, archive_asset_id = ?, updated_at = ? WHERE id = ?
-    `).bind(parentId, name, description, visibility, sortOrder, archiveAssetId, timestamp, id).run();
-    return { id };
+    `).bind(
+      parentId, name, description, legacyVisibility, visibility,
+      sortOrder, archiveAssetId, timestamp, id,
+    ).run();
+    await replaceAllowedUsers(env, "assetFolder", id, allowedUserIds, timestamp);
+    return { id, allowed_user_ids: allowedUserIds };
   }
 
   if (request.method === "DELETE") {
@@ -3747,7 +4233,10 @@ async function adminAssetFolders(request, env, id) {
     if (Number(counts?.folders) || Number(counts?.assets)) {
       throw new HttpError(409, "文件夹中仍有文件或子文件夹，请先移走或删除它们");
     }
-    await env.DB.prepare("DELETE FROM asset_folders WHERE id = ?").bind(id).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM asset_folder_access_users WHERE folder_id = ?").bind(id),
+      env.DB.prepare("DELETE FROM asset_folders WHERE id = ?").bind(id),
+    ]);
     return { ok: true };
   }
   throw new HttpError(405, "不支持的请求方法");
@@ -3756,7 +4245,8 @@ async function adminAssetFolders(request, env, id) {
 async function listAdminAssets(env) {
   const [assetResult, variantResult, uploadResult] = await Promise.all([
     env.DB.prepare(`
-      SELECT id, folder_id, section_id, album_id, filename, display_name, mime_type, size_bytes, kind, visibility,
+      SELECT id, folder_id, section_id, album_id, content_id, filename, display_name, mime_type, size_bytes, kind,
+             visibility, access_mode, scope, poster_object_key,
              download_policy, relative_path, status, stream_uid, stream_hls_url,
              stream_dash_url, poster_url, created_at, updated_at
       FROM assets ORDER BY created_at DESC
@@ -3777,10 +4267,11 @@ async function listAdminAssets(env) {
     if (!uploads.has(row.asset_id)) uploads.set(row.asset_id, []);
     uploads.get(row.asset_id).push(row);
   }
-  return rows(assetResult).map((row) => ({
+  const items = rows(assetResult).map((row) => ({
     ...assetDto(row, variants.get(row.id) || [], { includeDownload: true }),
     uploads: uploads.get(row.id) || [],
   }));
+  return attachAllowedUserIds(env, "asset", items);
 }
 
 async function cleanupExpiredAssetUploads(env) {
@@ -3805,7 +4296,7 @@ async function cleanupExpiredAssetUploads(env) {
 }
 
 async function deleteAssetObjects(env, assetId) {
-  const asset = await env.DB.prepare("SELECT object_key FROM assets WHERE id = ?").bind(assetId).first();
+  const asset = await env.DB.prepare("SELECT object_key, poster_object_key FROM assets WHERE id = ?").bind(assetId).first();
   if (!asset) throw new HttpError(404, "文件不存在");
   const [variants, uploads] = await Promise.all([
     env.DB.prepare("SELECT object_key FROM asset_variants WHERE asset_id = ?").bind(assetId).all(),
@@ -3816,17 +4307,52 @@ async function deleteAssetObjects(env, assetId) {
       try { await env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id).abort(); }
       catch (error) { console.warn("Ignoring multipart abort during asset deletion", error); }
     }
-    await env.BUCKET.delete([asset.object_key, ...rows(variants).map((item) => item.object_key)]);
+    await env.BUCKET.delete([
+      asset.object_key,
+      ...(asset.poster_object_key ? [asset.poster_object_key] : []),
+      ...rows(variants).map((item) => item.object_key),
+    ]);
   }
   await env.DB.batch([
     env.DB.prepare("UPDATE asset_folders SET archive_asset_id = NULL WHERE archive_asset_id = ?").bind(assetId),
     env.DB.prepare("DELETE FROM asset_uploads WHERE asset_id = ?").bind(assetId),
     env.DB.prepare("DELETE FROM asset_variants WHERE asset_id = ?").bind(assetId),
+    env.DB.prepare("DELETE FROM asset_access_users WHERE asset_id = ?").bind(assetId),
     env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId),
   ]);
 }
 
-async function adminAssets(request, env, id) {
+async function updateAssetPoster(request, env, id) {
+  if (request.method !== "POST") throw new HttpError(405, "不支持的请求方法");
+  if (!validId(id)) throw new HttpError(400, "文件 ID 错误");
+  const asset = await env.DB.prepare("SELECT id, kind, poster_object_key FROM assets WHERE id = ?").bind(id).first();
+  if (!asset || asset.kind !== "video") throw new HttpError(400, "只能给已经上传的视频设置封面");
+  const form = await request.formData();
+  const file = form.get("poster");
+  if (!(file instanceof File) || !file.size) throw new HttpError(400, "请选择视频封面图片");
+  if (!["image/jpeg", "image/png", "image/webp", "image/avif"].includes(file.type)) {
+    throw new HttpError(400, "视频封面仅支持 JPG、PNG、WebP 或 AVIF");
+  }
+  if (file.size > MAX_PREVIEW_BYTES) throw new HttpError(413, "视频封面不能超过 4MB");
+  const extension = file.type.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
+  const objectKey = `asset-posters/${new Date().toISOString().slice(0, 10)}/${id}-${crypto.randomUUID()}.${extension}`;
+  await env.BUCKET.put(objectKey, file.stream(), {
+    httpMetadata: { contentType: file.type },
+    customMetadata: { assetId: id, purpose: "video-poster" },
+  });
+  try {
+    await env.DB.prepare("UPDATE assets SET poster_object_key = ?, updated_at = ? WHERE id = ?")
+      .bind(objectKey, nowIso(), id).run();
+  } catch (error) {
+    await env.BUCKET.delete(objectKey).catch(() => null);
+    throw error;
+  }
+  if (asset.poster_object_key) await env.BUCKET.delete(asset.poster_object_key).catch(() => null);
+  return { id, poster_url: `/files/${id}?poster=1` };
+}
+
+async function adminAssets(request, env, id, action = "") {
+  if (action === "poster") return updateAssetPoster(request, env, id);
   if (request.method === "GET") {
     await cleanupExpiredAssetUploads(env);
     return listAdminAssets(env);
@@ -3844,7 +4370,22 @@ async function adminAssets(request, env, id) {
       const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
       if (!folder) throw new HttpError(400, "目标文件夹不存在");
     }
-    const visibility = normalizedAssetVisibility(body.visibility ?? existing.visibility);
+    const visibility = normalizedAssetVisibility(body.visibility ?? existing.access_mode ?? existing.visibility);
+    const legacyVisibility = legacyAssetVisibility(visibility);
+    let allowedInput = body.allowedUserIds;
+    if (!Object.prototype.hasOwnProperty.call(body, "allowedUserIds") && ["selected", "excluded"].includes(visibility)) {
+      const currentAllowed = await env.DB.prepare("SELECT user_id FROM asset_access_users WHERE asset_id = ?")
+        .bind(id).all();
+      allowedInput = rows(currentAllowed).map((item) => item.user_id);
+    }
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, allowedInput);
+    if (folderId) await validateChildAccessSubset(env, "assetFolder", folderId, visibility, allowedUserIds);
+    if ((existing.scope || "library") === "library") {
+      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
+    }
+    if (existing.section_id) await validateChildAccessSubset(env, "section", existing.section_id, visibility, allowedUserIds);
+    if (existing.album_id) await validateChildAccessSubset(env, "album", existing.album_id, visibility, allowedUserIds);
+    if (existing.content_id) await validateChildAccessSubset(env, "content", existing.content_id, visibility, allowedUserIds);
     const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy ?? existing.download_policy);
     const streamUid = clampText(body.streamUid ?? existing.stream_uid, 240);
     const streamHlsUrl = clampText(body.streamHlsUrl ?? existing.stream_hls_url, 1200);
@@ -3854,14 +4395,15 @@ async function adminAssets(request, env, id) {
       if (candidate && !/^https:\/\//i.test(candidate)) throw new HttpError(400, "播放或封面地址必须使用 HTTPS");
     }
     await env.DB.prepare(`
-      UPDATE assets SET folder_id = ?, display_name = ?, visibility = ?, download_policy = ?,
+      UPDATE assets SET folder_id = ?, display_name = ?, visibility = ?, access_mode = ?, download_policy = ?,
         stream_uid = ?, stream_hls_url = ?, stream_dash_url = ?, poster_url = ?, updated_at = ?
       WHERE id = ?
     `).bind(
-      folderId, displayName, visibility, downloadPolicy, streamUid, streamHlsUrl,
+      folderId, displayName, legacyVisibility, visibility, downloadPolicy, streamUid, streamHlsUrl,
       streamDashUrl, posterUrl, nowIso(), id,
     ).run();
-    return { id };
+    await replaceAllowedUsers(env, "asset", id, allowedUserIds);
+    return { id, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     if (!validId(id)) throw new HttpError(400, "文件 ID 错误");
@@ -3927,7 +4469,10 @@ async function createAssetUpload(request, env) {
         mime_type = excluded.mime_type, size_bytes = 0, status = 'uploading', updated_at = excluded.updated_at
     `).bind(crypto.randomUUID(), assetId, variantLabel, objectKey, mimeType, timestamp, timestamp).run();
   } else {
-    const folderId = validId(body.folderId) ? String(body.folderId) : null;
+    const kind = normalizedAssetKind(body.kind, mimeType, filename);
+    const inferredScope = kind === "video" && validId(body.sectionId) ? "gallery" : "library";
+    const scope = ["library", "article", "gallery"].includes(body.scope) ? body.scope : inferredScope;
+    const folderId = scope === "library" && validId(body.folderId) ? String(body.folderId) : null;
     if (folderId) {
       const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
       if (!folder) throw new HttpError(400, "目标文件夹不存在");
@@ -3935,13 +4480,16 @@ async function createAssetUpload(request, env) {
     assetId = crypto.randomUUID();
     objectKey = `assets/${datePrefix}/${assetId}/original-${filename}`;
     const displayName = clampText(body.displayName, 220) || filename;
-    const kind = normalizedAssetKind(body.kind, mimeType, filename);
     const visibility = normalizedAssetVisibility(body.visibility);
+    const legacyVisibility = legacyAssetVisibility(visibility);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
     const downloadPolicy = normalizedDownloadPolicy(body.downloadPolicy);
     const relativePath = safeRelativePath(body.relativePath);
     let sectionId = null;
     let albumId = null;
-    if (kind === "video" && validId(body.sectionId)) {
+    let contentId = null;
+    if (scope === "gallery") {
+      if (kind !== "video") throw new HttpError(400, "图片板块的大文件上传区目前仅接收视频；照片请使用照片上传");
       sectionId = await gallerySectionId(env, body.sectionId);
       if (validId(body.albumId)) {
         const album = await env.DB.prepare("SELECT id FROM albums WHERE id = ? AND section_id = ?")
@@ -3949,16 +4497,30 @@ async function createAssetUpload(request, env) {
         if (!album) throw new HttpError(400, "视频所选相册不属于当前图片板块");
         albumId = String(body.albumId);
       }
+      await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
+      if (albumId) await validateChildAccessSubset(env, "album", albumId, visibility, allowedUserIds);
+    } else if (scope === "article") {
+      contentId = validId(body.contentId) ? String(body.contentId) : null;
+      if (!contentId) throw new HttpError(400, "文章附件必须绑定当前文章，请先保存文章草稿");
+      const content = await env.DB.prepare("SELECT id FROM content WHERE id = ?").bind(contentId).first();
+      if (!content) throw new HttpError(400, "文章附件所绑定的文章不存在");
+      await validateChildAccessSubset(env, "content", contentId, visibility, allowedUserIds);
+    } else {
+      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
+      if (folderId) await validateChildAccessSubset(env, "assetFolder", folderId, visibility, allowedUserIds);
     }
     await env.DB.prepare(`
       INSERT INTO assets
-        (id, folder_id, section_id, album_id, filename, display_name, object_key, mime_type, size_bytes, kind,
-         visibility, download_policy, relative_path, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'uploading', ?, ?)
+        (id, folder_id, section_id, album_id, content_id, filename, display_name, object_key,
+         mime_type, size_bytes, kind, visibility, access_mode, scope, download_policy,
+         relative_path, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)
     `).bind(
-      assetId, folderId, sectionId, albumId, filename, displayName, objectKey, mimeType, kind,
-      visibility, downloadPolicy, relativePath, timestamp, timestamp,
+      assetId, folderId, sectionId, albumId, contentId, filename, displayName, objectKey,
+      mimeType, kind, legacyVisibility, visibility, scope, downloadPolicy, relativePath,
+      timestamp, timestamp,
     ).run();
+    await replaceAllowedUsers(env, "asset", assetId, allowedUserIds, timestamp);
   }
 
   let multipart;
@@ -3987,7 +4549,12 @@ async function createAssetUpload(request, env) {
     };
   } catch (error) {
     if (multipart) await multipart.abort().catch(() => null);
-    if (!variantLabel) await env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId).run().catch(() => null);
+    if (!variantLabel) {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM asset_access_users WHERE asset_id = ?").bind(assetId),
+        env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId),
+      ]).catch(() => null);
+    }
     else await env.DB.prepare("UPDATE asset_variants SET status = 'failed' WHERE asset_id = ? AND label = ?")
       .bind(assetId, variantLabel).run().catch(() => null);
     throw error;
@@ -4108,6 +4675,8 @@ async function uploadMedia(request, env) {
     } else {
       sectionId = await gallerySectionId(env, form.get("sectionId"));
     }
+    await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
+    if (albumId) await validateChildAccessSubset(env, "album", albumId, visibility, allowedUserIds);
   }
   const timestamp = nowIso();
 
@@ -4186,6 +4755,7 @@ async function adminMedia(request, env, id, action = "") {
     const items = rows(await env.DB.prepare(`
       SELECT m.*, a.name AS album_name
       FROM media m LEFT JOIN albums a ON a.id = m.album_id
+      WHERE m.kind = 'photo'
       ORDER BY m.created_at DESC
     `).all());
     return (await attachAllowedUserIds(env, "media", items)).map(mediaDto);
@@ -4210,6 +4780,8 @@ async function adminMedia(request, env, id, action = "") {
       } else {
         sectionId = await gallerySectionId(env, body.sectionId);
       }
+      await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
+      if (albumId) await validateChildAccessSubset(env, "album", albumId, visibility, allowedUserIds);
     }
     await env.DB.prepare("UPDATE media SET section_id = ?, album_id = ?, caption = ?, kind = ?, visibility = ?, updated_at = ? WHERE id = ?")
       .bind(sectionId, albumId, caption, kind, visibility, nowIso(), id).run();
@@ -4239,13 +4811,50 @@ async function adminComments(request, env, id) {
     return rows(await env.DB.prepare(`
       SELECT c.*, p.title AS content_title
       FROM comments c LEFT JOIN content p ON p.id = c.content_id
-      ORDER BY c.created_at DESC
+      ORDER BY c.is_pinned DESC, c.created_at DESC
     `).all());
+  }
+  if (request.method === "POST") {
+    const body = await readJson(request);
+    const contentId = clampText(body.contentId, 80);
+    const commentBody = clampText(body.body, 1000);
+    if (!validId(contentId) || !commentBody) throw new HttpError(400, "请选择文章并填写评论内容");
+    const content = await env.DB.prepare("SELECT id FROM content WHERE id = ?").bind(contentId).first();
+    if (!content) throw new HttpError(404, "文章不存在");
+    const settings = await settingsObject(env);
+    const owner = validId(settings.owner_user_id)
+      ? await env.DB.prepare("SELECT id, nickname FROM users WHERE id = ? AND status = 'approved'")
+        .bind(settings.owner_user_id).first()
+      : null;
+    const commentId = crypto.randomUUID();
+    const timestamp = nowIso();
+    await env.DB.prepare(`
+      INSERT INTO comments
+        (id, content_id, parent_id, guest_name, body, status, like_count, dislike_count,
+         author_user_id, is_admin, is_pinned, author_liked, created_at, updated_at)
+      VALUES (?, ?, NULL, ?, ?, 'active', 0, 0, ?, 1, 0, 0, ?, ?)
+    `).bind(
+      commentId, contentId, owner?.nickname || settings.owner_name || "星月集",
+      commentBody, owner?.id || null, timestamp, timestamp,
+    ).run();
+    return { id: commentId, contentId };
   }
   if (request.method === "PUT") {
     const body = await readJson(request);
+    if (!validId(id)) throw new HttpError(400, "评论 ID 错误");
+    if (body.action === "pin") {
+      const pinned = body.value === true ? 1 : 0;
+      await env.DB.prepare("UPDATE comments SET is_pinned = ?, updated_at = ? WHERE id = ?")
+        .bind(pinned, nowIso(), id).run();
+      return { id, is_pinned: pinned };
+    }
+    if (body.action === "author-like") {
+      const authorLiked = body.value === true ? 1 : 0;
+      await env.DB.prepare("UPDATE comments SET author_liked = ?, updated_at = ? WHERE id = ?")
+        .bind(authorLiked, nowIso(), id).run();
+      return { id, author_liked: authorLiked };
+    }
     if (body.action === "reply") {
-      if (!validId(id)) throw new HttpError(400, "评论 ID 错误");
       const parent = await env.DB.prepare(`
         SELECT c.id, c.content_id, c.author_user_id, p.title AS content_title
         FROM comments c LEFT JOIN content p ON p.id = c.content_id
@@ -4360,6 +4969,11 @@ async function adminSettings(request, env) {
       ["site_title", 80], ["owner_name", 80], ["school", 160],
       ["intro", 1000], ["usage_guide", 6000],
       ["contact_email", 240], ["site_version", 30], ["owner_user_id", 80],
+      ["guest_daily_limit", 8], ["about_heading", 80], ["about_intro", 3000],
+      ["about_school_label", 120], ["about_learning_title", 120],
+      ["about_learning_items", 3000], ["about_contact_title", 120],
+      ["contact_email_label", 120], ["contact_email_intl", 240],
+      ["contact_email_intl_label", 120],
     ]);
     const statements = [];
     for (const [key, max] of allowed) {
@@ -4368,7 +4982,15 @@ async function adminSettings(request, env) {
         env.DB.prepare(`
           INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        `).bind(key, clampText(body[key], max), nowIso()),
+        `).bind(
+          key,
+          key === "guest_daily_limit"
+            ? String(Math.max(0, Math.min(100000, Math.floor(Number(body[key]) || 0))))
+            : (["usage_guide", "about_intro", "about_learning_items"].includes(key)
+              ? clampMultilineText(body[key], max)
+              : clampText(body[key], max)),
+          nowIso(),
+        ),
       );
     }
     if (statements.length) await env.DB.batch(statements);
@@ -4623,7 +5245,7 @@ async function adminDashboard(env) {
       WHERE revoked_at IS NULL AND expires_at > ? AND last_seen_at > ?
     `).bind(nowIso(), new Date(Date.now() - 2 * 60 * 1000).toISOString()).first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM password_reset_requests WHERE status = 'pending'").first(),
-    env.DB.prepare("SELECT COUNT(*) AS count FROM guest_visits WHERE visit_day = ?").bind(today).first(),
+    env.DB.prepare("SELECT COALESCE(SUM(entry_count), 0) AS count FROM guest_visits WHERE visit_day = ?").bind(today).first(),
     env.DB.prepare("SELECT COALESCE(SUM(page_views), 0) AS count FROM guest_visits WHERE visit_day = ?").bind(today).first(),
   ]);
   return {
@@ -4665,7 +5287,7 @@ async function handleAdmin(request, env, url) {
   if (resource === "albums") return adminAlbums(request, env, id);
   if (resource === "media") return adminMedia(request, env, id, action);
   if (resource === "asset-folders") return adminAssetFolders(request, env, id);
-  if (resource === "assets") return adminAssets(request, env, id);
+  if (resource === "assets") return adminAssets(request, env, id, action);
   if (resource === "asset-uploads") return adminAssetUploads(request, env, id, action, detail);
   if (resource === "comments") return adminComments(request, env, id);
   if (resource === "feedback") return adminFeedback(request, env, id);
@@ -4766,6 +5388,7 @@ async function handleApi(request, env, url, ctx) {
   /* 游客入口：先读取公开背景，再由 Turnstile + Worker 签发 24 小时游客会话。 */
   if (url.pathname === "/api/guest/config" && request.method === "GET") {
     const status = turnstileStatus(env);
+    const limitSetting = await env.DB.prepare("SELECT value FROM settings WHERE key = 'guest_daily_limit'").first();
     return json({
       enabled: status.configured,
       incomplete: status.incomplete,
@@ -4773,10 +5396,14 @@ async function handleApi(request, env, url, ctx) {
       missingSecretKey: status.missingSecretKey,
       siteKey: status.configured ? status.siteKey : "",
       action: TURNSTILE_GUEST_ACTION,
+      dailyLimit: Math.max(0, Number.parseInt(limitSetting?.value || "20", 10) || 0),
     });
   }
   if (url.pathname === "/api/guest/entry-background" && request.method === "GET") {
     return json(await publicEntryBackground(env));
+  }
+  if (url.pathname === "/api/i18n/translate" && request.method === "POST") {
+    return json(await translateSiteTexts(request, env), 200, { "Cache-Control": "private, max-age=86400" });
   }
   if (url.pathname === "/api/guest/enter" && request.method === "POST") {
     return enterGuestWebsite(request, env);
@@ -4910,7 +5537,9 @@ export default {
       }
       return env.ASSETS.fetch(request);
     } catch (error) {
-      if (error instanceof HttpError) return json({ error: error.message }, error.status);
+      if (error instanceof HttpError) {
+        return json({ error: error.message, ...(error.code ? { errorCode: error.code } : {}) }, error.status);
+      }
       console.error("Unhandled worker error", error);
       return json({ error: "服务器处理请求时发生错误", errorCode: "WORKER_UNHANDLED", version: APP_VERSION }, 500);
     }

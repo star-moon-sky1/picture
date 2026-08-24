@@ -236,7 +236,164 @@ dialog.xyj-origin-dialog.is-closing > * {
 .portfolio-subtabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0 20px; }
 .gallery-video-card { position: relative; background: #14242b; }
 .gallery-video-card video { width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; }
-.gallery-video-card::after { content: "▶ 视频"; position: absolute; right: 10px; bottom: 10px; display: block !important; padding: 5px 9px; border-radius: 999px; color: white; background: rgba(14,31,39,.70); font-size: .72rem; }
+.gallery-video-badge { position: absolute; right: 10px; bottom: 10px; display: block; padding: 5px 9px; border-radius: 999px; color: white; background: rgba(14,31,39,.70); font-size: .72rem; pointer-events:none; }
+
+/* ==========================================================
+   琉璃质感与交互收束层
+   ========================================================== */
+:root {
+  --xyj-glass-surface: linear-gradient(148deg, rgba(255,255,255,.46), rgba(226,241,245,.23) 54%, rgba(221,224,241,.17));
+  --xyj-glass-control: linear-gradient(142deg, rgba(255,255,255,.42), rgba(215,235,240,.27) 55%, rgba(222,218,238,.20));
+  --xyj-glass-active: linear-gradient(132deg, rgba(39,151,157,.82), rgba(60,126,184,.80) 59%, rgba(105,83,157,.74));
+  --xyj-glass-line: rgba(255,255,255,.70);
+  --xyj-glass-shadow: 0 18px 48px rgba(26,54,66,.15), inset 0 1px 0 rgba(255,255,255,.90), inset 0 -1px 0 rgba(40,76,93,.15);
+  --xyj-glass-control-shadow: 0 8px 22px rgba(30,65,79,.14), inset 0 1px 0 rgba(255,255,255,.88), inset 0 -1px 0 rgba(44,81,98,.17);
+}
+
+/* 登录与注册使用透明液态玻璃：清晰中心、放大镜片和边缘折射分层完成。 */
+.entry-screen { overflow: hidden !important; }
+.entry-card,
+.auth-card {
+  width: min(720px, calc(100vw - 32px));
+  height: clamp(560px, 72dvh, 640px);
+  min-height: 560px;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow:
+    0 34px 90px rgba(9,28,36,.30),
+    inset 0 1px 0 rgba(255,255,255,.82),
+    inset 1px 0 0 rgba(255,255,255,.42),
+    inset 0 -1px 0 rgba(30,63,76,.26),
+    inset -1px 0 0 rgba(255,255,255,.22) !important;
+  -webkit-backdrop-filter: blur(.45px) saturate(1.08) contrast(1.025) !important;
+  backdrop-filter: blur(.45px) saturate(1.08) contrast(1.025) !important;
+}
+.entry-card::before,
+.auth-card::before {
+  inset: 0 !important;
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 69%, rgba(255,255,255,.07) 79%, rgba(255,255,255,.34) 94%, rgba(255,255,255,.58) 100%),
+    linear-gradient(108deg, rgba(255,255,255,.28), transparent 9% 82%, rgba(174,222,232,.17)) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+.liquid-glass-refraction {
+  opacity: 1;
+  -webkit-mask-image: radial-gradient(ellipse 94% 91% at 50% 49%, transparent 0 63%, rgba(0,0,0,.06) 69%, rgba(0,0,0,.50) 83%, #000 96%);
+  mask-image: radial-gradient(ellipse 94% 91% at 50% 49%, transparent 0 63%, rgba(0,0,0,.06) 69%, rgba(0,0,0,.50) 83%, #000 96%);
+}
+.liquid-glass-refraction > img {
+  transform: scale(1.055);
+  filter: blur(.38px) saturate(1.15) contrast(1.055);
+}
+
+/* 表单按钮采用低模糊磨砂，以免压过透明液态玻璃；普通站内按钮可稍厚。 */
+:is(.entry-card, .auth-card) :is(button, .btn, input, select, textarea) {
+  -webkit-backdrop-filter: blur(3px) saturate(1.12) !important;
+  backdrop-filter: blur(3px) saturate(1.12) !important;
+}
+:is(.entry-card, .auth-card) :is(button, .btn) {
+  position: relative;
+  overflow: visible;
+  box-shadow: 0 9px 24px rgba(23,60,74,.18), inset 0 1px 0 rgba(255,255,255,.92), inset 0 -1px 0 rgba(37,82,99,.20) !important;
+}
+:is(.entry-card, .auth-card) :is(button, .btn)::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  left: 12%; right: 12%; top: -1px; height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.96), transparent);
+  filter: blur(.4px);
+  box-shadow: 0 -2px 8px rgba(255,255,255,.40);
+}
+
+/* 夜览只处理表单与控件，登录/注册玻璃本身仍保持透明。 */
+:root[data-theme="dark"] :is(.entry-card, .auth-card) {
+  color: #edf5f7;
+  background: transparent !important;
+  box-shadow: 0 34px 94px rgba(0,0,0,.46), inset 0 1px 0 rgba(215,247,251,.35), inset 0 -1px 0 rgba(0,0,0,.40) !important;
+}
+:root[data-theme="dark"] :is(.entry-card, .auth-card)::before { background: radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 70%, rgba(188,232,239,.07) 82%, rgba(205,244,248,.25) 100%) !important; }
+:root[data-theme="dark"] :is(.entry-card, .auth-card) :is(input, textarea, select) { color:#eff7f8; background:rgba(7,22,29,.56) !important; }
+
+/* 登录界面不出现内外滚动条；注册页仍允许页面滚动但隐藏轨道。 */
+.auth-page { scrollbar-width:none; }
+.auth-page::-webkit-scrollbar { display:none; }
+body:has(.entry-screen:not([hidden])) { overflow:hidden; }
+
+/* 侧边栏底部固定、按钮舒展，并彻底隐藏滚动轨道。 */
+.sidebar { scrollbar-width:none !important; -ms-overflow-style:none; }
+.sidebar::-webkit-scrollbar { display:none !important; width:0 !important; height:0 !important; }
+.sidebar .nav { gap:9px; }
+.sidebar .nav button { min-height:47px; padding-block:12px; }
+.sidebar-note { margin-top:auto !important; flex:0 0 auto; }
+.sidebar-toggle,
+.sidebar-controls,
+.notification-bell,
+.nav,
+.nav button,
+.nav-icon,
+.nav-label,
+.sidebar-note { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+.sidebar-controls { position:relative; z-index:12; min-height:40px; }
+.app-shell.sidebar-collapsed .sidebar-controls { min-height:90px; width:40px; gap:10px; }
+
+/* 设置中的菜单始终盖在账号管理上方。 */
+.settings-grid { isolation:isolate; }
+.settings-card:first-child { position:relative; z-index:30; }
+.settings-theme-picker { position:relative; z-index:60; }
+.settings-theme-picker .theme-menu { z-index:1000; }
+#settings-account-host { position:relative; z-index:1; }
+.theme-schedule-settings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:10px 0 15px; padding:13px; border:1px solid var(--xyj-glass-line); border-radius:16px; background:rgba(223,239,243,.30); }
+.theme-schedule-settings[hidden] { display:none !important; }
+.theme-schedule-settings label { display:grid; gap:6px; }
+.theme-schedule-settings .btn { grid-column:1/-1; }
+
+/* 每个导航图标使用与其语义相符的一次短动效。 */
+.nav-icon-activated { display:inline-block; will-change:transform,filter; }
+.nav button[data-section="home"] .nav-icon-activated { animation:xyj-icon-home .48s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="portfolio"] .nav-icon-activated { animation:xyj-icon-portfolio .52s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="about"] .nav-icon-activated { animation:xyj-icon-about .54s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="feedback"] .nav-icon-activated { animation:xyj-icon-feedback .50s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="ai-helper"] .nav-icon-activated { animation:xyj-icon-star .52s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="settings"] .nav-icon-activated { animation:xyj-icon-gear .58s cubic-bezier(.18,.82,.22,1); }
+@keyframes xyj-icon-home { 0%,100%{transform:none} 42%{transform:translateY(-4px) scale(1.14)} 70%{transform:translateY(1px) scale(.97)} }
+@keyframes xyj-icon-portfolio { 0%,100%{transform:none} 48%{transform:perspective(80px) rotateY(34deg) scale(1.17)} }
+@keyframes xyj-icon-about { 0%,100%{transform:none} 50%{transform:rotate(180deg) scale(1.12)} }
+@keyframes xyj-icon-feedback { 0%,100%{transform:none} 30%{transform:rotate(-13deg) scale(1.12)} 66%{transform:rotate(9deg)} }
+@keyframes xyj-icon-star { 0%,100%{transform:none;filter:none} 48%{transform:scale(1.46);filter:drop-shadow(0 0 7px rgba(255,220,118,.85))} }
+@keyframes xyj-icon-gear { from{transform:rotate(0)} 65%{transform:rotate(155deg) scale(1.12)} to{transform:rotate(180deg)} }
+
+.comment-pin-badge { display:inline-flex; margin-left:7px; padding:2px 7px; border-radius:999px; color:#744f0b; background:rgba(247,205,105,.35); font-size:.68rem; }
+.author-liked-note { display:block; margin-top:6px; color:var(--muted); font-size:.72rem; }
+.registered-only-placeholder { padding:14px; border:1px dashed var(--xyj-glass-line); border-radius:15px; color:var(--muted); background:rgba(225,240,244,.25); }
+
+/* “修改密码”等界面文字统一系统黑体，避免单个汉字命中字形异常。 */
+button,.btn,input,textarea,select,label,.account-card { font-family:var(--font-ui),"HarmonyOS Sans SC","PingFang SC","Microsoft YaHei UI",sans-serif !important; }
+
+/* 卡片起手仍然允许纵向滚动，横向放大动画不产生滚动条。 */
+:is(.content-card,.photo-card,.resource-card,.usage-guide,.updates,[role="button"]) { touch-action:pan-y; }
+dialog,dialog > * { max-width:100%; }
+dialog.xyj-origin-dialog { overflow:hidden !important; }
+
+@media (max-width:760px) and (hover:none), (max-width:760px) and (pointer:coarse) {
+  .entry-card,.auth-card { width:min(100%,720px); height:auto; min-height:0; overflow:hidden !important; }
+  .entry-card { max-height:calc(100dvh - 112px); }
+  .auth-card { max-height:none; }
+  .sidebar { transition:max-height .12s linear,padding .12s linear !important; }
+  .sidebar .nav { flex-wrap:nowrap !important; }
+  .sidebar .nav button { min-height:40px; white-space:nowrap; flex-wrap:nowrap; }
+  .sidebar-note { margin-top:0 !important; flex-wrap:nowrap !important; white-space:nowrap; }
+  .sidebar-toggle { font-size:0; }
+  .sidebar-toggle::before { content:"▲"; font-size:1.1rem; }
+  .app-shell.sidebar-collapsed .sidebar-toggle::before { content:"▼"; }
+  .theme-schedule-settings { grid-template-columns:1fr; }
+  .theme-schedule-settings .btn { grid-column:auto; }
+}
 
 .side-nav-group {
   display: grid;
@@ -569,4 +726,50 @@ dialog.xyj-origin-dialog > * { max-width: 100%; overflow-x: hidden; }
   }
   .studio-link,
   #site-version { flex: 0 0 auto; white-space: nowrap; }
+}
+
+/* 最终材质变量放在文件末尾，保证公开站与 Studio 使用同一组克制琉璃色。 */
+:root {
+  --xyj-glass-surface: linear-gradient(148deg, rgba(255,255,255,.45), rgba(225,240,244,.24) 55%, rgba(223,223,239,.18));
+  --xyj-glass-surface-strong: linear-gradient(148deg, rgba(252,254,255,.70), rgba(228,242,245,.52) 58%, rgba(231,231,246,.43));
+  --xyj-glass-control: linear-gradient(140deg, rgba(255,255,255,.41), rgba(212,234,239,.27) 54%, rgba(222,219,238,.20));
+  --xyj-glass-active: linear-gradient(132deg, rgba(38,150,155,.82), rgba(55,124,182,.80) 60%, rgba(101,80,153,.74));
+}
+:root[data-theme="dark"] {
+  --xyj-glass-surface: linear-gradient(148deg, rgba(27,47,55,.68), rgba(13,29,36,.55) 58%, rgba(31,27,49,.46));
+  --xyj-glass-surface-strong: linear-gradient(148deg, rgba(30,51,59,.88), rgba(13,29,36,.82) 58%, rgba(31,27,49,.72));
+  --xyj-glass-control: linear-gradient(140deg, rgba(106,148,158,.23), rgba(44,82,96,.22) 56%, rgba(76,63,105,.20));
+  --xyj-glass-active: linear-gradient(132deg, rgba(30,142,145,.84), rgba(42,105,166,.84) 60%, rgba(91,66,150,.78));
+}
+
+.usage-guide-content p,
+.usage-guide-full p { white-space:pre-wrap; }
+
+@keyframes control-single-rebound {
+  0% { transform:translate3d(0,1px,0) scale(.955); }
+  52% { transform:translate3d(0,-3px,0) scale(1.045); }
+  100% { transform:translate3d(0,0,0) scale(1); }
+}
+@keyframes auth-control-single-rebound {
+  0% { transform:translate3d(0,1px,0) scale(.955); }
+  52% { transform:translate3d(0,-3px,0) scale(1.045); }
+  100% { transform:translate3d(0,0,0) scale(1); }
+}
+@keyframes studio-control-single-rebound {
+  0% { transform:translate3d(0,1px,0) scale(.955); }
+  52% { transform:translate3d(0,-3px,0) scale(1.045); }
+  100% { transform:translate3d(0,0,0) scale(1); }
+}
+
+/* Studio 手机端只占一条紧凑顶栏，分组容器不再形成纵向大块。 */
+@media (max-width:720px) {
+  .studio { display:flex !important; flex-direction:column !important; height:auto !important; min-height:100dvh; }
+  .studio .side { position:sticky !important; top:0; z-index:100; width:100%; height:auto !important; max-height:104px !important; padding:7px 9px 9px !important; overflow:hidden !important; }
+  .studio .side-nav { display:flex !important; flex-flow:row nowrap !important; overflow-x:auto !important; overflow-y:hidden !important; gap:7px !important; padding:40px 2px 1px !important; scrollbar-width:none; }
+  .studio .side-nav::-webkit-scrollbar { display:none; }
+  .studio .side-nav-group { display:contents !important; padding:0 !important; border:0 !important; background:none !important; }
+  .studio .side-nav-group-title { display:none !important; }
+  .studio .side-nav button,
+  .studio .side-nav-group button { flex:0 0 auto !important; width:auto !important; min-height:36px !important; padding:7px 11px !important; white-space:nowrap !important; }
+  .studio .workspace { height:auto !important; min-height:calc(100dvh - 96px); overflow:visible !important; padding:18px 12px 55px !important; }
 }
