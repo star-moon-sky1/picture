@@ -2640,37 +2640,37 @@
     }
 
     function renderGallerySection(host, section) {
-      const albums = (state.data?.albums || []).filter((item) => item.section_id ? item.section_id === section.id : section.id === "section-photos");
-      const validAlbumIds = new Set(albums.map((item) => item.id));
-      let activeAlbum = state.activeAlbums[section.id];
-      if (!activeAlbum || (activeAlbum !== "all" && !validAlbumIds.has(activeAlbum))) {
-        activeAlbum = Number(section.show_all) ? "all" : (albums[0]?.id || "none");
-        state.activeAlbums[section.id] = activeAlbum;
+      const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
+      const validSubsectionIds = new Set(subsections.map((item) => item.id));
+      let activeSubsection = state.activeSubsections[section.id];
+      if (!activeSubsection || (activeSubsection !== "all" && !validSubsectionIds.has(activeSubsection))) {
+        activeSubsection = (Number(section.show_all) || !subsections.length) ? "all" : subsections[0].id;
+        state.activeSubsections[section.id] = activeSubsection;
       }
 
       const tabs = document.createElement("div"); tabs.className = "album-tabs";
-      const selectAlbum = (albumId) => { state.activeAlbums[section.id] = albumId; renderPortfolioPanel(); };
+      const selectSubsection = (subsectionId) => { state.activeSubsections[section.id] = subsectionId; renderPortfolioPanel(); };
       if (Number(section.show_all)) {
         const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-        all.className = `tab-button${activeAlbum === "all" ? " active" : ""}`;
-        all.addEventListener("click", () => selectAlbum("all")); tabs.append(all);
+        all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
+        all.addEventListener("click", () => selectSubsection("all")); tabs.append(all);
       }
-      albums.forEach((album) => {
-        const button = document.createElement("button"); button.type = "button"; button.textContent = album.name;
-        button.className = `tab-button${activeAlbum === album.id ? " active" : ""}`;
-        button.title = album.description || album.name;
-        button.addEventListener("click", () => selectAlbum(album.id)); tabs.append(button);
+      subsections.forEach((subsection) => {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = subsection.name;
+        button.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
+        button.title = subsection.description || subsection.name;
+        button.addEventListener("click", () => selectSubsection(subsection.id)); tabs.append(button);
       });
-      host.append(tabs);
+      if (subsections.length) host.append(tabs);
 
       const gallery = document.createElement("div"); gallery.className = "gallery"; host.append(gallery);
       const photos = (state.data?.media || []).filter((item) => {
-        const belongs = item.section_id ? item.section_id === section.id : section.id === "section-photos";
-        return belongs && (activeAlbum === "all" || item.album_id === activeAlbum);
+        return item.section_id === section.id
+          && (activeSubsection === "all" || item.subsection_id === activeSubsection);
       });
-      const videos = (state.data?.galleryAssets || []).filter((item) => item.kind === "video"
-        && item.section_id === section.id && (activeAlbum === "all" || item.album_id === activeAlbum));
-      if (!photos.length && !videos.length) { gallery.append(empty("这个图片板块还没有上传图片或视频。")); return; }
+      const files = (state.data?.galleryAssets || []).filter((item) => item.section_id === section.id
+        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
+      if (!photos.length && !files.length) { gallery.append(empty("这个图片板块还没有上传图片或文件。")); return; }
       photos.forEach((photo) => {
         const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
         card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
@@ -2679,7 +2679,7 @@
         card.append(image); card.addEventListener("click", () => openImage(photo, photos));
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo, photos); }); gallery.append(card);
       });
-      videos.forEach((asset) => {
+      files.filter((asset) => asset.kind === "video").forEach((asset) => {
         const card = document.createElement("div"); card.className = "photo-card gallery-video-card"; card.tabIndex = 0;
         card.setAttribute("role", "button"); card.setAttribute("aria-label", `播放视频：${asset.display_name}`);
         const video = document.createElement("video"); video.preload = "metadata"; video.muted = true; video.playsInline = true;
@@ -2689,6 +2689,7 @@
         card.append(video, badge); card.addEventListener("click", open);
         card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
       });
+      files.filter((asset) => asset.kind !== "video").forEach((asset) => gallery.append(resourceCardForAsset(asset)));
     }
 
     function renderPortfolioPanel() {
@@ -2699,46 +2700,38 @@
       state.activePortfolioSection = section.id;
       if (section.kind === "gallery") { renderGallerySection(host, section); return; }
       if (section.kind === "resources") {
-        const folders = state.data?.assetFolders || [];
-        const roots = folders.filter((item) => !item.parent_id);
-        const canShowAll = Number(section.show_all) || !roots.length;
-        const folderMap = new Map(folders.map((item) => [item.id, item]));
-        let cursor = state.currentResourceFolder ? folderMap.get(state.currentResourceFolder) : null;
-        const visited = new Set();
-        while (cursor?.parent_id && !visited.has(cursor.id)) {
-          visited.add(cursor.id);
-          cursor = folderMap.get(cursor.parent_id);
+        const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
+        const canShowAll = Number(section.show_all) || !subsections.length;
+        let activeSubsection = state.activeSubsections[section.id] || (canShowAll ? "all" : subsections[0]?.id);
+        if ((activeSubsection === "all" && !canShowAll)
+          || (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection))) {
+          activeSubsection = canShowAll ? "all" : subsections[0]?.id;
         }
-        let activeRoot = cursor?.id || (canShowAll ? "all" : roots[0]?.id || "all");
-        if (!canShowAll && activeRoot === "all") activeRoot = roots[0]?.id || "all";
-        if (activeRoot !== "all" && !roots.some((item) => item.id === activeRoot)) {
-          activeRoot = canShowAll ? "all" : roots[0]?.id || "all";
-        }
-        if (!canShowAll && !state.currentResourceFolder) state.currentResourceFolder = activeRoot;
-        state.resourceRootLocked = !canShowAll;
-
-        if (roots.length) {
+        state.activeSubsections[section.id] = activeSubsection;
+        state.resourceRootLocked = false;
+        if (subsections.length) {
           const tabs = document.createElement("div"); tabs.className = "portfolio-subtabs";
-          const selectRoot = (folderId) => {
-            state.currentResourceFolder = folderId === "all" ? "" : folderId;
+          const selectSubsection = (subsectionId) => {
+            state.activeSubsections[section.id] = subsectionId;
+            state.currentResourceFolder = "";
             renderPortfolioPanel();
           };
           if (canShowAll) {
             const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-            all.className = `tab-button${activeRoot === "all" ? " active" : ""}`;
-            all.addEventListener("click", () => selectRoot("all")); tabs.append(all);
+            all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
+            all.addEventListener("click", () => selectSubsection("all")); tabs.append(all);
           }
-          roots.forEach((folder) => {
-            const button = document.createElement("button"); button.type = "button"; button.textContent = folder.name;
-            button.className = `tab-button${activeRoot === folder.id ? " active" : ""}`;
-            button.title = folder.description || folder.name;
-            button.addEventListener("click", () => selectRoot(folder.id)); tabs.append(button);
+          subsections.forEach((subsection) => {
+            const button = document.createElement("button"); button.type = "button"; button.textContent = subsection.name;
+            button.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
+            button.title = subsection.description || subsection.name;
+            button.addEventListener("click", () => selectSubsection(subsection.id)); tabs.append(button);
           });
           host.append(tabs);
         }
         state.resourcePanelNode ||= document.querySelector("#resources .section-inner");
         if (state.resourcePanelNode) host.append(state.resourcePanelNode);
-        renderResources();
+        renderResources(activeSubsection);
         return;
       }
 
@@ -2770,8 +2763,27 @@
       const grid = document.createElement("div"); grid.className = "content-grid"; host.append(grid);
       const items = (state.data?.content || []).filter((item) => contentBelongsToSection(item, section)
         && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      if (!items.length) grid.append(empty(`“${section.name}”尚未发布内容。`));
+      const photos = (state.data?.media || []).filter((item) => item.section_id === section.id
+        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
+      const files = (state.data?.sectionAssets || []).filter((item) => item.section_id === section.id
+        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
+      if (!items.length && !photos.length && !files.length) grid.append(empty(`“${section.name}”尚未发布内容。`));
       else items.forEach((item) => grid.append(contentCard(item, section)));
+      if (photos.length) {
+        const gallery = document.createElement("div"); gallery.className = "gallery";
+        photos.forEach((photo) => {
+          const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
+          card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
+          const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || "照片";
+          const open = () => openImage(photo, photos); card.append(image); card.addEventListener("click", open);
+          card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
+        });
+        host.append(gallery);
+      }
+      if (files.length) {
+        const resources = document.createElement("div"); resources.className = "resource-grid";
+        files.forEach((asset) => resources.append(resourceCardForAsset(asset))); host.append(resources);
+      }
     }
 
     function renderPortfolio() {
@@ -2838,7 +2850,7 @@
       const card = document.createElement("article"); card.className = "resource-card"; card.tabIndex = 0; card.setAttribute("role", "button");
       const icon = document.createElement("div"); icon.className = "resource-card-icon"; icon.textContent = resourceIcon(asset.kind);
       const title = document.createElement("h3"); title.textContent = asset.display_name;
-      const description = document.createElement("p"); description.textContent = `${asset.kind.toUpperCase()} · ${formatBytes(asset.size_bytes)}`;
+      const description = document.createElement("p"); description.textContent = `${asset.note ? `${asset.note} · ` : ""}${asset.kind.toUpperCase()} · ${formatBytes(asset.size_bytes)}`;
       const badges = document.createElement("div"); badges.className = "resource-badges";
       const view = document.createElement("span"); view.className = "resource-badge"; view.textContent = asset.kind === "archive" ? "直接下载" : "在线预览"; badges.append(view);
       if ((asset.variants || []).length) { const versions = document.createElement("span"); versions.className = "resource-badge"; versions.textContent = `${asset.variants.length} 个版本`; badges.append(versions); }
@@ -2856,28 +2868,42 @@
       return card;
     }
 
-    function renderResources() {
+    function renderResources(requestedSubsection = null) {
       const folders = state.data?.assetFolders || [];
       const assets = state.data?.assets || [];
-      if (state.currentResourceFolder && !folders.some((item) => item.id === state.currentResourceFolder)) state.currentResourceFolder = "";
       const resourceSection = portfolioSections().find((item) => item.kind === "resources");
-      const roots = folders.filter((item) => !item.parent_id);
-      state.resourceRootLocked = Boolean(resourceSection && !Number(resourceSection.show_all) && roots.length);
-      if (state.resourceRootLocked && !state.currentResourceFolder) state.currentResourceFolder = roots[0].id;
+      const activeSubsection = requestedSubsection || state.activeSubsections[resourceSection?.id] || "all";
+      if (state.currentResourceFolder && !folders.some((item) => item.id === state.currentResourceFolder)) state.currentResourceFolder = "";
+      state.resourceRootLocked = false;
       const current = state.currentResourceFolder || null;
       document.getElementById("resource-path").textContent = resourceFolderPath(current);
       const currentFolder = folders.find((item) => item.id === current);
       const up = document.getElementById("resource-up");
       up.hidden = !current || (state.resourceRootLocked && !currentFolder?.parent_id);
       const folderArchive = currentFolder?.archive_asset_id
-        ? assets.find((item) => item.id === currentFolder.archive_asset_id && item.kind === "archive")
+        ? assets.find((item) => item.id === currentFolder.archive_asset_id && item.kind === "archive"
+          && (activeSubsection === "all" || item.subsection_id === activeSubsection))
         : null;
       const folderDownload = document.getElementById("resource-folder-download");
       folderDownload.hidden = !folderArchive;
       folderDownload.dataset.assetId = folderArchive?.id || "";
       const grid = document.getElementById("resource-grid"); grid.replaceChildren();
       folders.filter((item) => (item.parent_id || null) === current).forEach((folder) => grid.append(resourceCardForFolder(folder)));
-      assets.filter((item) => item.status === "ready" && (item.folder_id || null) === current).forEach((asset) => grid.append(resourceCardForAsset(asset)));
+      const visibleAssets = assets.filter((item) => item.status === "ready" && (item.folder_id || null) === current
+        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
+      visibleAssets.forEach((asset) => grid.append(resourceCardForAsset(asset)));
+      if (!current) {
+        const photos = (state.data?.media || []).filter((item) => item.section_id === resourceSection?.id
+          && (activeSubsection === "all" || item.subsection_id === activeSubsection));
+        photos.forEach((photo) => {
+          const card = document.createElement("article"); card.className = "resource-card"; card.tabIndex = 0; card.setAttribute("role", "button");
+          const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || photo.filename;
+          image.style.cssText = "width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px";
+          const title = document.createElement("h3"); title.textContent = photo.caption || photo.filename;
+          const open = () => openImage(photo, photos); card.append(image, title); card.addEventListener("click", open);
+          card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); grid.append(card);
+        });
+      }
       if (!grid.childElementCount) grid.append(empty("这个文件夹暂时没有可见资源。"));
     }
 
@@ -3148,9 +3174,8 @@
         const type = placeholder.dataset.resourceType;
         const id = placeholder.dataset.resourceId;
         const item = type === "folder"
-          ? (state.data?.assetFolders || []).find((folder) => folder.id === id)
-          : [...(state.data?.articleAssets || []), ...(state.data?.assets || [])]
-            .find((asset) => asset.id === id && asset.status === "ready");
+          ? null
+          : (state.data?.articleAssets || []).find((asset) => asset.id === id && asset.status === "ready");
         const replacement = item
           ? (type === "folder" ? resourceCardForFolder(item) : resourceCardForAsset(item))
           : empty("该资源不存在，或当前账号没有访问权限。");

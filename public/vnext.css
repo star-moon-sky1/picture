@@ -773,3 +773,62 @@ dialog.xyj-origin-dialog > * { max-width: 100%; overflow-x: hidden; }
   .studio .side-nav-group button { flex:0 0 auto !important; width:auto !important; min-height:36px !important; padding:7px 11px !important; white-space:nowrap !important; }
   .studio .workspace { height:auto !important; min-height:calc(100dvh - 96px); overflow:visible !important; padding:18px 12px 55px !important; }
 }
+
+/* 商务型系统字体：优先使用当前设备原生的 Apple / HarmonyOS 字体。 */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-hei: -apple-system, BlinkMacSystemFont, "SF Pro Text", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+html,
+body,
+button,
+input,
+textarea,
+select,
+option,
+label,
+a,
+p,
+span,
+small,
+li,
+td,
+th {
+  font-family: var(--font-ui) !important;
+  font-synthesis: none;
+  font-kerning: normal;
+  font-feature-settings: "kern" 1, "liga" 1, "tnum" 1;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.card-head h2,
+.entry-card h1,
+.side-brand h1 {
+  font-family: var(--font-display) !important;
+  letter-spacing: -.018em;
+}
+
+/* 注册页夜览与登录入口使用同一层次的环境色，卡片中部不再形成黑色实心块。 */
+:root[data-theme="dark"] :is(.entry-photo-background, .auth-photo-background) {
+  background:
+    radial-gradient(circle at 14% 12%, rgba(48, 153, 166, .24), transparent 38%),
+    radial-gradient(circle at 86% 82%, rgba(111, 83, 166, .19), transparent 40%),
+    linear-gradient(145deg, #10242c, #09171d 56%, #141728) !important;
+}
+
+:root[data-theme="dark"] :is(.auth-page, .card-side, .auth-card, .auth-card .panel, #register-form, .register-step) {
+  background: transparent !important;
+}
+
+:root[data-theme="dark"] .auth-card::before {
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 72%, rgba(171, 224, 233, .055) 82%, rgba(205, 244, 248, .23) 100%),
+    linear-gradient(108deg, rgba(181, 231, 238, .10), transparent 12% 84%, rgba(133, 112, 192, .08)) !important;
+}
