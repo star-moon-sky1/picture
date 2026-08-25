@@ -81,6 +81,29 @@ const PUBLIC_SETTING_KEYS = new Set([
   "contact_email_label", "contact_email_intl", "contact_email_intl_label",
 ]);
 
+/* “关于我”按四个固定部分独立授权；标题只有至少一个部分可见时才会下发。 */
+const PROFILE_SECTION_DEFINITIONS = Object.freeze({
+  intro: {
+    visibilityKey: "about_intro_visibility",
+    settingKeys: ["about_intro"],
+  },
+  school: {
+    visibilityKey: "about_school_visibility",
+    settingKeys: ["school", "about_school_label"],
+  },
+  learning: {
+    visibilityKey: "about_learning_visibility",
+    settingKeys: ["about_learning_title", "about_learning_items"],
+  },
+  contact: {
+    visibilityKey: "about_contact_visibility",
+    settingKeys: [
+      "about_contact_title", "contact_email_label", "contact_email",
+      "contact_email_intl_label", "contact_email_intl",
+    ],
+  },
+});
+
 // Worker 实例复用时缓存 access_token，减少向 QQ 鉴权接口发起的重复请求。
 let qqAccessTokenCache = { appId: "", token: "", expiresAt: 0 };
 let qqEd25519KeyCache = { appId: "", privateKey: null, publicKey: null };
@@ -712,6 +735,15 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS profile_section_access_users (
+      section_key TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(section_key, user_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS user_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -930,6 +962,7 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_album_access_user ON album_access_users(user_id, album_id)",
     "CREATE INDEX IF NOT EXISTS idx_asset_folder_access_user ON asset_folder_access_users(user_id, folder_id)",
     "CREATE INDEX IF NOT EXISTS idx_asset_access_user ON asset_access_users(user_id, asset_id)",
+    "CREATE INDEX IF NOT EXISTS idx_profile_section_access_user ON profile_section_access_users(user_id, section_key)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_seen ON user_sessions(last_seen_at, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at, revoked_at)",
@@ -1057,6 +1090,14 @@ async function initializeSchema(env) {
       .bind("contact_email_intl", "xingyueji8@gmail.com", timestamp),
     env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)")
       .bind("contact_email_intl_label", "国际邮箱", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, 'public', ?)")
+      .bind("about_intro_visibility", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, 'public', ?)")
+      .bind("about_school_visibility", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, 'public', ?)")
+      .bind("about_learning_visibility", timestamp),
+    env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, 'public', ?)")
+      .bind("about_contact_visibility", timestamp),
   ]);
 
   /*
@@ -1349,6 +1390,7 @@ const ACCESS_TABLES = Object.freeze({
   album: { table: "album_access_users", targetColumn: "album_id" },
   assetFolder: { table: "asset_folder_access_users", targetColumn: "folder_id" },
   asset: { table: "asset_access_users", targetColumn: "asset_id" },
+  profile: { table: "profile_section_access_users", targetColumn: "section_key" },
 });
 
 function normalizedAllowedUserIds(value) {
@@ -1581,10 +1623,18 @@ async function settingsObject(env) {
   return Object.fromEntries(rows(result).map((item) => [item.key, item.value]));
 }
 
-function publicSettingsObject(settings) {
-  return Object.fromEntries(
+function publicSettingsObject(settings, visibleProfileSections = Object.keys(PROFILE_SECTION_DEFINITIONS)) {
+  const output = Object.fromEntries(
     Object.entries(settings || {}).filter(([key]) => PUBLIC_SETTING_KEYS.has(key)),
   );
+  const visible = new Set(visibleProfileSections);
+  for (const [sectionKey, definition] of Object.entries(PROFILE_SECTION_DEFINITIONS)) {
+    if (visible.has(sectionKey)) continue;
+    definition.settingKeys.forEach((key) => delete output[key]);
+  }
+  if (!visible.size) delete output.about_heading;
+  output.about_visible_sections = [...visible];
+  return output;
 }
 
 async function publicBootstrap(request, env) {
@@ -1594,6 +1644,7 @@ async function publicBootstrap(request, env) {
   const [
     changelogs, sections, subsections, content, albums, media, assetFolders, assets, assetVariants, settings,
     contentAccess, mediaAccess, sectionAccess, subsectionAccess, albumAccess, folderAccess, assetAccess,
+    profileSectionAccess,
   ] = await Promise.all([
     env.DB.prepare(
       "SELECT id, version, title, body, published_at, sort_order FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC",
@@ -1655,6 +1706,8 @@ async function publicBootstrap(request, env) {
       .bind(sessionUser?.id || "").all(),
     env.DB.prepare("SELECT asset_id FROM asset_access_users WHERE user_id = ?")
       .bind(sessionUser?.id || "").all(),
+    env.DB.prepare("SELECT section_key FROM profile_section_access_users WHERE user_id = ?")
+      .bind(sessionUser?.id || "").all(),
   ]);
 
   const ownerAccess = adminAccess || Boolean(
@@ -1668,6 +1721,17 @@ async function publicBootstrap(request, env) {
   const allowedAlbumIds = new Set(rows(albumAccess).map((item) => item.album_id));
   const allowedFolderIds = new Set(rows(folderAccess).map((item) => item.folder_id));
   const allowedAssetIds = new Set(rows(assetAccess).map((item) => item.asset_id));
+  const allowedProfileSectionKeys = new Set(rows(profileSectionAccess).map((item) => item.section_key));
+  const visibleProfileSections = Object.entries(PROFILE_SECTION_DEFINITIONS)
+    .filter(([sectionKey, definition]) => (
+      adminAccess || visibleToWebsite(
+        settings[definition.visibilityKey],
+        fullAccess,
+        allowedProfileSectionKeys.has(sectionKey),
+        ownerAccess,
+      )
+    ))
+    .map(([sectionKey]) => sectionKey);
   const sectionRows = rows(sections).map((item) => (
     item.id === RESOURCE_SECTION_ID ? { ...item, kind: "resources" } : item
   ));
@@ -1734,7 +1798,7 @@ async function publicBootstrap(request, env) {
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
   return {
-    settings: publicSettingsObject(settings),
+    settings: publicSettingsObject(settings, visibleProfileSections),
     access: { authenticated: Boolean(sessionUser), fullAccess, ownerAccess },
     changelogs: rows(changelogs),
     sections: visibleSections,
@@ -3485,6 +3549,11 @@ async function buildAiContext(request, env) {
    * member / selected / excluded / private 数据即使当前账号可见，也不会发送到外部模型。
    */
   const bootstrap = await publicBootstrap(request, env);
+  const allSettings = await settingsObject(env);
+  const publicProfileSections = Object.entries(PROFILE_SECTION_DEFINITIONS)
+    .filter(([, definition]) => normalizedVisibility(allSettings[definition.visibilityKey]) === "public")
+    .map(([sectionKey]) => sectionKey);
+  const strictlyPublicSettings = publicSettingsObject(allSettings, publicProfileSections);
   const publicSections = bootstrap.sections.filter((item) => normalizedVisibility(item.visibility) === "public");
   const publicSectionIds = new Set(publicSections.map((item) => item.id));
   const publicSubsections = bootstrap.subsections.filter((item) => (
@@ -3525,7 +3594,7 @@ async function buildAiContext(request, env) {
   ].filter(Boolean).join("：")).join("\n");
 
   return [
-    `网站公开设置：${JSON.stringify(bootstrap.settings)}`,
+    `网站公开设置：${JSON.stringify(strictlyPublicSettings)}`,
     `版本更新：${bootstrap.changelogs.slice(0, 15).map((item) => `${item.version} ${item.title} ${item.body}`).join("；")}`,
     `公开个人空间大板块：${publicSections.map((item) => `${item.name}（${item.kind === "gallery" ? "图片" : "文章"}）：${item.description}`).join("；")}`,
     `公开小板块：${publicSubsections.map((item) => `${item.name}：${item.description}`).join("；")}`,
@@ -4131,6 +4200,37 @@ async function syncEmbeddedArticleAssets(env, content, bodyHtml, timestamp) {
   await moveLegacyAssetsIntoArticle(env, content, embeddedAssetIdsFromHtml(bodyHtml), timestamp);
 }
 
+async function deleteRemovedArticleAssets(env, contentId, bodyHtml, requestedIds) {
+  if (!Array.isArray(requestedIds)) return { deletedAssetIds: [], failedDeleteAssetIds: [] };
+  const retainedIds = new Set(embeddedAssetIdsFromHtml(bodyHtml));
+  const candidates = [...new Set(requestedIds.map(String).filter(validId))]
+    .filter((assetId) => !retainedIds.has(assetId))
+    .slice(0, 200);
+  if (!candidates.length) return { deletedAssetIds: [], failedDeleteAssetIds: [] };
+
+  /*
+   * 浏览器只能请求删除当前文章真正拥有、且新正文已经不再引用的附件。
+   * 即使有人手工伪造请求，也不能借此删除其他文章或其他板块的文件。
+   */
+  const result = await env.DB.prepare(`
+    SELECT id FROM assets
+    WHERE scope = 'article' AND content_id = ?
+      AND id IN (SELECT value FROM json_each(?))
+  `).bind(contentId, JSON.stringify(candidates)).all();
+  const deletedAssetIds = [];
+  const failedDeleteAssetIds = [];
+  for (const item of rows(result)) {
+    try {
+      await deleteAssetObjects(env, item.id);
+      deletedAssetIds.push(item.id);
+    } catch (error) {
+      console.error("Article attachment deletion failed", { contentId, assetId: item.id, error });
+      failedDeleteAssetIds.push(item.id);
+    }
+  }
+  return { deletedAssetIds, failedDeleteAssetIds };
+}
+
 async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds = []) {
   const ids = inlineMediaIdsFromHtml(bodyHtml);
   if (!ids.length) return;
@@ -4418,10 +4518,11 @@ async function adminContent(request, env, id) {
     `).bind(sectionId, subsectionId, timestamp, id).run();
     await replaceAllowedUsers(env, "content", id, allowedUserIds, timestamp);
     await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
+    const attachmentDeletion = await deleteRemovedArticleAssets(env, id, bodyHtml, body.deleteAssetIds);
     if (status === "published" && existing.status !== "published") {
       await notifyArticlePublished(env, id, title);
     }
-    return { id };
+    return { id, ...attachmentDeletion };
   }
 
   if (request.method === "DELETE") {
@@ -5384,8 +5485,27 @@ async function adminFeedback(request, env, id) {
   throw new HttpError(405, "不支持的请求方法");
 }
 
+async function adminSettingsObject(env) {
+  const [settings, accessResult] = await Promise.all([
+    settingsObject(env),
+    env.DB.prepare("SELECT section_key, user_id FROM profile_section_access_users ORDER BY section_key, user_id").all(),
+  ]);
+  const accessBySection = new Map();
+  for (const item of rows(accessResult)) {
+    if (!accessBySection.has(item.section_key)) accessBySection.set(item.section_key, []);
+    accessBySection.get(item.section_key).push(item.user_id);
+  }
+  settings.profile_access = Object.fromEntries(
+    Object.entries(PROFILE_SECTION_DEFINITIONS).map(([sectionKey, definition]) => [sectionKey, {
+      visibility: normalizedVisibility(settings[definition.visibilityKey]),
+      allowedUserIds: accessBySection.get(sectionKey) || [],
+    }]),
+  );
+  return settings;
+}
+
 async function adminSettings(request, env) {
-  if (request.method === "GET") return settingsObject(env);
+  if (request.method === "GET") return adminSettingsObject(env);
   if (request.method === "PUT") {
     const body = await readJson(request);
     if ("owner_user_id" in body && clampText(body.owner_user_id, 80)) {
@@ -5404,6 +5524,16 @@ async function adminSettings(request, env) {
       ["contact_email_label", 120], ["contact_email_intl", 240],
       ["contact_email_intl_label", 120],
     ]);
+    const profileUpdates = [];
+    if (body.profileAccess && typeof body.profileAccess === "object") {
+      for (const [sectionKey, definition] of Object.entries(PROFILE_SECTION_DEFINITIONS)) {
+        if (!Object.prototype.hasOwnProperty.call(body.profileAccess, sectionKey)) continue;
+        const requested = body.profileAccess[sectionKey] || {};
+        const visibility = normalizedVisibility(requested.visibility);
+        const allowedUserIds = await validatedAllowedUserIds(env, visibility, requested.allowedUserIds);
+        profileUpdates.push({ sectionKey, definition, visibility, allowedUserIds });
+      }
+    }
     const statements = [];
     for (const [key, max] of allowed) {
       if (!(key in body)) continue;
@@ -5422,8 +5552,17 @@ async function adminSettings(request, env) {
         ),
       );
     }
+    for (const update of profileUpdates) {
+      statements.push(env.DB.prepare(`
+        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).bind(update.definition.visibilityKey, update.visibility, nowIso()));
+    }
     if (statements.length) await env.DB.batch(statements);
-    return settingsObject(env);
+    for (const update of profileUpdates) {
+      await replaceAllowedUsers(env, "profile", update.sectionKey, update.allowedUserIds);
+    }
+    return adminSettingsObject(env);
   }
   throw new HttpError(405, "不支持的请求方法");
 }

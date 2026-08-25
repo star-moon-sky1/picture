@@ -204,7 +204,9 @@
     .asset-row-controls select { width:auto; min-width:118px; padding:7px 9px; font-size:.76rem; }
     .upload-queue { display:grid; gap:8px; margin-top:14px; }
     .upload-job { padding:11px 13px; border:1px solid #cfe4e7; border-radius:11px; background:#f7fbfb; }
-    .upload-job-head { display:flex; justify-content:space-between; gap:10px; font-size:.78rem; }
+    .upload-job-head { display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:.78rem; }
+    .upload-job-controls { display:flex; align-items:center; justify-content:flex-end; gap:8px; text-align:right; }
+    .upload-job-controls .btn { min-width:58px; padding:5px 9px; }
     .upload-progress { height:7px; margin-top:8px; border-radius:999px; overflow:hidden; background:#dce8e9; }
     .upload-progress > span { display:block; width:0; height:100%; background:var(--cyan); transition:width .18s ease; }
     .resource-picker { width:min(720px,calc(100% - 28px)); max-height:min(720px,86dvh); border:1px solid rgba(255,255,255,.72); border-radius:22px; padding:0; color:var(--ink); background:rgba(248,252,252,.94); box-shadow:0 28px 80px rgba(17,45,55,.25); }
@@ -468,7 +470,7 @@
                   <button type="button" data-command="insertUnorderedList">列表</button><button type="button" id="insert-link">链接</button><button type="button" id="insert-image">插图</button><button type="button" id="insert-resource">插入文件/视频</button><button type="button" id="remove-editor-resource">删除选中资源</button>
                 </div>
                 <div id="content-editor" class="editor" contenteditable="true"></div>
-                <input id="inline-image-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
+                <input id="inline-image-input" class="hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
               </div>
             </div>
             <div class="actions"><button class="btn" type="submit">保存内容</button><button id="delete-content" class="btn danger hidden" type="button">删除</button><span id="content-notice" class="status"></span></div>
@@ -488,7 +490,7 @@
             <button id="content-section-upload-file" class="btn small ghost" type="button">上传文件/视频</button>
             <span id="content-section-asset-notice" class="status"></span>
           </div>
-          <input id="content-section-photo-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
+          <input id="content-section-photo-input" class="hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
           <input id="content-section-file-input" class="hidden" type="file" multiple>
           <div id="content-section-upload-queue" class="upload-queue"></div>
           <div id="content-section-assets-list" class="asset-browser"></div>
@@ -532,7 +534,7 @@
         <form id="media-form" class="panel">
           <h3>上传图片</h3>
           <div class="form-grid">
-            <div class="field"><label>图片文件（最大 20MB）</label><input id="media-file" type="file" required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 2560px、较高画质的 WebP 压缩预览，供照片专栏和登录背景显示。</small></div>
+            <div class="field"><label>图片文件（可多选，单张最大 20MB）</label><input id="media-file" type="file" multiple required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 2560px、较高画质的 WebP 压缩预览，供照片专栏和登录背景显示。</small></div>
             <div class="field"><label>所属小板块</label><select id="media-album"></select></div>
             <div class="field">
               <label>照片可见范围</label>
@@ -574,7 +576,7 @@
             <span id="asset-notice" class="status"></span>
           </div>
           <input id="asset-file-input" class="hidden" type="file" multiple>
-          <input id="asset-photo-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
+          <input id="asset-photo-input" class="hidden" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/avif">
           <input id="asset-folder-input" class="hidden" type="file" webkitdirectory directory multiple>
           <input id="asset-variant-input" class="hidden" type="file">
           <input id="asset-poster-input" class="hidden" type="file" accept="image/jpeg,image/png,image/webp">
@@ -666,13 +668,17 @@
             <div class="field"><label>每日游客人次上限</label><input id="setting-guest-limit" type="number" min="0" max="100000" value="20"></div>
             <div class="field"><label>关于我标题</label><input id="setting-about-heading" maxlength="80"></div>
             <div class="field wide"><label>关于我介绍</label><textarea id="setting-about-intro" maxlength="3000"></textarea></div>
+            <div class="field wide"><label>个人介绍可见范围</label><select id="setting-about-intro-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="setting-about-intro-users" class="audience-picker hidden"></div></div>
             <div class="field"><label>院校信息标题</label><input id="setting-about-school-label" maxlength="120"></div>
+            <div class="field wide"><label>院校信息可见范围</label><select id="setting-about-school-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="setting-about-school-users" class="audience-picker hidden"></div></div>
             <div class="field"><label>学习方向标题</label><input id="setting-about-learning-title" maxlength="120"></div>
             <div class="field wide"><label>学习方向（每行一项）</label><textarea id="setting-about-learning-items" maxlength="3000"></textarea></div>
+            <div class="field wide"><label>学习方向可见范围</label><select id="setting-about-learning-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="setting-about-learning-users" class="audience-picker hidden"></div></div>
             <div class="field"><label>联系方式标题</label><input id="setting-about-contact-title" maxlength="120"></div>
             <div class="field"><label>邮箱标签</label><input id="setting-email-label" maxlength="120"></div>
             <div class="field"><label>国际邮箱标签</label><input id="setting-email-intl-label" maxlength="120"></div>
             <div class="field"><label>国际邮箱</label><input id="setting-email-intl" type="email" maxlength="240"></div>
+            <div class="field wide"><label>联系方式可见范围</label><select id="setting-about-contact-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="setting-about-contact-users" class="audience-picker hidden"></div></div>
             <div class="field wide"><label>绑定站长用户账号</label><select id="setting-owner-user"><option value="">尚未绑定</option></select><small>绑定后可用该用户身份发送私信，并让后台评论回复显示“站长”。</small></div>
           </div>
           <div class="actions"><button class="btn" type="submit">保存网站设置</button><span id="settings-notice" class="status"></span></div>
@@ -707,6 +713,7 @@
       users: [], passwordResets: [], userEvents: [], generatedResetLinks: new Map(), settings: {},
       currentAssetFolder: "", editorRange: null, variantTarget: null, posterTarget: null, assetUploadContext: null, messageContacts: [], messagePeer: null,
       feedbackArchive: false, visibilityEditor: null,
+      articleSessionAssetIds: new Set(), articleAssetRemovalDecisions: new Map(),
     };
     const viewInfo = {
       dashboard:["概览","查看网站目前的内容状态。"], sections:["个人空间板块","管理文章、图片和固定文件资源板块及其分支。"],
@@ -728,6 +735,12 @@
       excluded: "不给指定用户看",
       private: "仅本人可见",
     };
+    const profileAccessControls = Object.freeze({
+      intro: ["setting-about-intro-visibility", "setting-about-intro-users"],
+      school: ["setting-about-school-visibility", "setting-about-school-users"],
+      learning: ["setting-about-learning-visibility", "setting-about-learning-users"],
+      contact: ["setting-about-contact-visibility", "setting-about-contact-users"],
+    });
 
     async function api(path, options={}) {
       const response = await fetch(path, options); const type=response.headers.get("content-type")||"";
@@ -772,6 +785,14 @@
       const valid=!visibilityUsesAudience(choice.visibility)||choice.allowedUserIds.length>0;
       if(!valid){const text=choice.visibility==="excluded"?"选择‘不给指定用户看’时，请至少勾选一个账号。":"选择‘仅指定用户’时，请至少勾选一个账号。";if(messageTarget)messageTarget.textContent=text;else alert(text)}
       return valid;
+    }
+    function profileAccessPayload(){
+      return Object.fromEntries(Object.entries(profileAccessControls).map(([sectionKey,[selectId,pickerId]])=>[
+        sectionKey,visibilityPayload(selectId,pickerId),
+      ]));
+    }
+    function validateProfileAccess(profileAccess,messageTarget=null){
+      return Object.values(profileAccess).every(choice=>validateVisibilityChoice(choice,messageTarget));
     }
     function openVisibilityEditor(title,visibility="public",allowedUserIds=[]){
       const dialog=document.getElementById("visibility-editor-dialog");
@@ -993,9 +1014,32 @@
     function renderContentList(){const list=document.getElementById("content-list");clear(list);if(!app.content.length){const p=document.createElement("p");p.className="status";p.textContent="还没有内容。";list.append(p);return}app.content.forEach(item=>{const row=document.createElement("div");row.className=`list-item${document.getElementById("content-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.title;const meta=document.createElement("div");meta.className="list-meta";const section=app.sections.find(s=>s.id===item.section_id);const audienceCount=visibilityUsesAudience(item.visibility)?`（${item.allowed_user_ids?.length||0} 人）`:"";meta.textContent=`${section?.name||(item.type==="guide"?"北京旅行指南":"文章")} · ${item.status==="published"?"已发布":"草稿"} · ${visibilityLabels[item.visibility]||visibilityLabels.public}${audienceCount} · ${formatDate(item.updated_at)}`;row.append(title,meta);row.addEventListener("click",()=>editContent(item));list.append(row)})}
     function updateCoverPreview(){const host=document.getElementById("content-cover-preview");const id=document.getElementById("content-cover").value;const item=app.media.find(media=>media.id===id);clear(host);if(!item){const span=document.createElement("span");span.textContent="尚未选择封面";host.append(span);return}const img=document.createElement("img");img.src=item.previewUrl||item.url;img.alt=item.caption||item.filename;host.append(img)}
     function syncCurrentContentPanels(){const id=document.getElementById("content-id").value;document.querySelectorAll(".article-linked-panel").forEach(panel=>panel.classList.toggle("hidden",!id));renderArticleAssets();renderCurrentContentComments()}
-    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";document.getElementById("article-asset-notice").textContent="请先保存文章草稿，再上传只属于这篇文章的附件。";syncAudiencePicker("content-visibility","content-user-picker",[]);refreshContentSubsectionOptions(document.getElementById("content-section").value);updateCoverPreview();syncCurrentContentPanels();renderContentList()}
-    function editContent(item){const sectionId=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=sectionId;refreshContentSubsectionOptions(sectionId,item.subsection_id||"");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";syncAudiencePicker("content-visibility","content-user-picker",item.allowed_user_ids||[]);document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.remove("hidden");document.getElementById("article-asset-notice").textContent="";updateCoverPreview();syncCurrentContentPanels();renderContentList()}
-    function contentPayload(){const sectionId=document.getElementById("content-section").value;return{sectionId,subsectionId:document.getElementById("content-subsection").value||null,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,...visibilityPayload("content-visibility","content-user-picker"),title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML}}
+    function articleEditorAssetIds(){
+      return new Set([...document.querySelectorAll("#content-editor .resource-embed[data-resource-type='asset'][data-resource-id]")]
+        .map(node=>node.dataset.resourceId).filter(Boolean));
+    }
+    function resetArticleAttachmentTracking(trackCurrent=false){
+      app.articleSessionAssetIds=trackCurrent?articleEditorAssetIds():new Set();
+      app.articleAssetRemovalDecisions=new Map();
+    }
+    function decideArticleAssetRemoval(assetId){
+      if(!assetId)return false;
+      if(app.articleAssetRemovalDecisions.has(assetId))return app.articleAssetRemovalDecisions.get(assetId);
+      const item=app.assets.find(asset=>asset.id===assetId);
+      const label=item?.display_name||"这个附件";
+      const permanentlyDelete=confirm(`“${label}”已从文章正文移除。\n\n是否同时将该文件从网站永久删除？\n确定：永久删除文件\n取消：保留在当前文章附件栏，只是不再显示在正文中`);
+      app.articleAssetRemovalDecisions.set(assetId,permanentlyDelete);
+      return permanentlyDelete;
+    }
+    function removedArticleAssetIdsForSave(){
+      const current=articleEditorAssetIds();
+      const removed=[...app.articleSessionAssetIds].filter(assetId=>!current.has(assetId));
+      removed.forEach(decideArticleAssetRemoval);
+      return removed.filter(assetId=>app.articleAssetRemovalDecisions.get(assetId)===true);
+    }
+    function resetContentForm(){document.getElementById("content-form").reset();document.getElementById("content-id").value="";document.getElementById("content-editor").innerHTML="<p></p>";resetArticleAttachmentTracking(false);clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.add("hidden");document.getElementById("content-notice").textContent="";document.getElementById("article-asset-notice").textContent="请先保存文章草稿，再上传只属于这篇文章的附件。";syncAudiencePicker("content-visibility","content-user-picker",[]);refreshContentSubsectionOptions(document.getElementById("content-section").value);updateCoverPreview();syncCurrentContentPanels();renderContentList()}
+    function editContent(item){const sectionId=item.section_id||(item.type==="guide"?"section-guides":"section-essays");document.getElementById("content-id").value=item.id;document.getElementById("content-section").value=sectionId;refreshContentSubsectionOptions(sectionId,item.subsection_id||"");document.getElementById("content-status").value=item.status;document.getElementById("content-visibility").value=item.visibility||"public";syncAudiencePicker("content-visibility","content-user-picker",item.allowed_user_ids||[]);document.getElementById("content-title").value=item.title;document.getElementById("content-excerpt").value=item.excerpt||"";document.getElementById("content-cover").value=item.cover_media_id||"";document.getElementById("content-editor").innerHTML=item.body_html||"<p></p>";resetArticleAttachmentTracking(true);clear(document.getElementById("article-upload-queue"));app.assetUploadContext=null;document.getElementById("delete-content").classList.remove("hidden");document.getElementById("article-asset-notice").textContent="";updateCoverPreview();syncCurrentContentPanels();renderContentList()}
+    function contentPayload(deleteAssetIds=[]){const sectionId=document.getElementById("content-section").value;return{sectionId,subsectionId:document.getElementById("content-subsection").value||null,type:sectionId==="section-guides"?"guide":"article",status:document.getElementById("content-status").value,...visibilityPayload("content-visibility","content-user-picker"),title:document.getElementById("content-title").value,excerpt:document.getElementById("content-excerpt").value,coverMediaId:document.getElementById("content-cover").value,bodyHtml:document.getElementById("content-editor").innerHTML,deleteAssetIds}}
 
     async function loadChangelogs(){app.changelogs=await api("/api/admin/changelogs");renderChangelogs()}
     function renderChangelogs(){const list=document.getElementById("changelog-list");clear(list);app.changelogs.forEach(item=>{const row=document.createElement("div");row.className="list-item";const title=document.createElement("div");title.className="list-title";title.textContent=`v${item.version} · ${item.title}`;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${formatDate(item.published_at)} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editChangelog(item));list.append(row)})}
@@ -1165,11 +1209,50 @@
     async function deleteAsset(item){if(!confirm(`确定永久删除“${item.display_name}”及其全部清晰度/预览版本吗？`))return;await api(`/api/admin/assets/${item.id}`,{method:"DELETE"});await Promise.all([loadAssets(),loadDashboard()])}
 
     function createUploadJob(file,scope="library"){
-      const queue=document.getElementById(scope==="article"?"article-upload-queue":scope==="gallery"?"media-video-upload-queue":scope==="section"?"content-section-upload-queue":"asset-upload-queue");const job=document.createElement("div");job.className="upload-job";const head=document.createElement("div");head.className="upload-job-head";const name=document.createElement("strong");name.textContent=file.name;const state=document.createElement("span");state.textContent="等待上传";head.append(name,state);const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
-      return {update(percent,text){bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;state.textContent=text},fail(text){job.style.borderColor="#e4aaa5";state.textContent=text}};
+      const queue=document.getElementById(scope==="article"?"article-upload-queue":scope==="gallery"?"media-video-upload-queue":scope==="section"?"content-section-upload-queue":"asset-upload-queue");
+      const job=document.createElement("div");job.className="upload-job";
+      const head=document.createElement("div");head.className="upload-job-head";
+      const name=document.createElement("strong");name.textContent=file.name;
+      const controls=document.createElement("div");controls.className="upload-job-controls";
+      const state=document.createElement("span");state.textContent="等待上传";
+      const pause=button("暂停","btn small ghost");pause.setAttribute("aria-label",`暂停上传 ${file.name}`);
+      controls.append(state,pause);head.append(name,controls);
+      const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
+
+      let paused=false;let terminal=false;let activeController=null;let lastState="等待上传";let resumeWaiters=[];
+      const pauseAbortedRequests=new WeakSet();
+      const resume=()=>{paused=false;pause.textContent="暂停";pause.setAttribute("aria-label",`暂停上传 ${file.name}`);state.textContent=lastState;const waiters=resumeWaiters;resumeWaiters=[];waiters.forEach(resolve=>resolve())};
+      pause.addEventListener("click",()=>{
+        if(terminal)return;
+        if(paused){resume();return}
+        paused=true;pause.textContent="恢复";pause.setAttribute("aria-label",`恢复上传 ${file.name}`);state.textContent="已暂停（恢复后会安全重传当前分片）";
+        if(activeController){pauseAbortedRequests.add(activeController);activeController.abort()}
+      });
+      const update=(percent,text)=>{bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;lastState=text;if(!paused)state.textContent=text};
+      return {
+        update,
+        waitUntilResumed(){return paused?new Promise(resolve=>resumeWaiters.push(resolve)):Promise.resolve()},
+        beginPartRequest(){activeController=new AbortController();return activeController},
+        endPartRequest(controller){if(activeController===controller)activeController=null},
+        wasPausedAbort(controller){return pauseAbortedRequests.has(controller)},
+        lock(text){if(paused)resume();terminal=true;pause.disabled=true;pause.textContent="处理中";update(100,text)},
+        finish(text){terminal=true;pause.disabled=true;pause.textContent="完成";update(100,text)},
+        fail(text){terminal=true;if(paused)resume();pause.disabled=true;pause.textContent="失败";job.style.borderColor="#e4aaa5";lastState=text;state.textContent=text},
+      };
     }
-    async function uploadPartWithRetry(url,blob){
-      let lastError;for(let attempt=1;attempt<=3;attempt+=1){try{const response=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:blob});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||`分片上传失败（${response.status}）`);return data}catch(error){lastError=error;if(attempt<3)await new Promise(resolve=>setTimeout(resolve,450*attempt))}}
+    async function uploadPartWithRetry(url,blob,job){
+      let lastError;let attempt=1;
+      while(attempt<=3){
+        await job.waitUntilResumed();
+        const controller=job.beginPartRequest();
+        try{
+          const response=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:blob,signal:controller.signal});
+          const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||`分片上传失败（${response.status}）`);return data;
+        }catch(error){
+          if(job.wasPausedAbort(controller))continue;
+          lastError=error;if(attempt>=3)break;await new Promise(resolve=>setTimeout(resolve,450*attempt));attempt+=1;
+        }finally{job.endPartRequest(controller)}
+      }
       throw lastError;
     }
     async function uploadAssetFile(file,{folderId="",relativePath="",assetId="",variantLabel="",sectionId="",subsectionId="",albumId="",contentId="",scope="library",visibility="",allowedUserIds=null,note=""}={}){
@@ -1177,8 +1260,8 @@
       try{
         job.update(0,"正在建立上传会话…");session=await api("/api/admin/asset-uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({assetId,variantLabel,folderId,sectionId,subsectionId,albumId,contentId,scope,filename:file.name,displayName:file.name,mimeType:file.type||"application/octet-stream",sizeBytes:file.size,relativePath,note,visibility:uploadVisibility,allowedUserIds:uploadAudience,downloadPolicy:document.getElementById("asset-download-policy").value})});
         const parts=[];const count=Math.ceil(file.size/session.partSize);if(count>session.maxParts)throw new Error("文件分片数超过 R2 上限");
-        for(let index=0;index<count;index+=1){const start=index*session.partSize;const end=Math.min(file.size,start+session.partSize);job.update(start/file.size*100,`上传第 ${index+1}/${count} 片…`);const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${index+1}`,file.slice(start,end));parts.push(result);job.update(end/file.size*100,`已上传 ${formatBytes(end)} / ${formatBytes(file.size)}`)}
-        job.update(100,"正在合并并校验…");await api(`/api/admin/asset-uploads/${session.sessionId}/complete`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({parts})});job.update(100,"上传完成");return session.assetId;
+        for(let index=0;index<count;index+=1){const start=index*session.partSize;const end=Math.min(file.size,start+session.partSize);await job.waitUntilResumed();job.update(start/file.size*100,`上传第 ${index+1}/${count} 片…`);const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${index+1}`,file.slice(start,end),job);parts.push(result);job.update(end/file.size*100,`已上传 ${formatBytes(end)} / ${formatBytes(file.size)}`)}
+        await job.waitUntilResumed();job.lock("正在合并并校验…");await api(`/api/admin/asset-uploads/${session.sessionId}/complete`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({parts})});job.finish("上传完成");return session.assetId;
       }catch(error){job.fail(`失败：${error.message}`);if(session?.sessionId)await api(`/api/admin/asset-uploads/${session.sessionId}`,{method:"DELETE"}).catch(()=>null);throw error}
     }
     async function ensureFolderPath(parts,parentId,choice){
@@ -1208,6 +1291,7 @@
       const editor=document.getElementById("content-editor");editor.focus();const selection=getSelection();if(app.editorRange){selection.removeAllRanges();selection.addRange(app.editorRange)}
       const embed=document.createElement("div");embed.className="resource-embed";embed.dataset.resourceType=type;embed.dataset.resourceId=id;embed.textContent=`已插入：${label}`;
       if(selection.rangeCount){const range=selection.getRangeAt(0);range.deleteContents();range.insertNode(embed);range.setStartAfter(embed);range.collapse(true);selection.removeAllRanges();selection.addRange(range)}else editor.append(embed);
+      if(type==="asset")app.articleSessionAssetIds.add(id);
       document.getElementById("resource-picker").close();document.getElementById("content-notice").textContent="资源已插入正文，保存文章后生效。";
     }
 
@@ -1364,12 +1448,14 @@
     async function loadUsers(){
       const contentSelection=selectedAudienceIds("content-user-picker");
       const mediaSelection=selectedAudienceIds("media-user-picker");
+      const profileSelections=Object.fromEntries(Object.entries(profileAccessControls).map(([sectionKey,[,pickerId]])=>[sectionKey,selectedAudienceIds(pickerId)]));
       [app.users,app.passwordResets]=await Promise.all([
         api("/api/admin/users"),api("/api/admin/password-resets"),
       ]);
       renderUsers();renderPasswordResets();
       renderAudiencePicker("content-user-picker",contentSelection);
       renderAudiencePicker("media-user-picker",mediaSelection);
+      Object.entries(profileAccessControls).forEach(([sectionKey,[selectId,pickerId]])=>syncAudiencePicker(selectId,pickerId,profileSelections[sectionKey]));
       if(app.media.length)renderMedia();
     }
 
@@ -1461,7 +1547,13 @@
     }
 
     function refreshOwnerOptions(){const select=document.getElementById("setting-owner-user");const current=app.settings.owner_user_id||select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent="尚未绑定";select.append(none);approvedAudienceUsers().forEach(user=>{const option=document.createElement("option");option.value=user.id;option.textContent=`${user.nickname}（@${user.username}）`;select.append(option)});if([...select.options].some(option=>option.value===current))select.value=current}
-    async function loadSettings(){app.settings=await api("/api/admin/settings");const values={"setting-site-title":"site_title","setting-owner-name":"owner_name","setting-site-version":"site_version","setting-school":"school","setting-intro":"intro","setting-usage-guide":"usage_guide","setting-email":"contact_email","setting-guest-limit":"guest_daily_limit","setting-about-heading":"about_heading","setting-about-intro":"about_intro","setting-about-school-label":"about_school_label","setting-about-learning-title":"about_learning_title","setting-about-learning-items":"about_learning_items","setting-about-contact-title":"about_contact_title","setting-email-label":"contact_email_label","setting-email-intl":"contact_email_intl","setting-email-intl-label":"contact_email_intl_label"};Object.entries(values).forEach(([id,key])=>{document.getElementById(id).value=app.settings[key]||""});refreshOwnerOptions()}
+    async function loadSettings(){
+      app.settings=await api("/api/admin/settings");
+      const values={"setting-site-title":"site_title","setting-owner-name":"owner_name","setting-site-version":"site_version","setting-school":"school","setting-intro":"intro","setting-usage-guide":"usage_guide","setting-email":"contact_email","setting-guest-limit":"guest_daily_limit","setting-about-heading":"about_heading","setting-about-intro":"about_intro","setting-about-school-label":"about_school_label","setting-about-learning-title":"about_learning_title","setting-about-learning-items":"about_learning_items","setting-about-contact-title":"about_contact_title","setting-email-label":"contact_email_label","setting-email-intl":"contact_email_intl","setting-email-intl-label":"contact_email_intl_label"};
+      Object.entries(values).forEach(([id,key])=>{document.getElementById(id).value=app.settings[key]||""});
+      Object.entries(profileAccessControls).forEach(([sectionKey,[selectId,pickerId]])=>{const access=app.settings.profile_access?.[sectionKey]||{visibility:"public",allowedUserIds:[]};document.getElementById(selectId).value=access.visibility||"public";syncAudiencePicker(selectId,pickerId,access.allowedUserIds||[])});
+      refreshOwnerOptions();
+    }
 
     async function uploadInline(file) {
       const visibility = document.getElementById("content-visibility").value;
@@ -1476,6 +1568,16 @@
       await appendCompressedPreview(form, file);
       const item = await api("/api/admin/media", { method: "POST", body: form });
       app.media.unshift(item); refreshCoverOptions(); return item;
+    }
+
+    function insertInlineImageAtEditorRange(item,file){
+      const editor=document.getElementById("content-editor");editor.focus();
+      let range=app.editorRange?.cloneRange();
+      if(!range||!editor.contains(range.commonAncestorContainer)){range=document.createRange();range.selectNodeContents(editor);range.collapse(false)}
+      const image=document.createElement("img");image.src=item.url;image.alt=file.name;image.loading="lazy";
+      const lineBreak=document.createElement("br");const fragment=document.createDocumentFragment();fragment.append(image,lineBreak);
+      range.deleteContents();range.insertNode(fragment);range.setStartAfter(lineBreak);range.collapse(true);
+      const selection=getSelection();selection.removeAllRanges();selection.addRange(range);app.editorRange=range.cloneRange();
     }
 
     async function uploadSectionPhoto(file,{sectionId,subsectionId="",caption="",visibility="public",allowedUserIds=[]}={}){
@@ -1569,12 +1671,16 @@
       event.preventDefault();
       const id=document.getElementById("content-id").value;
       const notice=document.getElementById("content-notice");
-      const payload=contentPayload();
+      const deleteAssetIds=id?removedArticleAssetIdsForSave():[];
+      const payload=contentPayload(deleteAssetIds);
       if(!validateVisibilityChoice(payload,notice))return;
       notice.textContent="正在保存…";
       try{
         const result=await api(id?`/api/admin/content/${id}`:"/api/admin/content",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-        notice.textContent="已保存。";await loadContent();await loadDashboard();const saved=app.content.find(item=>item.id===(id||result.id));if(saved)editContent(saved);
+        const failedDeletes=result.failedDeleteAssetIds?.length||0;
+        notice.textContent=failedDeletes?`文章已保存，但有 ${failedDeletes} 个附件删除失败并已保留。`:"已保存。";
+        await Promise.all([loadContent(),loadDashboard(),...(deleteAssetIds.length?[loadAssets()]:[])]);
+        const saved=app.content.find(item=>item.id===(id||result.id));if(saved)editContent(saved);
       }catch(error){notice.textContent=error.message}
     });
     document.getElementById("delete-content").addEventListener("click",async()=>{const id=document.getElementById("content-id").value;if(!id||!confirm("确定删除这篇内容及其全部评论吗？"))return;await api(`/api/admin/content/${id}`,{method:"DELETE"});resetContentForm();await loadContent();await loadComments();await loadDashboard()});
@@ -1594,12 +1700,12 @@
         if(savedRange&&!savedRange.collapsed)document.execCommand("createLink",false,url.href);
         else{const anchor=document.createElement("a");anchor.href=url.href;anchor.textContent=url.href;anchor.target="_blank";anchor.rel="noopener noreferrer";const range=savedRange||document.createRange();if(!savedRange)range.selectNodeContents(editor);range.collapse(false);range.insertNode(anchor);range.setStartAfter(anchor);range.collapse(true);selection.removeAllRanges();selection.addRange(range)}
       }catch{alert("网址格式不正确，请填写完整的 http:// 或 https:// 地址。");}
-    });document.getElementById("insert-image").addEventListener("click",()=>document.getElementById("inline-image-input").click());
+    });document.getElementById("insert-image").addEventListener("click",()=>{const editor=document.getElementById("content-editor");const selection=getSelection();app.editorRange=selection.rangeCount&&editor.contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;document.getElementById("inline-image-input").click()});
     document.getElementById("insert-resource").addEventListener("click",()=>{const selection=getSelection();app.editorRange=selection.rangeCount&&document.getElementById("content-editor").contains(selection.anchorNode)?selection.getRangeAt(0).cloneRange():null;renderResourcePicker();document.getElementById("resource-picker").showModal()});
     document.getElementById("resource-picker-close").addEventListener("click",()=>document.getElementById("resource-picker").close());
     document.getElementById("content-editor").addEventListener("click",event=>{document.querySelectorAll("#content-editor .resource-embed.is-selected").forEach(node=>node.classList.remove("is-selected"));event.target.closest?.(".resource-embed")?.classList.add("is-selected")});
-    document.getElementById("remove-editor-resource").addEventListener("click",()=>{const selected=document.querySelector("#content-editor .resource-embed.is-selected");if(!selected){alert("请先点击正文中要删除的文件卡片。");return}selected.remove();document.getElementById("content-notice").textContent="资源已从正文移除，保存文章后生效。"});
-    document.getElementById("inline-image-input").addEventListener("change",async event=>{const file=event.target.files[0];if(!file)return;const notice=document.getElementById("content-notice");notice.textContent="正在上传插图…";try{const item=await uploadInline(file);document.getElementById("content-editor").focus();document.execCommand("insertImage",false,item.url);notice.textContent="插图已插入正文。"}catch(error){notice.textContent=error.message}event.target.value=""});
+    document.getElementById("remove-editor-resource").addEventListener("click",()=>{const selected=document.querySelector("#content-editor .resource-embed.is-selected");if(!selected){alert("请先点击正文中要删除的文件卡片。");return}const assetId=selected.dataset.resourceType==="asset"?selected.dataset.resourceId:"";if(assetId)app.articleSessionAssetIds.add(assetId);const permanentlyDelete=assetId?decideArticleAssetRemoval(assetId):false;selected.remove();document.getElementById("content-notice").textContent=permanentlyDelete?"资源已移出正文；保存文章后会同时永久删除该附件。":"资源已移出正文；保存文章后仍会保留在当前文章附件栏。"});
+    document.getElementById("inline-image-input").addEventListener("change",async event=>{const files=[...event.target.files];event.target.value="";if(!files.length)return;const notice=document.getElementById("content-notice");let completed=0;const failures=[];for(const file of files){notice.textContent=`正在上传插图 ${completed+1}/${files.length}…`;try{const item=await uploadInline(file);insertInlineImageAtEditorRange(item,file);completed+=1}catch(error){failures.push(`${file.name}：${error.message}`)}}notice.textContent=failures.length?`已插入 ${completed}/${files.length} 张图片；${failures.length} 张失败：${failures.join("；")}`:`已插入 ${completed} 张图片。`});
 
     document.getElementById("changelog-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("changelog-id").value;const notice=document.getElementById("changelog-notice");const date=document.getElementById("changelog-date").value;try{await api(id?`/api/admin/changelogs/${id}`:"/api/admin/changelogs",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({version:document.getElementById("changelog-version").value,title:document.getElementById("changelog-title").value,body:document.getElementById("changelog-body").value,publishedAt:date?new Date(date).toISOString():new Date().toISOString(),sortOrder:Number(document.getElementById("changelog-sort").value||0)})});notice.textContent="更新记录已保存，精确时间、顺序和网页版本号已同步。";resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()}catch(error){notice.textContent=error.message}});
     document.getElementById("new-changelog").addEventListener("click",resetChangelog);document.getElementById("delete-changelog").addEventListener("click",async()=>{const id=document.getElementById("changelog-id").value;if(!id||!confirm("确定删除这条更新记录吗？"))return;await api(`/api/admin/changelogs/${id}`,{method:"DELETE"});resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()});
@@ -1616,34 +1722,32 @@
       // currentTarget 只在事件派发期间可靠；异步压缩/上传后它可能已变为 null。
       // 因此必须在第一个 await 之前保存表单引用，上传成功后再用它 reset()。
       const mediaForm = event.currentTarget;
-      const file = document.getElementById("media-file").files[0];
+      const files = [...document.getElementById("media-file").files];
       const notice = document.getElementById("media-notice");
       const submit = mediaForm.querySelector("button[type='submit']");
-      if (!file) return;
+      if (!files.length) return;
       const visibility = document.getElementById("media-visibility").value;
       const allowedUserIds = selectedAudienceIds("media-user-picker");
+      const sectionId = document.getElementById("media-section").value;
+      const subsectionId = document.getElementById("media-album").value;
+      const caption = document.getElementById("media-caption").value.trim();
       if (!validateVisibilityChoice({visibility,allowedUserIds},notice)) return;
       submit.disabled = true;
-      try {
-        const form = new FormData();
-        form.append("file", file);
-        form.append("sectionId", document.getElementById("media-section").value);
-        form.append("subsectionId", document.getElementById("media-album").value);
-        form.append("caption", document.getElementById("media-caption").value);
-        form.append("kind", "photo");
-        form.append("visibility", visibility);
-        form.append("allowedUserIds", JSON.stringify(allowedUserIds));
-        notice.textContent = "正在生成压缩预览…";
-        await appendCompressedPreview(form, file, { required: true });
-        notice.textContent = "正在上传原片和压缩预览…";
-        await api("/api/admin/media", { method: "POST", body: form });
-        mediaForm.reset(); syncAudiencePicker("media-visibility","media-user-picker",[]); notice.textContent = "上传成功：网页使用压缩预览，下载链接保留原片。";
-        await loadAlbumsAndMedia(); await loadDashboard();
-      } catch (error) {
-        notice.textContent = error.message;
-      } finally {
-        submit.disabled = false;
-      }
+      try{
+        let completed=0;const failures=[];
+        for(const file of files){
+          try {
+            const form = new FormData();
+            form.append("file", file);form.append("sectionId", sectionId);form.append("subsectionId", subsectionId);
+            form.append("caption", caption || file.name);form.append("kind", "photo");form.append("visibility", visibility);form.append("allowedUserIds", JSON.stringify(allowedUserIds));
+            notice.textContent = `正在处理第 ${completed+failures.length+1}/${files.length} 张图片…`;
+            await appendCompressedPreview(form, file, { required: true });
+            await api("/api/admin/media", { method: "POST", body: form });completed+=1;
+          } catch (error) { failures.push(`${file.name}：${error.message}`); }
+        }
+        if(completed){mediaForm.reset();syncAudiencePicker("media-visibility","media-user-picker",[]);await Promise.all([loadAlbumsAndMedia(),loadDashboard()])}
+        notice.textContent=failures.length?`已上传 ${completed}/${files.length} 张；${failures.length} 张失败：${failures.join("；")}`:`已上传 ${completed} 张图片，网页使用压缩预览并保留原片。`;
+      }catch(error){notice.textContent=`图片列表刷新失败：${error.message}`}finally{submit.disabled=false}
     });
     document.getElementById("asset-current-folder").addEventListener("change",event=>{app.currentAssetFolder=event.target.value;renderAssetBrowser()});
     document.getElementById("asset-subsection").addEventListener("change",renderAssetBrowser);
@@ -1658,14 +1762,15 @@
     document.getElementById("article-upload-file").addEventListener("click",()=>{const contentId=document.getElementById("content-id").value;if(!contentId){alert("请先保存文章草稿");return}const choice=visibilityPayload("content-visibility","content-user-picker");if(!validateVisibilityChoice(choice))return;const input=document.getElementById("article-file-input");app.assetUploadContext={scope:"article",contentId,...choice};input.click()});
     document.getElementById("article-file-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";await runAssetUpload(files,context)});
     document.getElementById("content-section-file-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";await runAssetUpload(files,context)});
-    document.getElementById("content-section-photo-input").addEventListener("change",async event=>{const file=event.target.files[0];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";if(!file)return;const notice=document.getElementById("content-section-asset-notice");try{notice.textContent="正在上传图片…";await uploadSectionPhoto(file,context);notice.textContent="图片已上传到当前文章板块。";await Promise.all([loadAlbumsAndMedia(),loadDashboard()])}catch(error){notice.textContent=error.message}});
-    document.getElementById("asset-photo-input").addEventListener("change",async event=>{const file=event.target.files[0];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";if(!file)return;const notice=document.getElementById("asset-notice");try{notice.textContent="正在上传图片…";await uploadSectionPhoto(file,context);notice.textContent="图片已上传到文件板块。";await Promise.all([loadAlbumsAndMedia(),loadDashboard()])}catch(error){notice.textContent=error.message}});
+    document.getElementById("content-section-photo-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";if(!files.length)return;const notice=document.getElementById("content-section-asset-notice");let completed=0;const failures=[];for(const file of files){try{notice.textContent=`正在上传图片 ${completed+failures.length+1}/${files.length}…`;await uploadSectionPhoto(file,{...context,caption:file.name});completed+=1}catch(error){failures.push(`${file.name}：${error.message}`)}}if(completed)await Promise.all([loadAlbumsAndMedia(),loadDashboard()]);notice.textContent=failures.length?`已上传 ${completed}/${files.length} 张；${failures.length} 张失败：${failures.join("；")}`:`${completed} 张图片已上传到当前文章板块。`});
+    document.getElementById("asset-photo-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";if(!files.length)return;const notice=document.getElementById("asset-notice");let completed=0;const failures=[];for(const file of files){try{notice.textContent=`正在上传图片 ${completed+failures.length+1}/${files.length}…`;await uploadSectionPhoto(file,{...context,caption:file.name});completed+=1}catch(error){failures.push(`${file.name}：${error.message}`)}}if(completed)await Promise.all([loadAlbumsAndMedia(),loadDashboard()]);notice.textContent=failures.length?`已上传 ${completed}/${files.length} 张；${failures.length} 张失败：${failures.join("；")}`:`${completed} 张图片已上传到文件板块。`});
     document.getElementById("asset-upload-folder").addEventListener("click",()=>{const choice=visibilityPayload("asset-upload-visibility","asset-upload-user-picker");if(!validateVisibilityChoice(choice))return;app.assetUploadContext={scope:"library",subsectionId:document.getElementById("asset-subsection").value,note:document.getElementById("asset-upload-note").value,folderMode:true,...choice};document.getElementById("asset-folder-input").click()});
     document.getElementById("asset-file-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{};app.assetUploadContext=null;event.target.value="";event.target.accept="";await runAssetUpload(files,context)});
     document.getElementById("asset-folder-input").addEventListener("change",async event=>{const files=[...event.target.files];const context=app.assetUploadContext||{scope:"library",folderMode:true};app.assetUploadContext=null;event.target.value="";await runAssetUpload(files,context)});
     document.getElementById("asset-variant-input").addEventListener("change",async event=>{const file=event.target.files[0];event.target.value="";const target=app.variantTarget;app.variantTarget=null;if(!file||!target)return;try{await uploadAssetFile(file,{assetId:target.item.id,variantLabel:target.label});await loadAssets()}catch(error){document.getElementById("asset-notice").textContent=`版本上传失败：${error.message}`}});
     document.getElementById("asset-poster-input").addEventListener("change",async event=>{const file=event.target.files[0];const target=app.posterTarget;event.target.value="";app.posterTarget=null;if(!file||!target)return;const form=new FormData();form.append("poster",file,file.name);try{await api(`/api/admin/assets/${target.id}/poster`,{method:"POST",body:form});await loadAssets()}catch(error){alert(`视频封面保存失败：${error.message}`)}});
     document.getElementById("visibility-editor-mode").addEventListener("change",()=>syncAudiencePicker("visibility-editor-mode","visibility-editor-users",selectedAudienceIds("visibility-editor-users")));
+    Object.values(profileAccessControls).forEach(([selectId,pickerId])=>document.getElementById(selectId).addEventListener("change",()=>syncAudiencePicker(selectId,pickerId,selectedAudienceIds(pickerId))));
     document.getElementById("visibility-editor-form").addEventListener("submit",event=>{event.preventDefault();const dialog=document.getElementById("visibility-editor-dialog");const editor=app.visibilityEditor;if(!editor)return;if(event.submitter?.value==="cancel"){app.visibilityEditor=null;dialog.close("cancel");editor.resolve(null);return}const choice=visibilityPayload("visibility-editor-mode","visibility-editor-users");if(!validateVisibilityChoice(choice))return;app.visibilityEditor=null;dialog.close("save");editor.resolve(choice)});
     document.getElementById("visibility-editor-dialog").addEventListener("cancel",event=>{event.preventDefault();const editor=app.visibilityEditor;app.visibilityEditor=null;event.currentTarget.close("cancel");editor?.resolve(null)});
     document.getElementById("refresh-comments").addEventListener("click",loadComments);
@@ -1678,7 +1783,13 @@
     document.getElementById("visitor-day").addEventListener("change",()=>loadGuestAnalytics().catch(error=>alert(error.message)));
     document.getElementById("refresh-users").addEventListener("click",async()=>{await loadUsers();await loadDashboard()});
     document.getElementById("studio-message-form").addEventListener("submit",async event=>{event.preventDefault();const input=document.getElementById("studio-message-input");if(!app.messagePeer||!input.value.trim())return;await api("/api/admin/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipientUserId:app.messagePeer.id,body:input.value})});input.value="";await openStudioMessage(app.messagePeer.id);await loadStudioMessages()});
-    document.getElementById("settings-form").addEventListener("submit",async event=>{event.preventDefault();const notice=document.getElementById("settings-notice");try{app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,usage_guide:document.getElementById("setting-usage-guide").value,contact_email:document.getElementById("setting-email").value,guest_daily_limit:document.getElementById("setting-guest-limit").value,about_heading:document.getElementById("setting-about-heading").value,about_intro:document.getElementById("setting-about-intro").value,about_school_label:document.getElementById("setting-about-school-label").value,about_learning_title:document.getElementById("setting-about-learning-title").value,about_learning_items:document.getElementById("setting-about-learning-items").value,about_contact_title:document.getElementById("setting-about-contact-title").value,contact_email_label:document.getElementById("setting-email-label").value,contact_email_intl:document.getElementById("setting-email-intl").value,contact_email_intl_label:document.getElementById("setting-email-intl-label").value,owner_user_id:document.getElementById("setting-owner-user").value})});notice.textContent="网站设置已保存。"}catch(error){notice.textContent=error.message}});
+    document.getElementById("settings-form").addEventListener("submit",async event=>{
+      event.preventDefault();const notice=document.getElementById("settings-notice");const profileAccess=profileAccessPayload();if(!validateProfileAccess(profileAccess,notice))return;
+      try{
+        app.settings=await api("/api/admin/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({site_title:document.getElementById("setting-site-title").value,owner_name:document.getElementById("setting-owner-name").value,site_version:document.getElementById("setting-site-version").value,school:document.getElementById("setting-school").value,intro:document.getElementById("setting-intro").value,usage_guide:document.getElementById("setting-usage-guide").value,contact_email:document.getElementById("setting-email").value,guest_daily_limit:document.getElementById("setting-guest-limit").value,about_heading:document.getElementById("setting-about-heading").value,about_intro:document.getElementById("setting-about-intro").value,about_school_label:document.getElementById("setting-about-school-label").value,about_learning_title:document.getElementById("setting-about-learning-title").value,about_learning_items:document.getElementById("setting-about-learning-items").value,about_contact_title:document.getElementById("setting-about-contact-title").value,contact_email_label:document.getElementById("setting-email-label").value,contact_email_intl:document.getElementById("setting-email-intl").value,contact_email_intl_label:document.getElementById("setting-email-intl-label").value,owner_user_id:document.getElementById("setting-owner-user").value,profileAccess})});
+        notice.textContent="网站设置和个人信息权限已保存。";
+      }catch(error){notice.textContent=error.message}
+    });
 
     // 用户在线状态每60秒更新一次；未登录后台时不会发起刷新请求。
     window.setInterval(()=>{if(!document.getElementById("studio").classList.contains("hidden"))loadUsers().catch(()=>null)},60_000);

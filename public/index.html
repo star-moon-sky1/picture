@@ -1587,7 +1587,7 @@
       <nav class="nav" aria-label="主要导航">
         <button data-section="home" title="主页"><span class="nav-icon">⌂</span><span class="nav-label">主页</span></button>
         <button data-section="portfolio" title="个人空间"><span class="nav-icon">▦</span><span class="nav-label">个人空间</span></button>
-        <button data-section="about" title="关于我"><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
+        <button id="about-nav-button" data-section="about" title="关于我" hidden><span class="nav-icon">◎</span><span class="nav-label">关于我</span></button>
         <button data-section="feedback" title="留言与反馈"><span class="nav-icon">◇</span><span class="nav-label">留言与反馈</span></button>
         <button data-section="ai-helper" title="AI 助手"><span class="nav-icon">✦</span><span class="nav-label">AI 助手</span></button>
         <button id="account-nav-button" data-section="settings" title="设置"><span class="nav-icon">⚙</span><span id="account-nav-label" class="nav-label">设置</span></button>
@@ -1660,19 +1660,23 @@
       </section>
 
       <!-- ==================== 关于我 ==================== -->
-      <section id="about" class="content-section">
+      <section id="about" class="content-section" hidden>
         <div class="section-inner">
           <h1 id="about-heading">关于我</h1>
           <p id="about-intro" class="lead" hidden></p>
-          <div class="profile-grid">
-            <div class="info-card"><span id="about-school-label">就读院校与专业</span><strong id="about-school">北京理工大学 计算机学院 计算机科学与技术</strong></div>
+          <div id="about-school-section" class="profile-grid" hidden>
+            <div class="info-card"><span id="about-school-label">就读院校与专业</span><strong id="about-school"></strong></div>
           </div>
-          <h2 id="about-learning-title">目前学习方向</h2>
-          <div id="about-learning-items" class="badges"></div>
-          <h2 id="about-contact-title">联系方式</h2>
-          <div class="profile-grid">
-            <div class="info-card"><span id="contact-email-label">国内邮箱</span><a id="contact-email" href="mailto:1598116329@qq.com">1598116329@qq.com</a></div>
-            <div class="info-card"><span id="contact-email-intl-label">国际邮箱</span><a id="contact-email-intl" href="mailto:xingyueji8@gmail.com">xingyueji8@gmail.com</a></div>
+          <div id="about-learning-section" hidden>
+            <h2 id="about-learning-title">目前学习方向</h2>
+            <div id="about-learning-items" class="badges"></div>
+          </div>
+          <div id="about-contact-section" hidden>
+            <h2 id="about-contact-title">联系方式</h2>
+            <div class="profile-grid">
+              <div class="info-card"><span id="contact-email-label">国内邮箱</span><a id="contact-email"></a></div>
+              <div class="info-card"><span id="contact-email-intl-label">国际邮箱</span><a id="contact-email-intl"></a></div>
+            </div>
           </div>
         </div>
       </section>
@@ -3308,28 +3312,43 @@
       renderUsageGuide(settings.usage_guide);
       document.getElementById("site-version").textContent = `网站版本 v${settings.site_version || "2.2.0.0"}`;
 
+      const validAboutSections = ["intro", "school", "learning", "contact"];
+      const visibleAboutSections = new Set(Array.isArray(settings.about_visible_sections)
+        ? settings.about_visible_sections.filter((item) => validAboutSections.includes(item))
+        : validAboutSections);
+      const aboutVisible = visibleAboutSections.size > 0;
+      document.getElementById("about-nav-button").hidden = !aboutVisible;
+      document.getElementById("about").hidden = !aboutVisible;
       document.getElementById("about-heading").textContent = settings.about_heading || "关于我";
+
       const aboutIntro = String(settings.about_intro || "");
       const aboutIntroNode = document.getElementById("about-intro");
-      aboutIntroNode.textContent = aboutIntro;
-      aboutIntroNode.hidden = !aboutIntro.trim();
+      aboutIntroNode.textContent = visibleAboutSections.has("intro") ? aboutIntro : "";
+      aboutIntroNode.hidden = !visibleAboutSections.has("intro") || !aboutIntro.trim();
+
+      const schoolSection = document.getElementById("about-school-section");
+      schoolSection.hidden = !visibleAboutSections.has("school");
       document.getElementById("about-school-label").textContent = settings.about_school_label || "就读院校与专业";
-      document.getElementById("about-school").textContent = settings.school || "北京理工大学 计算机学院";
+      document.getElementById("about-school").textContent = visibleAboutSections.has("school") ? String(settings.school || "") : "";
+
+      const learningSection = document.getElementById("about-learning-section");
+      learningSection.hidden = !visibleAboutSections.has("learning");
       document.getElementById("about-learning-title").textContent = settings.about_learning_title || "目前学习方向";
-      const learning = document.getElementById("about-learning-items");
-      learning.replaceChildren();
-      String(settings.about_learning_items || "Python\nC\nHTML / CSS / JavaScript\nOpenHarmony开发")
+      const learning = document.getElementById("about-learning-items");learning.replaceChildren();
+      if(visibleAboutSections.has("learning"))String(settings.about_learning_items || "")
         .split(/\n+/).map((item) => item.trim()).filter(Boolean).forEach((item) => {
           const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = item; learning.append(badge);
         });
+
+      const contactSection = document.getElementById("about-contact-section");
+      contactSection.hidden = !visibleAboutSections.has("contact");
       document.getElementById("about-contact-title").textContent = settings.about_contact_title || "联系方式";
       document.getElementById("contact-email-label").textContent = settings.contact_email_label || "国内邮箱";
-      const email = settings.contact_email || "1598116329@qq.com";
-      const contact = document.getElementById("contact-email"); contact.textContent = email; contact.href = `mailto:${email}`;
+      const email = visibleAboutSections.has("contact") ? String(settings.contact_email || "") : "";
+      const contact = document.getElementById("contact-email");contact.textContent = email;contact.toggleAttribute("href",Boolean(email));if(email)contact.href = `mailto:${email}`;
       document.getElementById("contact-email-intl-label").textContent = settings.contact_email_intl_label || "国际邮箱";
-      const intlEmail = settings.contact_email_intl || "xingyueji8@gmail.com";
-      const intlContact = document.getElementById("contact-email-intl");
-      intlContact.textContent = intlEmail; intlContact.href = `mailto:${intlEmail}`;
+      const intlEmail = visibleAboutSections.has("contact") ? String(settings.contact_email_intl || "") : "";
+      const intlContact = document.getElementById("contact-email-intl");intlContact.textContent = intlEmail;intlContact.toggleAttribute("href",Boolean(intlEmail));if(intlEmail)intlContact.href = `mailto:${intlEmail}`;
     }
 
     /* ---------- 07. 普通用户账户状态、昵称和密码。 ---------- */
