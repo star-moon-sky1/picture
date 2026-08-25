@@ -4,6 +4,10 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-08-06",
 
+  // 正式站只允许通过自定义域名访问，关闭 workers.dev 与临时预览入口。
+  "workers_dev": false,
+  "preview_urls": false,
+
   // 保留在 Cloudflare 控制台中配置的普通环境变量。
   // 如果不启用该选项，Git 自动部署 Worker 时会用本文件的配置覆盖控制台变量，
   // 例如 TURNSTILE_SITE_KEY 会在一次部署后消失；Secret 类型变量不受此项影响。
@@ -16,7 +20,8 @@
     "directory": "./public",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "run_worker_first": ["/api/*", "/media/*", "/files/*"]
+    // 静态页面也先经过 Worker，确保 HTTP 跳转和安全响应头不会被绕过。
+    "run_worker_first": true
   },
   "d1_databases": [
     {

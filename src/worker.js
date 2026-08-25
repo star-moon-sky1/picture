@@ -5,8 +5,12 @@
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
 const APP_VERSION = "2.2.0.0";
+const DEFAULT_CANONICAL_HOSTNAME = "xingyueji.com.cn";
+const DEFAULT_ALLOWED_HOSTNAMES = Object.freeze([DEFAULT_CANONICAL_HOSTNAME, `www.${DEFAULT_CANONICAL_HOSTNAME}`]);
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 const SESSION_COOKIE = "xyj_admin";
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const SESSION_TTL_SECONDS = 60 * 60 * 12;
+const ADMIN_SESSION_TOUCH_SECONDS = 5 * 60;
 const USER_SESSION_COOKIE = "xyj_user";
 const USER_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const USER_SESSION_REMEMBER_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -66,6 +70,16 @@ const DEFAULT_USAGE_GUIDE = [
 const QQ_API_BASE = "https://api.bot.qq.com";
 const QQ_OPENID_SETTING_KEY = "qq_notification_openid";
 const QQ_BIND_COMMAND = "绑定网站通知";
+const QQ_WEBHOOK_MAX_SKEW_SECONDS = 5 * 60;
+const QQ_WEBHOOK_REPLAY_TTL_SECONDS = 2 * 24 * 60 * 60;
+
+/* 公开 bootstrap 只下发页面真正需要的展示设置，内部账号和机器人配置不外泄。 */
+const PUBLIC_SETTING_KEYS = new Set([
+  "site_title", "owner_name", "site_version", "school", "intro", "usage_guide",
+  "contact_email", "about_heading", "about_intro", "about_school_label",
+  "about_learning_title", "about_learning_items", "about_contact_title",
+  "contact_email_label", "contact_email_intl", "contact_email_intl_label",
+]);
 
 // Worker 实例复用时缓存 access_token，减少向 QQ 鉴权接口发起的重复请求。
 let qqAccessTokenCache = { appId: "", token: "", expiresAt: 0 };
@@ -90,14 +104,24 @@ let schemaPromise = null;
 
 const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Content-Security-Policy": "base-uri 'self'; object-src 'none'; frame-ancestors 'none'",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  // 先使用一天的观察期，确认 HTTPS 全链路稳定后可在 Cloudflare 中逐步延长。
+  "Strict-Transport-Security": "max-age=86400",
 };
 
 function json(data, status = 200, headers = {}) {
   return Response.json(data, {
     status,
-    headers: { ...SECURITY_HEADERS, "X-Xingyueji-Version": APP_VERSION, ...headers },
+    headers: {
+      ...SECURITY_HEADERS,
+      "Cache-Control": "no-store",
+      "X-Xingyueji-Version": APP_VERSION,
+      ...headers,
+    },
   });
 }
 
@@ -107,9 +131,74 @@ function textResponse(message, status = 200, headers = {}) {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       ...SECURITY_HEADERS,
+      "Cache-Control": "no-store",
       ...headers,
     },
   });
+}
+
+function responseWithSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  Object.entries(SECURITY_HEADERS).forEach(([name, value]) => {
+    if (!headers.has(name)) headers.set(name, value);
+  });
+  if (!headers.has("X-Xingyueji-Version")) headers.set("X-Xingyueji-Version", APP_VERSION);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function configuredAllowedHostnames(env) {
+  const configured = String(env?.ALLOWED_HOSTNAMES || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const canonical = clampText(env?.CANONICAL_HOSTNAME || DEFAULT_CANONICAL_HOSTNAME, 253).toLowerCase();
+  return {
+    canonical,
+    allowed: new Set([canonical, ...(configured.length ? configured : DEFAULT_ALLOWED_HOSTNAMES)]),
+  };
+}
+
+function localRequestHostname(hostname) {
+  const normalized = String(hostname || "").toLowerCase();
+  return LOCAL_HOSTNAMES.has(normalized) || normalized.endsWith(".localhost");
+}
+
+function requestGateResponse(url, env) {
+  const hostname = url.hostname.toLowerCase();
+  if (localRequestHostname(hostname)) return null;
+  const { canonical, allowed } = configuredAllowedHostnames(env);
+  if (!allowed.has(hostname)) return textResponse("请求入口无效", 421);
+  if (url.protocol === "https:" && hostname === canonical) return null;
+
+  const target = new URL(url);
+  target.protocol = "https:";
+  target.hostname = canonical;
+  target.port = "";
+  return new Response(null, {
+    status: 308,
+    headers: {
+      ...SECURITY_HEADERS,
+      "Cache-Control": "no-store",
+      "Location": target.toString(),
+    },
+  });
+}
+
+function rejectCrossSiteMutation(request) {
+  if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+  const site = String(request.headers.get("Sec-Fetch-Site") || "").toLowerCase();
+  if (site && !["same-origin", "none"].includes(site)) {
+    throw new HttpError(403, "拒绝跨站请求");
+  }
+  const origin = request.headers.get("Origin");
+  if (!origin) return;
+  let originUrl;
+  try { originUrl = new URL(origin); } catch { throw new HttpError(403, "请求来源无效"); }
+  if (originUrl.origin !== new URL(request.url).origin) throw new HttpError(403, "拒绝跨站请求");
 }
 
 function nowIso() {
@@ -186,6 +275,35 @@ function normalizedAssetKind(value, mimeType = "", filename = "") {
   if (["zip", "rar", "7z", "tar", "gz", "bz2", "xz"].includes(extension)
     || ["application/zip", "application/x-7z-compressed", "application/vnd.rar"].includes(mime)) return "archive";
   return "file";
+}
+
+const INLINE_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg", "image/png", "image/webp", "image/gif", "image/avif",
+]);
+const INLINE_VIDEO_MIME_TYPES = new Set([
+  "video/mp4", "video/webm", "video/ogg", "video/quicktime",
+]);
+const INLINE_AUDIO_MIME_TYPES = new Set([
+  "audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/x-wav", "audio/flac", "audio/aac",
+]);
+
+function normalizedMimeType(value) {
+  return String(value || "").split(";", 1)[0].trim().toLowerCase();
+}
+
+/*
+ * assets 的 MIME 来自浏览器上传参数，不能据此把任意内容作为同源页面打开。
+ * 只有网站确实需要内联展示、且浏览器不会把它当 HTML/脚本执行的少数格式
+ * 可以 inline；HTML、SVG、XML、脚本以及普通附件一律按二进制下载。
+ */
+function assetCanRenderInline(asset, mimeType, { variantLabel = "", wantsPoster = false } = {}) {
+  const mime = normalizedMimeType(mimeType);
+  if (wantsPoster) return INLINE_IMAGE_MIME_TYPES.has(mime);
+  if (variantLabel === "preview") return mime === "application/pdf";
+  if (asset.kind === "pdf") return mime === "application/pdf";
+  if (asset.kind === "video") return INLINE_VIDEO_MIME_TYPES.has(mime);
+  if (asset.kind === "audio") return INLINE_AUDIO_MIME_TYPES.has(mime);
+  return false;
 }
 
 function safeAssetFilename(value) {
@@ -608,6 +726,18 @@ async function initializeSchema(env) {
     )
     `,
     `
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token_hash TEXT PRIMARY KEY,
+      access_email TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      ip_hash TEXT NOT NULL DEFAULT '',
+      user_agent TEXT NOT NULL DEFAULT ''
+    )
+    `,
+    `
     CREATE TABLE IF NOT EXISTS login_events (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -781,6 +911,13 @@ async function initializeSchema(env) {
       PRIMARY KEY(source_hash, language)
     )
     `,
+    `
+    CREATE TABLE IF NOT EXISTS qq_webhook_events (
+      event_key TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL DEFAULT '',
+      received_at TEXT NOT NULL
+    )
+    `,
     "CREATE INDEX IF NOT EXISTS idx_content_type_status ON content(type, status, published_at)",
     "CREATE INDEX IF NOT EXISTS idx_comments_content ON comments(content_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_media_album ON media(album_id, created_at)",
@@ -795,6 +932,7 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_asset_access_user ON asset_access_users(user_id, asset_id)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_seen ON user_sessions(last_seen_at, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_admin_sessions_expiry ON admin_sessions(expires_at, revoked_at)",
     "CREATE INDEX IF NOT EXISTS idx_login_events_user ON login_events(user_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_guest_visits_day ON guest_visits(visit_day, last_seen_at)",
     "CREATE INDEX IF NOT EXISTS idx_guest_visits_ip ON guest_visits(ip_hash, last_seen_at)",
@@ -809,6 +947,7 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_assets_visibility ON assets(visibility, status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_asset_variants_asset ON asset_variants(asset_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_asset_uploads_expiry ON asset_uploads(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_qq_webhook_events_received ON qq_webhook_events(received_at)",
   ];
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
 
@@ -859,7 +998,8 @@ async function initializeSchema(env) {
 
   /*
    * 登录痕迹只保留最近 90 天；过期会话和过期重置申请同时做状态清理。
-   * 这些语句只删除已经没有安全用途的旧日志，不会影响用户账号和内容。
+   * 旧版远程翻译缓存可能包含动态页面文字，停用远程翻译后立即清空。
+   * 这些语句只清理过期安全记录和派生缓存，不会影响用户账号或站内内容。
    */
   await env.DB.batch([
     env.DB.prepare("DELETE FROM login_events WHERE created_at < ?")
@@ -868,6 +1008,13 @@ async function initializeSchema(env) {
       .bind(analyticsDay(env, new Date(Date.now() - GUEST_ANALYTICS_RETENTION_DAYS * 24 * 60 * 60 * 1000))),
     env.DB.prepare("DELETE FROM user_sessions WHERE expires_at < ?")
       .bind(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at < ?")
+      .bind(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    env.DB.prepare("DELETE FROM qq_webhook_events WHERE received_at < ?")
+      .bind(new Date(Date.now() - QQ_WEBHOOK_REPLAY_TTL_SECONDS * 1000).toISOString()),
+    env.DB.prepare("DELETE FROM rate_limits WHERE reset_at < ?")
+      .bind(Math.floor(Date.now() / 1000) - 24 * 60 * 60),
+    env.DB.prepare("DELETE FROM translations"),
     env.DB.prepare(`
       UPDATE password_reset_requests SET status = 'expired'
       WHERE status = 'approved' AND expires_at IS NOT NULL AND expires_at <= ?
@@ -1221,10 +1368,9 @@ async function validatedAllowedUserIds(env, visibility, value) {
       ? "选择‘仅指定用户’时，请至少勾选一个已审核账号"
       : "选择‘不给指定用户看’时，请至少勾选一个已审核账号");
   }
-  const placeholders = ids.map(() => "?").join(",");
   const result = await env.DB.prepare(
-    `SELECT id FROM users WHERE status = 'approved' AND id IN (${placeholders})`,
-  ).bind(...ids).all();
+    "SELECT id FROM users WHERE status = 'approved' AND id IN (SELECT value FROM json_each(?))",
+  ).bind(JSON.stringify(ids)).all();
   const approved = new Set(rows(result).map((item) => item.id));
   if (approved.size !== ids.length) throw new HttpError(400, "指定用户中包含未审核或不存在的账号，请刷新用户列表后重试");
   return ids;
@@ -1235,11 +1381,16 @@ async function replaceAllowedUsers(env, kind, targetId, userIds, timestamp = now
   if (!config) throw new Error("Unknown access table kind");
   const statements = [
     env.DB.prepare(`DELETE FROM ${config.table} WHERE ${config.targetColumn} = ?`).bind(targetId),
-    ...userIds.map((userId) => env.DB.prepare(`
-      INSERT INTO ${config.table} (${config.targetColumn}, user_id, created_at)
-      VALUES (?, ?, ?)
-    `).bind(targetId, userId, timestamp)),
   ];
+  if (userIds.length) {
+    statements.push(env.DB.prepare(`
+      INSERT INTO ${config.table} (${config.targetColumn}, user_id, created_at)
+      SELECT ?, users.id, ?
+      FROM users
+      WHERE users.status = 'approved'
+        AND users.id IN (SELECT value FROM json_each(?))
+    `).bind(targetId, timestamp, JSON.stringify(userIds)));
+  }
   await env.DB.batch(statements);
 }
 
@@ -1430,6 +1581,12 @@ async function settingsObject(env) {
   return Object.fromEntries(rows(result).map((item) => [item.key, item.value]));
 }
 
+function publicSettingsObject(settings) {
+  return Object.fromEntries(
+    Object.entries(settings || {}).filter(([key]) => PUBLIC_SETTING_KEYS.has(key)),
+  );
+}
+
 async function publicBootstrap(request, env) {
   const sessionUser = await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
@@ -1577,7 +1734,7 @@ async function publicBootstrap(request, env) {
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
   return {
-    settings,
+    settings: publicSettingsObject(settings),
     access: { authenticated: Boolean(sessionUser), fullAccess, ownerAccess },
     changelogs: rows(changelogs),
     sections: visibleSections,
@@ -1694,18 +1851,26 @@ async function sha256(value) {
 
 async function consumeRateLimit(env, key, maxCount, windowSeconds) {
   const now = Math.floor(Date.now() / 1000);
-  const existing = await env.DB.prepare("SELECT count, reset_at FROM rate_limits WHERE key = ?")
-    .bind(key).first();
-
-  if (!existing || Number(existing.reset_at) <= now) {
-    await env.DB.prepare("INSERT OR REPLACE INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)")
-      .bind(key, now + windowSeconds).run();
-    return;
-  }
-  if (Number(existing.count) >= maxCount) {
+  /*
+   * 检查与累加必须在同一条 SQLite 语句里完成，否则并发请求会同时读到旧值，
+   * 从而越过登录、AI 或写操作的限制。计数封顶在 max + 1，避免攻击流量无限增大字段。
+   */
+  const state = await env.DB.prepare(`
+    INSERT INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      count = CASE
+        WHEN rate_limits.reset_at <= ? THEN 1
+        ELSE MIN(rate_limits.count + 1, ?)
+      END,
+      reset_at = CASE
+        WHEN rate_limits.reset_at <= ? THEN excluded.reset_at
+        ELSE rate_limits.reset_at
+      END
+    RETURNING count, reset_at
+  `).bind(key, now + windowSeconds, now, maxCount + 1, now).first();
+  if (Number(state?.count || 0) > maxCount) {
     throw new HttpError(429, "操作过于频繁，请稍后再试");
   }
-  await env.DB.prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?").bind(key).run();
 }
 
 async function clientRateKey(request, scope) {
@@ -1869,6 +2034,33 @@ async function verifyQqWebhookSignature(request, rawBody, env) {
   return crypto.subtle.verify("Ed25519", publicKey, signature, message);
 }
 
+function webhookTimestampMilliseconds(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return Number.NaN;
+  if (/^\d{10,16}$/.test(raw)) {
+    const numeric = Number(raw);
+    return raw.length >= 13 ? numeric : numeric * 1000;
+  }
+  return Date.parse(raw);
+}
+
+function freshQqWebhookTimestamp(value) {
+  const timestamp = webhookTimestampMilliseconds(value);
+  return Number.isFinite(timestamp)
+    && Math.abs(Date.now() - timestamp) <= QQ_WEBHOOK_MAX_SKEW_SECONDS * 1000;
+}
+
+async function claimQqWebhookEvent(env, payload, rawBody) {
+  const eventId = clampText(payload.id || payload.d?.event_id || payload.d?.id, 500);
+  const eventType = clampText(payload.t, 160);
+  const eventKey = await sha256(`${eventType}\u0000${eventId || rawBody}`);
+  const result = await env.DB.prepare(`
+    INSERT OR IGNORE INTO qq_webhook_events (event_key, event_type, received_at)
+    VALUES (?, ?, ?)
+  `).bind(eventKey, eventType, nowIso()).run();
+  return Number(result?.meta?.changes || 0) === 1;
+}
+
 async function getQqAccessToken(env) {
   const appId = clampText(env.QQ_BOT_APP_ID, 80);
   if (!appId || !env.QQ_BOT_SECRET) throw new Error("QQ 机器人 AppID 或 AppSecret 尚未配置");
@@ -1974,9 +2166,18 @@ async function handleQqWebhook(request, env, ctx) {
     const plainToken = clampText(payload.d?.plain_token, 300);
     const eventTs = clampText(payload.d?.event_ts, 80);
     if (!plainToken || !eventTs) throw new HttpError(400, "QQ 回调验证参数不完整");
+    if (!freshQqWebhookTimestamp(eventTs)) throw new HttpError(401, "QQ 回调验证请求已过期");
+    const configuredToken = String(env.QQ_WEBHOOK_VALIDATION_TOKEN || "").trim();
+    const suppliedToken = new URL(request.url).searchParams.get("validation_token") || "";
+    if (configuredToken && !(await timingSafeEqualText(suppliedToken, configuredToken))) {
+      throw new HttpError(403, "QQ 回调验证入口未授权");
+    }
     return json({ plain_token: plainToken, signature: await signQqValidation(env, eventTs, plainToken) });
   }
 
+  if (!freshQqWebhookTimestamp(request.headers.get("X-Signature-Timestamp"))) {
+    throw new HttpError(401, "QQ 回调时间戳无效或已经过期");
+  }
   if (!(await verifyQqWebhookSignature(request, rawBody, env))) {
     throw new HttpError(401, "QQ 回调签名无效");
   }
@@ -1984,6 +2185,7 @@ async function handleQqWebhook(request, env, ctx) {
 
   if (payload.t === "C2C_MESSAGE_CREATE") {
     await ensureSchema(env);
+    if (!(await claimQqWebhookEvent(env, payload, rawBody))) return json({ op: 12 });
     const userOpenid = clampText(payload.d?.author?.user_openid || payload.d?.author?.id, 180);
     const messageId = clampText(payload.d?.id, 240);
     const content = clampText(payload.d?.content, 500).replace(/\s+/g, " ");
@@ -2203,35 +2405,84 @@ function getCookie(request, name) {
   return "";
 }
 
-async function makeSession(env) {
-  const secret = env.SESSION_SECRET || env.ADMIN_PASSWORD;
-  if (!secret) throw new HttpError(503, "后台密码尚未配置");
-  const payload = encodeBase64Url(JSON.stringify({
-    exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-    nonce: crypto.randomUUID(),
-  }));
-  return `${payload}.${await hmac(payload, secret)}`;
+function configuredAdminAccessEmails(env) {
+  return new Set(String(env?.ADMIN_ACCESS_EMAILS || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean));
+}
+
+function adminAccessEmail(request, env, { required = false } = {}) {
+  const allowed = configuredAdminAccessEmails(env);
+  if (!allowed.size) return "";
+  const email = clampText(request.headers.get("Cf-Access-Authenticated-User-Email"), 320).toLowerCase();
+  if (!email || !allowed.has(email)) {
+    if (required) throw new HttpError(403, "后台身份未通过 Cloudflare Access 验证");
+    return null;
+  }
+  return email;
+}
+
+function adminSessionTtl(env) {
+  const configured = Number.parseInt(env?.ADMIN_SESSION_TTL_SECONDS || "", 10);
+  return Number.isFinite(configured)
+    ? Math.max(15 * 60, Math.min(7 * 24 * 60 * 60, configured))
+    : SESSION_TTL_SECONDS;
+}
+
+async function makeSession(request, env, accessEmail = "") {
+  const token = randomToken();
+  const tokenHash = await sha256(token);
+  const timestamp = nowIso();
+  const ttl = adminSessionTtl(env);
+  const meta = await clientMeta(request);
+  await env.DB.prepare(`
+    INSERT INTO admin_sessions
+      (token_hash, access_email, created_at, last_seen_at, expires_at, revoked_at, ip_hash, user_agent)
+    VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+  `).bind(
+    tokenHash,
+    accessEmail,
+    timestamp,
+    timestamp,
+    new Date(Date.now() + ttl * 1000).toISOString(),
+    meta.ipHash,
+    meta.userAgent,
+  ).run();
+  return { token, ttl };
 }
 
 async function isAdmin(request, env) {
   const token = getCookie(request, SESSION_COOKIE);
-  const secret = env.SESSION_SECRET || env.ADMIN_PASSWORD;
-  if (!token || !secret || !token.includes(".")) return false;
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature || (await hmac(payload, secret)) !== signature) return false;
-  try {
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
-    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))));
-    return Number(parsed.exp) > Math.floor(Date.now() / 1000);
-  } catch {
-    return false;
+  if (!env.DB || !/^[a-zA-Z0-9_-]{32,200}$/.test(token)) return false;
+  const accessEmail = adminAccessEmail(request, env);
+  if (accessEmail === null) return false;
+  const tokenHash = await sha256(token);
+  const session = await env.DB.prepare(`
+    SELECT token_hash, access_email, last_seen_at, expires_at, revoked_at, user_agent
+    FROM admin_sessions WHERE token_hash = ?
+  `).bind(tokenHash).first();
+  if (!session || session.revoked_at || Date.parse(session.expires_at) <= Date.now()) return false;
+  if (session.access_email && session.access_email !== accessEmail) return false;
+  const userAgent = clampText(request.headers.get("User-Agent"), 300);
+  if (session.user_agent && session.user_agent !== userAgent) return false;
+
+  if (Date.now() - Date.parse(session.last_seen_at) >= ADMIN_SESSION_TOUCH_SECONDS * 1000) {
+    await env.DB.prepare("UPDATE admin_sessions SET last_seen_at = ? WHERE token_hash = ?")
+      .bind(nowIso(), tokenHash).run();
   }
+  return true;
 }
 
-function secureCookie(request, value, maxAge) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`;
+async function revokeAdminSession(request, env) {
+  const token = getCookie(request, SESSION_COOKIE);
+  if (!env.DB || !/^[a-zA-Z0-9_-]{32,200}$/.test(token)) return;
+  await env.DB.prepare("UPDATE admin_sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL")
+    .bind(nowIso(), await sha256(token)).run();
+}
+
+function secureCookie(_request, value, maxAge) {
+  return `${SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
 }
 
 async function timingSafeEqualText(a, b) {
@@ -2248,13 +2499,14 @@ async function timingSafeEqualText(a, b) {
 
 async function adminLogin(request, env) {
   if (!env.ADMIN_PASSWORD) throw new HttpError(503, "请先在 Cloudflare 中配置 ADMIN_PASSWORD");
+  const accessEmail = adminAccessEmail(request, env, { required: true });
   await consumeRateLimit(env, await clientRateKey(request, "admin-login"), 8, 15 * 60);
   const body = await readJson(request);
   if (!(await timingSafeEqualText(body.password || "", env.ADMIN_PASSWORD))) {
     throw new HttpError(401, "密码错误");
   }
-  const token = await makeSession(env);
-  return json({ ok: true }, 200, { "Set-Cookie": secureCookie(request, token, SESSION_TTL_SECONDS) });
+  const session = await makeSession(request, env, accessEmail);
+  return json({ ok: true }, 200, { "Set-Cookie": secureCookie(request, session.token, session.ttl) });
 }
 
 /* ============================================================
@@ -2429,9 +2681,8 @@ async function makeGuestSession(env, visitorHash) {
   return `${payload}.${await hmac(payload, guestSessionSecret(env))}`;
 }
 
-function guestSessionCookie(request, value, maxAge) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${GUEST_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+function guestSessionCookie(_request, value, maxAge) {
+  return `${GUEST_SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 async function getGuestSession(request, env) {
@@ -2638,6 +2889,7 @@ async function runtimeBotBlockedResponse(request, env, identity, reasons) {
       .catch((error) => console.error("Runtime bot event logging failed", error));
     headers.append("Set-Cookie", userSessionCookie(request, "", 0));
   } else {
+    await revokeAdminSession(request, env);
     headers.append("Set-Cookie", secureCookie(request, "", 0));
   }
 
@@ -2682,11 +2934,10 @@ async function runtimeSecurityHeartbeat(request, env) {
   return json({ ok: true, nextCheckSeconds: 45 }, 200, { "Cache-Control": "no-store" });
 }
 
-function userSessionCookie(request, value, maxAge) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+function userSessionCookie(_request, value, maxAge) {
   const hasLifetime = maxAge !== null && maxAge !== undefined && Number.isFinite(Number(maxAge));
   const lifetime = hasLifetime ? `; Max-Age=${Number(maxAge)}` : "";
-  return `${USER_SESSION_COOKIE}=${value}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
+  return `${USER_SESSION_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/${lifetime}`;
 }
 
 function publicUser(user) {
@@ -3228,55 +3479,58 @@ async function resetUserPassword(request, env) {
   return { ok: true, message: "密码已重置，请使用新密码登录。" };
 }
 
-async function buildAiContext(env, userId) {
-  const [settings, logs, sections, albums, media, published, contentAccess, mediaAccess] = await Promise.all([
-    settingsObject(env),
-    env.DB.prepare("SELECT version, title, body, published_at FROM changelogs ORDER BY published_at DESC LIMIT 15").all(),
-    env.DB.prepare("SELECT id, name, kind, description, visibility FROM portfolio_sections ORDER BY sort_order ASC").all(),
-    env.DB.prepare("SELECT section_id, name, description FROM albums ORDER BY sort_order ASC").all(),
-    env.DB.prepare(`
-      SELECT m.id, m.section_id, m.filename, m.caption, m.visibility,
-             s.visibility AS section_visibility
-      FROM media m LEFT JOIN portfolio_sections s ON s.id = m.section_id
-      WHERE m.kind = 'photo' ORDER BY m.created_at DESC LIMIT 240
-    `).all(),
-    env.DB.prepare(`
-      SELECT c.id, c.type, c.title, c.excerpt, c.body_html, c.published_at, c.visibility,
-             s.name AS section_name, s.visibility AS section_visibility
-      FROM content c LEFT JOIN portfolio_sections s ON s.id = c.section_id
-      WHERE c.status = 'published'
-      ORDER BY published_at DESC LIMIT 120
-    `).all(),
-    env.DB.prepare("SELECT content_id FROM content_access_users WHERE user_id = ?").bind(userId).all(),
-    env.DB.prepare("SELECT media_id FROM media_access_users WHERE user_id = ?").bind(userId).all(),
-  ]);
-
-  const allowedContentIds = new Set(rows(contentAccess).map((item) => item.content_id));
-  const allowedMediaIds = new Set(rows(mediaAccess).map((item) => item.media_id));
-  const visibleSections = rows(sections).filter((item) => visibleToWebsite(item.visibility, true));
-  const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
-  const visiblePublished = rows(published).filter((item) => (
-    visibleToWebsite(item.section_visibility, true)
-    && visibleToWebsite(item.visibility, true, allowedContentIds.has(item.id))
+async function buildAiContext(request, env) {
+  /*
+   * AI 上下文复用前台 bootstrap 的完整权限链，再额外收紧为真正公开的内容。
+   * member / selected / excluded / private 数据即使当前账号可见，也不会发送到外部模型。
+   */
+  const bootstrap = await publicBootstrap(request, env);
+  const publicSections = bootstrap.sections.filter((item) => normalizedVisibility(item.visibility) === "public");
+  const publicSectionIds = new Set(publicSections.map((item) => item.id));
+  const publicSubsections = bootstrap.subsections.filter((item) => (
+    publicSectionIds.has(item.section_id) && normalizedVisibility(item.visibility) === "public"
+  ));
+  const publicSubsectionIds = new Set(publicSubsections.map((item) => item.id));
+  const publicAlbums = bootstrap.albums.filter((item) => (
+    publicSectionIds.has(item.section_id) && normalizedVisibility(item.visibility) === "public"
+  ));
+  const publicAlbumIds = new Set(publicAlbums.map((item) => item.id));
+  const published = bootstrap.content.filter((item) => (
+    publicSectionIds.has(item.section_id)
+    && (!item.subsection_id || publicSubsectionIds.has(item.subsection_id))
+    && normalizedVisibility(item.visibility) === "public"
   )).slice(0, 30);
-  const visibleMedia = rows(media).filter((item) => (
-    visibleToWebsite(item.section_visibility, true)
-    && visibleToWebsite(item.visibility, true, allowedMediaIds.has(item.id))
+  const media = bootstrap.media.filter((item) => (
+    publicSectionIds.has(item.section_id)
+    && (!item.subsection_id || publicSubsectionIds.has(item.subsection_id))
+    && (!item.album_id || publicAlbumIds.has(item.album_id))
+    && normalizedVisibility(item.visibility) === "public"
   )).slice(0, 80);
-  const contentText = visiblePublished.map((item) => [
-    item.section_name || (item.type === "guide" ? "北京旅行指南" : "文章"),
+
+  const bodiesById = new Map();
+  if (published.length) {
+    const placeholders = published.map(() => "?").join(",");
+    const result = await env.DB.prepare(`
+      SELECT id, body_html FROM content
+      WHERE status = 'published' AND id IN (${placeholders})
+    `).bind(...published.map((item) => item.id)).all();
+    rows(result).forEach((item) => bodiesById.set(item.id, item.body_html));
+  }
+  const sectionNames = new Map(publicSections.map((item) => [item.id, item.name]));
+  const contentText = published.map((item) => [
+    sectionNames.get(item.section_id) || (item.type === "guide" ? "北京旅行指南" : "文章"),
     item.title,
     item.excerpt,
-    stripHtml(item.body_html).slice(0, 2200),
+    stripHtml(bodiesById.get(item.id) || "").slice(0, 2200),
   ].filter(Boolean).join("：")).join("\n");
 
   return [
-    `网站设置：${JSON.stringify(settings)}`,
-    `版本更新：${rows(logs).map((item) => `${item.version} ${item.title} ${item.body}`).join("；")}`,
-    `个人空间大板块：${visibleSections.map((item) => `${item.name}（${item.kind === "gallery" ? "图片" : "文章"}）：${item.description}`).join("；")}`,
-    `图片子板块：${rows(albums).filter((item) => visibleSectionIds.has(item.section_id)).map((item) => `${item.name}：${item.description}`).join("；")}`,
-    `当前账号可见的图片说明：${visibleMedia.map((item) => item.caption || item.filename).filter(Boolean).join("；")}`,
-    `已发布内容：\n${contentText}`,
+    `网站公开设置：${JSON.stringify(bootstrap.settings)}`,
+    `版本更新：${bootstrap.changelogs.slice(0, 15).map((item) => `${item.version} ${item.title} ${item.body}`).join("；")}`,
+    `公开个人空间大板块：${publicSections.map((item) => `${item.name}（${item.kind === "gallery" ? "图片" : "文章"}）：${item.description}`).join("；")}`,
+    `公开小板块：${publicSubsections.map((item) => `${item.name}：${item.description}`).join("；")}`,
+    `公开图片说明：${media.map((item) => item.caption || item.filename).filter(Boolean).join("；")}`,
+    `公开发布内容：\n${contentText}`,
   ].join("\n\n").slice(0, 24_000);
 }
 
@@ -3312,105 +3566,6 @@ async function fetchAiJson(url, options, unavailableMessage) {
   return result;
 }
 
-function parsedTranslationArray(value) {
-  const source = String(value || "").trim();
-  const match = source.match(/\[[\s\S]*\]/);
-  if (!match) return null;
-  try {
-    const result = JSON.parse(match[0]);
-    return Array.isArray(result) ? result.map((item) => String(item ?? "")) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function translateSiteTexts(request, env) {
-  await consumeRateLimit(env, await clientRateKey(request, "site-translation"), 90, 60 * 60);
-  const input = await readJson(request);
-  const language = input.language === "en" ? "en" : input.language === "zh-TW" ? "zh-TW" : "";
-  if (!language) throw new HttpError(400, "不支持的界面语言");
-  const sourceTexts = Array.isArray(input.texts)
-    ? input.texts.map((item) => clampMultilineText(item, 2000)).filter(Boolean).slice(0, 36)
-    : [];
-  if (!sourceTexts.length) return { translations: [] };
-  if (sourceTexts.reduce((sum, item) => sum + item.length, 0) > 12000) {
-    throw new HttpError(413, "单次翻译文字过多，请缩小批次");
-  }
-
-  const hashes = await Promise.all(sourceTexts.map(sha256));
-  const cached = new Map();
-  if (hashes.length) {
-    const placeholders = hashes.map(() => "?").join(",");
-    const result = await env.DB.prepare(`
-      SELECT source_hash, translated_text FROM translations
-      WHERE language = ? AND source_hash IN (${placeholders})
-    `).bind(language, ...hashes).all();
-    for (const item of rows(result)) cached.set(item.source_hash, item.translated_text);
-  }
-  const missingIndexes = hashes.map((hash, index) => cached.has(hash) ? -1 : index).filter((index) => index >= 0);
-  if (missingIndexes.length) {
-    const missing = missingIndexes.map((index) => sourceTexts[index]);
-    const target = language === "en" ? "natural English" : "繁體中文（保持現代、自然用語）";
-    const prompt = [
-      `Translate every JSON array item into ${target}.`,
-      "Return only one valid JSON array of strings in the same order and length.",
-      "Preserve names, URLs, numbers, emoji, placeholders, line breaks and leading full-width spaces where appropriate.",
-      "Translate all visible prose, labels and messages; do not summarize and do not add explanations.",
-      JSON.stringify(missing),
-    ].join("\n");
-    let result;
-    if (env.DEEPSEEK_API_KEY) {
-      result = await fetchAiJson(
-        `${(env.DEEPSEEK_API_BASE || "https://api.deepseek.com").replace(/\/$/, "")}/chat/completions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}` },
-          body: JSON.stringify({
-            model: env.DEEPSEEK_MODEL || "deepseek-v4-flash",
-            stream: false,
-            max_tokens: 5000,
-            temperature: 0.1,
-            messages: [{ role: "user", content: prompt }],
-          }),
-          signal: AbortSignal.timeout(40_000),
-        },
-        "全站翻译服务暂时不可用",
-      );
-    } else {
-      result = await fetchAiJson(env.AI_UPSTREAM_URL || "https://qwen-ai.1598116329.workers.dev", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
-        signal: AbortSignal.timeout(40_000),
-      }, "全站翻译服务暂时不可用");
-    }
-    const raw = result.choices?.[0]?.message?.content
-      || result.output?.choices?.[0]?.message?.content
-      || result.answer
-      || "";
-    const translated = parsedTranslationArray(raw);
-    if (!translated || translated.length !== missing.length) {
-      throw new HttpError(502, "全站翻译服务返回格式错误，请稍后重试");
-    }
-    const timestamp = nowIso();
-    const statements = [];
-    missingIndexes.forEach((sourceIndex, translatedIndex) => {
-      const value = clampMultilineText(translated[translatedIndex], 4000);
-      cached.set(hashes[sourceIndex], value);
-      statements.push(env.DB.prepare(`
-        INSERT INTO translations (source_hash, language, source_text, translated_text, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(source_hash, language) DO UPDATE SET
-          source_text = excluded.source_text,
-          translated_text = excluded.translated_text,
-          updated_at = excluded.updated_at
-      `).bind(hashes[sourceIndex], language, sourceTexts[sourceIndex], value, timestamp));
-    });
-    if (statements.length) await env.DB.batch(statements);
-  }
-  return { translations: hashes.map((hash) => cached.get(hash) || "") };
-}
-
 // 读取问题、执行限流并构造站内知识上下文；流式与非流式接口共用这一步。
 async function prepareAiRequest(request, env, sessionUser) {
   const body = await readJson(request);
@@ -3422,7 +3577,8 @@ async function prepareAiRequest(request, env, sessionUser) {
   try {
     await ensureSchema(env);
     await consumeRateLimit(env, await clientRateKey(request, "ai"), 40, 60 * 60);
-    context = await buildAiContext(env, sessionUser.id);
+    await consumeRateLimit(env, `ai-user:${sessionUser.id}`, 40, 60 * 60);
+    context = await buildAiContext(request, env);
   } catch (error) {
     if (error instanceof HttpError && error.status === 429) throw error;
     console.error("AI is using fallback context because D1 context failed", {
@@ -3455,6 +3611,19 @@ function deepSeekRequestOptions(env, context, question, stream) {
     }),
     signal: AbortSignal.timeout(stream ? 60_000 : 40_000),
   };
+}
+
+function aiUpstreamHeaders(env) {
+  const headers = { "Content-Type": "application/json" };
+  const token = String(env.AI_UPSTREAM_AUTH_TOKEN || "").trim();
+  const accessClientId = String(env.AI_UPSTREAM_ACCESS_CLIENT_ID || "").trim();
+  const accessClientSecret = String(env.AI_UPSTREAM_ACCESS_CLIENT_SECRET || "").trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (accessClientId && accessClientSecret) {
+    headers["CF-Access-Client-Id"] = accessClientId;
+    headers["CF-Access-Client-Secret"] = accessClientSecret;
+  }
+  return headers;
 }
 
 function aiStreamResponse(body, mode) {
@@ -3571,7 +3740,7 @@ async function askAi(request, env, sessionUser) {
   const upstreamUrl = env.AI_UPSTREAM_URL || "https://qwen-ai.1598116329.workers.dev";
   const result = await fetchAiJson(upstreamUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: aiUpstreamHeaders(env),
     body: JSON.stringify({
       prompt: `请根据以下“星月集”网站公开资料回答问题；如果资料无关，也可以正常回答一般问题。不得虚构网站资料。${AI_FORMAT_INSTRUCTION}\n\n${context}\n\n用户问题：${question}`,
     }),
@@ -3600,7 +3769,7 @@ async function askAiStream(request, env, sessionUser) {
   const upstreamUrl = env.AI_UPSTREAM_URL || "https://qwen-ai.1598116329.workers.dev";
   const result = await fetchAiJson(upstreamUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: aiUpstreamHeaders(env),
     body: JSON.stringify({
       prompt: `请根据以下“星月集”网站公开资料回答问题；如果资料无关，也可以正常回答一般问题。不得虚构网站资料。${AI_FORMAT_INSTRUCTION}\n\n${context}\n\n用户问题：${question}`,
     }),
@@ -3823,7 +3992,9 @@ async function serveAsset(request, env, id) {
   if (request.method !== "HEAD" && !object) throw new HttpError(404, "R2 中的文件对象不存在");
   const headers = new Headers(SECURITY_HEADERS);
   head.writeHttpMetadata(headers);
-  headers.set("Content-Type", mimeType);
+  const rendersInline = !access.wantsDownload && assetCanRenderInline(asset, mimeType, { variantLabel, wantsPoster });
+  // 对不能安全内联的附件隐藏用户声明的主动内容类型，阻止直接访问时执行同源脚本。
+  headers.set("Content-Type", rendersInline ? normalizedMimeType(mimeType) : "application/octet-stream");
   headers.set("ETag", head.httpEtag);
   headers.set("Accept-Ranges", "bytes");
   headers.set("Content-Length", String(range ? range.length : head.size));
@@ -3834,8 +4005,15 @@ async function serveAsset(request, env, id) {
       ? "public, max-age=3600"
       : "private, no-store",
   );
-  const disposition = access.wantsDownload ? "attachment" : "inline";
+  const disposition = rendersInline ? "inline" : "attachment";
   headers.set("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  if (rendersInline && normalizedMimeType(mimeType) === "application/pdf") {
+    // 只允许本站资源查看器嵌入经过 MIME 收窄的 PDF。
+    headers.set("X-Frame-Options", "SAMEORIGIN");
+    headers.set("Content-Security-Policy", "base-uri 'none'; object-src 'none'; frame-ancestors 'self'");
+  } else if (!rendersInline) {
+    headers.set("Content-Security-Policy", "sandbox; default-src 'none'; frame-ancestors 'none'");
+  }
   return new Response(object?.body || null, { status: range ? 206 : 200, headers });
 }
 
@@ -3956,26 +4134,37 @@ async function syncEmbeddedArticleAssets(env, content, bodyHtml, timestamp) {
 async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds = []) {
   const ids = inlineMediaIdsFromHtml(bodyHtml);
   if (!ids.length) return;
-  const placeholders = ids.map(() => "?").join(",");
-  const existing = await env.DB.prepare(
-    `SELECT id FROM media WHERE kind = 'inline' AND id IN (${placeholders})`,
-  ).bind(...ids).all();
-  const mediaIds = rows(existing).map((item) => item.id);
-  if (!mediaIds.length) return;
   const timestamp = nowIso();
-  await env.DB.batch(mediaIds.map((mediaId) => env.DB.prepare(`
-    UPDATE media SET visibility = ?, updated_at = ? WHERE id = ? AND kind = 'inline'
-  `).bind(visibility, timestamp, mediaId)));
+  const mediaIdsJson = JSON.stringify(ids);
+  const statements = [
+    env.DB.prepare(`
+      UPDATE media
+      SET visibility = ?, updated_at = ?
+      WHERE kind = 'inline'
+        AND id IN (SELECT value FROM json_each(?))
+    `).bind(visibility, timestamp, mediaIdsJson),
+    env.DB.prepare(`
+      DELETE FROM media_access_users
+      WHERE media_id IN (
+        SELECT id FROM media
+        WHERE kind = 'inline'
+          AND id IN (SELECT value FROM json_each(?))
+      )
+    `).bind(mediaIdsJson),
+  ];
   // 文章内图片沿用文章白名单，防止通过复制 /media/:id 地址绕过正文权限。
-  for (const mediaId of mediaIds) {
-    await replaceAllowedUsers(
-      env,
-      "media",
-      mediaId,
-      ["selected", "excluded"].includes(visibility) ? allowedUserIds : [],
-      timestamp,
-    );
+  if (["selected", "excluded"].includes(visibility) && allowedUserIds.length) {
+    statements.push(env.DB.prepare(`
+      INSERT INTO media_access_users (media_id, user_id, created_at)
+      SELECT media.id, users.id, ?
+      FROM media, users
+      WHERE media.kind = 'inline'
+        AND media.id IN (SELECT value FROM json_each(?))
+        AND users.status = 'approved'
+        AND users.id IN (SELECT value FROM json_each(?))
+    `).bind(timestamp, mediaIdsJson, JSON.stringify(allowedUserIds)));
   }
+  await env.DB.batch(statements);
 }
 
 /* ---------- 个人空间大板块：新增、改名、排序、删除。 ---------- */
@@ -5517,6 +5706,7 @@ async function handleAdmin(request, env, url) {
 
   if (resource === "session" && request.method === "GET") return { authenticated: true };
   if (resource === "logout" && request.method === "POST") {
+    await revokeAdminSession(request, env);
     return json({ ok: true }, 200, { "Set-Cookie": secureCookie(request, "", 0) });
   }
   if (resource === "dashboard" && request.method === "GET") return adminDashboard(env);
@@ -5549,12 +5739,18 @@ async function handleApi(request, env, url, ctx) {
   if (url.pathname === "/api/qq/events" && request.method === "GET") {
     return json({
       ok: true,
-      configured: Boolean(env.QQ_BOT_APP_ID && env.QQ_BOT_SECRET),
-      message: "QQ 机器人 Webhook 回调地址已就绪",
+      message: "Webhook endpoint ready",
     });
   }
   if (url.pathname === "/api/qq/events" && request.method === "POST") {
     return handleQqWebhook(request, env, ctx);
+  }
+
+  // 浏览器写操作只能来自本站；QQ 的服务端回调已在上方通过独立签名验证。
+  rejectCrossSiteMutation(request);
+
+  if (url.pathname === "/api/i18n/translate" && request.method === "POST") {
+    return json({ error: "远程页面翻译已停用" }, 410);
   }
 
   // 健康检查会同时测试绑定、D1 连通性和实际数据表初始化。
@@ -5589,6 +5785,9 @@ async function handleApi(request, env, url, ctx) {
       try { qqRecipientBound = Boolean(await getQqTargetOpenid(env)); }
       catch (error) { console.error("QQ notification binding health check failed", error); }
     }
+    const publicStatus = { ok, version: APP_VERSION };
+    const adminDiagnostics = schemaReadyForRequests && await isAdmin(request, env);
+    if (!adminDiagnostics) return json(publicStatus, ok ? 200 : 503);
     return json({
       ok,
       version: APP_VERSION,
@@ -5641,9 +5840,6 @@ async function handleApi(request, env, url, ctx) {
   }
   if (url.pathname === "/api/guest/entry-background" && request.method === "GET") {
     return json(await publicEntryBackground(env));
-  }
-  if (url.pathname === "/api/i18n/translate" && request.method === "POST") {
-    return json(await translateSiteTexts(request, env), 200, { "Cache-Control": "private, max-age=86400" });
   }
   if (url.pathname === "/api/guest/enter" && request.method === "POST") {
     return enterGuestWebsite(request, env);
@@ -5761,7 +5957,11 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     try {
-      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      const gateResponse = requestGateResponse(url, env);
+      if (gateResponse) return gateResponse;
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: SECURITY_HEADERS });
+      }
       if (url.pathname.startsWith("/api/")) return await handleApi(request, env, url, ctx);
       if (url.pathname.startsWith("/media/")) {
         await ensureSchema(env);
@@ -5775,7 +5975,7 @@ export default {
         if (!validId(id)) throw new HttpError(404, "文件不存在");
         return await serveAsset(request, env, id);
       }
-      return env.ASSETS.fetch(request);
+      return responseWithSecurityHeaders(await env.ASSETS.fetch(request));
     } catch (error) {
       if (error instanceof HttpError) {
         return json({ error: error.message, ...(error.code ? { errorCode: error.code } : {}) }, error.status);
