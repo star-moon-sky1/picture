@@ -832,3 +832,215 @@ h6,
     radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 72%, rgba(171, 224, 233, .055) 82%, rgba(205, 244, 248, .23) 100%),
     linear-gradient(108deg, rgba(181, 231, 238, .10), transparent 12% 84%, rgba(133, 112, 192, .08)) !important;
 }
+
+/* 侧栏使用较高模糊度的磨砂玻璃，正文操作保持低模糊的透明液态玻璃。 */
+:root {
+  --xyj-sidebar-frost:
+    linear-gradient(145deg, rgba(255,255,255,.56), rgba(208,235,241,.34) 55%, rgba(219,218,240,.27));
+  --xyj-sidebar-frost-active:
+    linear-gradient(135deg, rgba(42,174,169,.68), rgba(57,132,201,.66) 58%, rgba(112,87,180,.58));
+  --xyj-page-liquid:
+    linear-gradient(138deg, rgba(255,255,255,.17), rgba(192,230,238,.09) 52%, rgba(214,205,239,.08));
+  --xyj-page-liquid-tint:
+    linear-gradient(135deg, rgba(41,181,177,.24), rgba(51,137,210,.22) 58%, rgba(116,87,190,.18));
+  --xyj-page-liquid-active:
+    linear-gradient(135deg, rgba(35,169,165,.52), rgba(48,126,196,.50) 58%, rgba(104,78,174,.46));
+}
+
+.sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) {
+  color: var(--ink);
+  border-color: rgba(255,255,255,.78);
+  background: var(--xyj-sidebar-frost);
+  box-shadow:
+    0 9px 24px rgba(31,73,89,.14),
+    inset 0 1px 0 rgba(255,255,255,.94),
+    inset 0 -1px 0 rgba(58,103,122,.14);
+  -webkit-backdrop-filter: blur(19px) saturate(1.30);
+  backdrop-filter: blur(19px) saturate(1.30);
+}
+
+.sidebar .nav button.active {
+  color: #fff;
+  border-color: rgba(255,255,255,.90);
+  background: var(--xyj-sidebar-frost-active);
+  box-shadow:
+    0 12px 29px rgba(39,111,147,.25),
+    inset 0 1px 0 rgba(255,255,255,.82),
+    inset 0 -1px 0 rgba(30,72,108,.22);
+}
+
+:is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+) {
+  color: #183740;
+  border-color: rgba(255,255,255,.80);
+  background: var(--xyj-page-liquid);
+  box-shadow:
+    0 8px 22px rgba(29,77,96,.12),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 1px 0 0 rgba(255,255,255,.38),
+    inset 0 -1px 0 rgba(34,87,106,.19);
+  -webkit-backdrop-filter: blur(2px) saturate(1.42) contrast(1.07);
+  backdrop-filter: blur(2px) saturate(1.42) contrast(1.07);
+}
+
+:is(
+  .app-shell .main .btn:not(.ghost):not(.light):not(.danger),
+  dialog .btn:not(.ghost):not(.light):not(.danger)
+) {
+  color: #173840;
+  border-color: rgba(255,255,255,.86);
+  background: var(--xyj-page-liquid-tint);
+}
+
+:is(.app-shell .main .btn.ghost, dialog .btn.ghost, .app-shell .main .btn.light, dialog .btn.light) {
+  color: var(--ink);
+  background: var(--xyj-page-liquid);
+}
+
+:is(.app-shell .main .btn.danger, dialog .btn.danger) {
+  color: #8c342f;
+  border-color: rgba(255,214,208,.74);
+  background: linear-gradient(138deg, rgba(255,255,255,.16), rgba(223,91,80,.15));
+}
+
+.app-shell .main :is(.tab-button, .theme-toggle).active {
+  color: #fff;
+  background: var(--xyj-page-liquid-active);
+  border-color: rgba(255,255,255,.90);
+  box-shadow: 0 10px 25px rgba(40,111,149,.20), inset 0 1px 0 rgba(255,255,255,.90);
+}
+
+/* 评论输入区固定高度，提交按钮固定在输入框右下角。 */
+.comment-form {
+  display: block;
+  width: 100%;
+  margin: 16px 0 24px;
+}
+.comment-composer {
+  position: relative;
+  width: 100%;
+}
+.comment-form .comment-composer textarea {
+  display: block;
+  width: 100%;
+  height: 156px;
+  min-height: 156px;
+  max-height: 156px;
+  padding: 14px 16px 58px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  resize: none;
+}
+.comment-composer .comment-submit {
+  position: absolute;
+  right: 11px;
+  bottom: 11px;
+  z-index: 2;
+  min-width: 76px;
+  color: #15373f;
+  border-color: rgba(255,255,255,.84);
+  background: linear-gradient(145deg, rgba(240,251,252,.58), rgba(80,170,187,.34));
+  box-shadow: 0 8px 19px rgba(34,89,106,.16), inset 0 1px 0 rgba(255,255,255,.94);
+  -webkit-backdrop-filter: blur(18px) saturate(1.26);
+  backdrop-filter: blur(18px) saturate(1.26);
+}
+
+/* 照片可通过滚轮、双击、双指和拖拽在查看器内局部缩放。 */
+.image-view { position: relative; }
+.image-stage {
+  overflow: hidden;
+  border-radius: 16px;
+  touch-action: none;
+  user-select: none;
+  cursor: zoom-in;
+}
+.image-stage.is-zoomed { cursor: grab; }
+.image-stage.is-zoomed:active { cursor: grabbing; }
+#image-preview {
+  transform-origin: center;
+  will-change: transform;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.image-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+}
+#image-caption { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.image-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.image-zoom-controls .btn { min-width: 38px; color: #fff; padding-inline: 10px; }
+#image-zoom-level { min-width: 52px; color: rgba(255,255,255,.86); text-align: center; font-variant-numeric: tabular-nums; }
+.image-boundary-notice {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  top: 50%;
+  width: min(330px, calc(100% - 36px));
+  padding: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 13px;
+  border: 1px solid rgba(255,255,255,.48);
+  border-radius: 19px;
+  color: #fff;
+  background: rgba(18,38,46,.68);
+  box-shadow: 0 18px 48px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.30);
+  -webkit-backdrop-filter: blur(18px) saturate(1.30);
+  backdrop-filter: blur(18px) saturate(1.30);
+  transform: translate(-50%, -50%);
+}
+.image-boundary-notice[hidden] { display: none; }
+.image-boundary-notice.is-arriving { animation: image-boundary-arrive .24s cubic-bezier(.18,.82,.22,1); }
+.image-boundary-notice .btn { color: #fff; min-width: 86px; }
+@keyframes image-boundary-arrive {
+  from { opacity: 0; transform: translate(-50%, -44%) scale(.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+:root[data-theme="dark"] {
+  --xyj-sidebar-frost:
+    linear-gradient(145deg, rgba(91,139,151,.34), rgba(34,72,86,.31) 56%, rgba(67,54,96,.29));
+  --xyj-sidebar-frost-active:
+    linear-gradient(135deg, rgba(28,148,145,.72), rgba(38,103,169,.72) 58%, rgba(93,68,153,.68));
+  --xyj-page-liquid:
+    linear-gradient(138deg, rgba(190,229,235,.10), rgba(75,137,151,.07) 54%, rgba(119,96,157,.07));
+  --xyj-page-liquid-tint:
+    linear-gradient(135deg, rgba(35,173,169,.25), rgba(47,119,190,.23) 58%, rgba(107,77,176,.20));
+  --xyj-page-liquid-active:
+    linear-gradient(135deg, rgba(27,151,148,.54), rgba(38,106,176,.52) 58%, rgba(91,65,159,.50));
+}
+:root[data-theme="dark"] :is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+) { color: #eaf6f7; border-color: rgba(185,228,234,.28); }
+:root[data-theme="dark"] .comment-composer .comment-submit {
+  color: #effafb;
+  border-color: rgba(184,231,236,.30);
+  background: linear-gradient(145deg, rgba(96,158,171,.42), rgba(35,91,108,.38));
+}
+
+@media (max-width: 760px) {
+  .comment-form .comment-composer textarea { height: 144px; min-height: 144px; max-height: 144px; }
+  .image-zoom-controls { order: -1; width: 100%; }
+  #image-caption { flex-basis: 100%; text-align: center; }
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) { background: rgba(237,246,248,.96); }
+  :is(.app-shell .main .btn, .app-shell .main .tab-button, .app-shell .main .theme-toggle, dialog .btn) { background: rgba(216,238,242,.92); }
+}

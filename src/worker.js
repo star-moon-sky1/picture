@@ -148,6 +148,25 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
+/*
+ * Headers 对同名 Set-Cookie 的追加语义比普通对象可靠。登录成功时需要同时
+ * 写入账户会话并清除游客会话，避免浏览器里两种身份并存后公开接口误用高
+ * 权限身份。其余普通 JSON 响应仍继续使用上面的轻量 helper。
+ */
+function jsonWithCookies(data, status, cookies, headers = {}) {
+  const responseHeaders = new Headers({
+    ...SECURITY_HEADERS,
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Xingyueji-Version": APP_VERSION,
+    ...headers,
+  });
+  for (const cookie of cookies) {
+    if (cookie) responseHeaders.append("Set-Cookie", cookie);
+  }
+  return new Response(JSON.stringify(data), { status, headers: responseHeaders });
+}
+
 function textResponse(message, status = 200, headers = {}) {
   return new Response(message, {
     status,
@@ -1466,6 +1485,21 @@ async function ownerUserId(env) {
 }
 
 async function websiteAccessContext(request, env) {
+  /*
+   * 点击“游客浏览”后，公开站点必须严格按游客权限运行。即使同一浏览器还
+   * 保留 Studio 或普通账号 Cookie，也不能借这些 Cookie 读取指定用户文章。
+   * Studio 自身的 /api/admin/* 接口不经过这里，因此后台会话不会被破坏。
+   */
+  const guest = await getGuestSession(request, env);
+  if (guest) {
+    return {
+      user: null,
+      fullAccess: false,
+      adminAccess: false,
+      ownerAccess: false,
+      guestMode: true,
+    };
+  }
   const user = await getUserSession(request, env);
   const admin = await isAdmin(request, env);
   const ownerId = await ownerUserId(env);
@@ -1638,9 +1672,11 @@ function publicSettingsObject(settings, visibleProfileSections = Object.keys(PRO
 }
 
 async function publicBootstrap(request, env) {
-  const sessionUser = await getUserSession(request, env);
+  // 游客会话代表公开站点当前明确选择的身份，不能被并存的高权限 Cookie 覆盖。
+  const guestSession = await getGuestSession(request, env);
+  const sessionUser = guestSession ? null : await getUserSession(request, env);
   const fullAccess = sessionUser?.status === "approved";
-  const adminAccess = await isAdmin(request, env);
+  const adminAccess = guestSession ? false : await isAdmin(request, env);
   const [
     changelogs, sections, subsections, content, albums, media, assetFolders, assets, assetVariants, settings,
     contentAccess, mediaAccess, sectionAccess, subsectionAccess, albumAccess, folderAccess, assetAccess,
@@ -2570,7 +2606,10 @@ async function adminLogin(request, env) {
     throw new HttpError(401, "密码错误");
   }
   const session = await makeSession(request, env, accessEmail);
-  return json({ ok: true }, 200, { "Set-Cookie": secureCookie(request, session.token, session.ttl) });
+  return jsonWithCookies({ ok: true }, 200, [
+    secureCookie(request, session.token, session.ttl),
+    guestSessionCookie(request, "", 0),
+  ]);
 }
 
 /* ============================================================
@@ -2773,6 +2812,9 @@ async function requireGuestSession(request, env) {
 }
 
 async function requireWebsiteVisitor(request, env) {
+  // 公开站点的显式游客身份优先；账号与 Studio Cookie 仍可留存但不得参与读取。
+  const guest = await getGuestSession(request, env);
+  if (guest) return { type: "guest", ...guest };
   const user = await getUserSession(request, env, false);
   if (user) return { type: "user", user };
   if (await isAdmin(request, env)) return { type: "admin" };
@@ -3344,9 +3386,10 @@ async function registerUser(request, env, ctx) {
     note, inviteCode, createdAt: timestamp,
   }).catch((error) => console.error("Registration notification failed", error));
   if (ctx) ctx.waitUntil(noticeJob); else await noticeJob;
-  const responseHeaders = { "Cache-Control": "no-store" };
-  if (session) responseHeaders["Set-Cookie"] = userSessionCookie(request, session.token, session.cookieMaxAge);
-  return json({ ok: true, user: publicUser(user), authenticated: Boolean(session) }, 201, responseHeaders);
+  return jsonWithCookies({ ok: true, user: publicUser(user), authenticated: Boolean(session) }, 201, [
+    session ? userSessionCookie(request, session.token, session.cookieMaxAge) : "",
+    guestSessionCookie(request, "", 0),
+  ]);
 }
 
 async function loginUser(request, env) {
@@ -3375,14 +3418,15 @@ async function loginUser(request, env) {
   user.last_login_at = timestamp;
   user.last_seen_at = timestamp;
   await recordLoginEvent(env, request, "login_success", user.id, username);
-  return json({ ok: true, user: publicUser(user) }, 200, {
-    "Set-Cookie": userSessionCookie(request, session.token, session.cookieMaxAge),
-    "Cache-Control": "no-store",
-  });
+  return jsonWithCookies({ ok: true, user: publicUser(user) }, 200, [
+    userSessionCookie(request, session.token, session.cookieMaxAge),
+    guestSessionCookie(request, "", 0),
+  ]);
 }
 
 async function authSession(request, env) {
-  const user = await getUserSession(request, env);
+  // 与 bootstrap 使用相同身份决策，游客模式下前端也必须立即呈现未登录状态。
+  const user = (await getGuestSession(request, env)) ? null : await getUserSession(request, env);
   return json({
     authenticated: Boolean(user),
     user: user ? publicUser(user) : null,
