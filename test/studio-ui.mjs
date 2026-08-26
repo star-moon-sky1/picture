@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const studioHtml = await readFile(new URL("../public/studio.html", import.meta.url), "utf8");
+const inlineScripts = [...studioHtml.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+  .map((match) => match[1])
+  .filter((source) => source.trim());
+
+assert.ok(inlineScripts.length > 0, "Studio must contain inline application JavaScript");
+for (const source of inlineScripts) new Function(source);
+
+assert.match(studioHtml, /id="subsection-download-policy"/);
+assert.match(studioHtml, /站长私有备注（仅后台可见）/);
+assert.match(studioHtml, /className="upload-job-rate"/);
+assert.match(studioHtml, /function uploadPartRequest\(/);
+assert.match(studioHtml, /UPLOAD_STALL_TIMEOUT_MS=30\*1000/);
+assert.match(studioHtml, /waitUntilReady/);
+assert.match(studioHtml, /wasNetworkAbort/);
+assert.match(studioHtml, /照片权限已保存/);
+
+console.log("studio UI regression passed");

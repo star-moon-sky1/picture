@@ -566,6 +566,8 @@ async function initializeSchema(env) {
       name TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       sort_order INTEGER NOT NULL DEFAULT 0,
+      download_policy TEXT NOT NULL DEFAULT 'public'
+        CHECK(download_policy IN ('public', 'member')),
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(section_id) REFERENCES portfolio_sections(id) ON DELETE CASCADE
@@ -681,6 +683,7 @@ async function initializeSchema(env) {
       note TEXT NOT NULL DEFAULT '',
       invite_code TEXT NOT NULL DEFAULT '',
       review_note TEXT NOT NULL DEFAULT '',
+      admin_note TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -1028,6 +1031,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "media", "preview_object_key", "TEXT");
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "portfolio_subsections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "portfolio_subsections", "download_policy", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "albums", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "subsection_id", "TEXT");
@@ -1046,6 +1050,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "assets", "note", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "asset_uploads", "part_size", "INTEGER NOT NULL DEFAULT 33554432");
   await ensureColumn(env, "asset_folders", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "user_profiles", "admin_note", "TEXT NOT NULL DEFAULT ''");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
   await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "feedback", "admin_replied_at", "TEXT");
@@ -1707,7 +1712,7 @@ async function publicBootstrap(request, env) {
       FROM portfolio_sections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, section_id, name, description, sort_order, visibility
+      SELECT id, section_id, name, description, sort_order, visibility, download_policy
       FROM portfolio_subsections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
@@ -1802,6 +1807,14 @@ async function publicBootstrap(request, env) {
     ))
   ));
   const visibleSubsectionIds = new Set(visibleSubsections.map((item) => item.id));
+  const subsectionDownloadPolicies = new Map(rows(subsections).map((item) => [
+    item.id, normalizedDownloadPolicy(item.download_policy),
+  ]));
+  const elevatedDownloadAccess = fullAccess || adminAccess || ownerAccess;
+  const canDownloadAsset = (item) => elevatedDownloadAccess || (
+    normalizedDownloadPolicy(item.download_policy) === "public"
+    && (!item.subsection_id || subsectionDownloadPolicies.get(item.subsection_id) !== "member")
+  );
   const visibleContent = rows(content).filter((item) => (
     visibleSectionIds.has(item.section_id)
     && (!item.subsection_id || visibleSubsectionIds.has(item.subsection_id))
@@ -1873,21 +1886,21 @@ async function publicBootstrap(request, env) {
      * 公开下载的文件游客可下载，其余文件仅审核通过的登录用户可下载。
      */
     assets: visibleAssets.filter((item) => item.scope === "library" && item.section_id === RESOURCE_SECTION_ID).map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
-      includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+      includeDownload: canDownloadAsset(item),
     })),
     galleryAssets: visibleAssets.filter((item) => item.scope === "gallery" && gallerySectionIds.has(item.section_id)).map((item) => assetDto(
       item, variantsByAsset.get(item.id) || [], {
-        includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+        includeDownload: canDownloadAsset(item),
       },
     )),
     sectionAssets: visibleAssets.filter((item) => item.scope === "section" && contentSectionIds.has(item.section_id)).map((item) => assetDto(
       item, variantsByAsset.get(item.id) || [], {
-        includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+        includeDownload: canDownloadAsset(item),
       },
     )),
     articleAssets: visibleAssets.filter((item) => item.scope === "article").map((item) => assetDto(
       item, variantsByAsset.get(item.id) || [], {
-        includeDownload: fullAccess || normalizedDownloadPolicy(item.download_policy) === "public",
+        includeDownload: canDownloadAsset(item),
       },
     )),
   };
@@ -4005,6 +4018,7 @@ async function assetAccessContext(request, env, asset) {
   let folder = asset.folder_id ? folderMap.get(asset.folder_id) : null;
   const context = await websiteAccessContext(request, env);
   let isPublicChain = normalizedAssetVisibility(asset.access_mode || asset.visibility) === "public";
+  let effectiveDownloadPolicy = normalizedDownloadPolicy(asset.download_policy);
   if ((asset.scope || "library") === "library") {
     const resourceSection = await env.DB.prepare("SELECT id, visibility FROM portfolio_sections WHERE id = ?")
       .bind(RESOURCE_SECTION_ID).first();
@@ -4036,12 +4050,13 @@ async function assetAccessContext(request, env, asset) {
   }
   if (asset.subsection_id) {
     const subsection = await env.DB.prepare(
-      "SELECT id, visibility FROM portfolio_subsections WHERE id = ? AND section_id = ?",
+      "SELECT id, visibility, download_policy FROM portfolio_subsections WHERE id = ? AND section_id = ?",
     ).bind(asset.subsection_id, asset.section_id).first();
     if (!subsection || !(await canAccessTarget(env, "subsection", subsection.id, subsection.visibility, context))) {
       throw new HttpError(404, "文件不存在");
     }
     isPublicChain = isPublicChain && normalizedVisibility(subsection.visibility) === "public";
+    if (normalizedDownloadPolicy(subsection.download_policy) === "member") effectiveDownloadPolicy = "member";
   }
   if (asset.album_id) {
     const album = await env.DB.prepare("SELECT id, visibility FROM albums WHERE id = ?").bind(asset.album_id).first();
@@ -4060,12 +4075,18 @@ async function assetAccessContext(request, env, asset) {
     throw new HttpError(404, "文件不存在");
   }
 
-  const wantsDownload = new URL(request.url).searchParams.get("download") === "1" || asset.kind === "archive";
-  if (wantsDownload && normalizedDownloadPolicy(asset.download_policy) !== "public"
+  const wantsDownload = new URL(request.url).searchParams.get("download") === "1"
+    || asset.kind === "archive" || asset.kind === "file";
+  if (wantsDownload && effectiveDownloadPolicy !== "public"
     && !context.adminAccess && !context.ownerAccess) {
     await requireApprovedUser(request, env);
   }
-  return { inheritedVisibility: isPublicChain ? "public" : "protected", adminAccess: context.adminAccess, wantsDownload };
+  return {
+    inheritedVisibility: isPublicChain ? "public" : "protected",
+    downloadPolicy: effectiveDownloadPolicy,
+    adminAccess: context.adminAccess,
+    wantsDownload,
+  };
 }
 
 /*
@@ -4131,7 +4152,7 @@ async function serveAsset(request, env, id) {
   if (range) headers.set("Content-Range", `bytes ${range.start}-${range.end}/${head.size}`);
   headers.set(
     "Cache-Control",
-    access.inheritedVisibility === "public" && normalizedDownloadPolicy(asset.download_policy) === "public"
+    access.inheritedVisibility === "public" && access.downloadPolicy === "public"
       ? "public, max-age=3600"
       : "private, no-store",
   );
@@ -4455,23 +4476,30 @@ async function adminSubsections(request, env, id) {
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
     const visibility = normalizedVisibility(input.visibility);
+    const requestedDownloadPolicy = Object.prototype.hasOwnProperty.call(input, "downloadPolicy")
+      ? normalizedDownloadPolicy(input.downloadPolicy)
+      : null;
     const allowedUserIds = await validatedAllowedUserIds(env, visibility, input.allowedUserIds);
     await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
     if (!name) throw new HttpError(400, "小板块名称不能为空");
     const timestamp = nowIso();
     if (request.method === "POST") {
       const newId = crypto.randomUUID();
+      const downloadPolicy = requestedDownloadPolicy || "public";
       await env.DB.prepare(`
         INSERT INTO portfolio_subsections
-          (id, section_id, name, description, sort_order, visibility, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, sectionId, name, description, sortOrder, visibility, timestamp, timestamp).run();
+          (id, section_id, name, description, sort_order, visibility, download_policy, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, sectionId, name, description, sortOrder, visibility, downloadPolicy, timestamp, timestamp).run();
       await replaceAllowedUsers(env, "subsection", newId, allowedUserIds, timestamp);
       return { id: newId, allowed_user_ids: allowedUserIds };
     }
     if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
-    const existing = await env.DB.prepare("SELECT id, section_id FROM portfolio_subsections WHERE id = ?").bind(id).first();
+    const existing = await env.DB.prepare(
+      "SELECT id, section_id, download_policy FROM portfolio_subsections WHERE id = ?",
+    ).bind(id).first();
     if (!existing) throw new HttpError(404, "小板块不存在");
+    const downloadPolicy = requestedDownloadPolicy || normalizedDownloadPolicy(existing.download_policy);
     if (existing.section_id !== sectionId) {
       const usage = await env.DB.prepare(`
         SELECT
@@ -4483,9 +4511,9 @@ async function adminSubsections(request, env, id) {
     }
     await env.DB.prepare(`
       UPDATE portfolio_subsections
-      SET section_id = ?, name = ?, description = ?, sort_order = ?, visibility = ?, updated_at = ?
+      SET section_id = ?, name = ?, description = ?, sort_order = ?, visibility = ?, download_policy = ?, updated_at = ?
       WHERE id = ?
-    `).bind(sectionId, name, description, sortOrder, visibility, timestamp, id).run();
+    `).bind(sectionId, name, description, sortOrder, visibility, downloadPolicy, timestamp, id).run();
     await replaceAllowedUsers(env, "subsection", id, allowedUserIds, timestamp);
     return { id, allowed_user_ids: allowedUserIds };
   }
@@ -5786,7 +5814,7 @@ async function adminUsers(request, env, id) {
     const result = await env.DB.prepare(`
       SELECT u.id, u.username, u.nickname, u.status, u.role, u.created_at, u.updated_at,
              u.approved_at, u.last_login_at, u.last_seen_at, u.password_changed_at,
-             p.display_name, p.contact_type, p.contact_value, p.note, p.invite_code, p.review_note,
+             p.display_name, p.contact_type, p.contact_value, p.note, p.invite_code, p.review_note, p.admin_note,
              MAX(CASE WHEN s.revoked_at IS NULL AND s.expires_at > ? THEN s.last_seen_at ELSE NULL END) AS active_session_seen_at,
              SUM(CASE WHEN s.revoked_at IS NULL AND s.expires_at > ? THEN 1 ELSE 0 END) AS active_session_count
       FROM users u
@@ -5807,12 +5835,21 @@ async function adminUsers(request, env, id) {
   if (request.method === "PUT") {
     if (!validId(id)) throw new HttpError(400, "用户 ID 错误");
     const input = await readJson(request);
+    const existing = await env.DB.prepare(`
+      SELECT u.id, u.status, p.review_note, p.admin_note
+      FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id
+      WHERE u.id = ?
+    `).bind(id).first();
+    if (!existing) throw new HttpError(404, "用户不存在");
     const status = ["pending", "approved", "rejected", "disabled"].includes(input.status)
       ? input.status
-      : "pending";
-    const reviewNote = clampText(input.reviewNote, 800);
-    const existing = await env.DB.prepare("SELECT id, status FROM users WHERE id = ?").bind(id).first();
-    if (!existing) throw new HttpError(404, "用户不存在");
+      : existing.status;
+    const reviewNote = Object.prototype.hasOwnProperty.call(input, "reviewNote")
+      ? clampText(input.reviewNote, 800)
+      : (existing.review_note || "");
+    const adminNote = Object.prototype.hasOwnProperty.call(input, "adminNote")
+      ? clampMultilineText(input.adminNote, 1200)
+      : (existing.admin_note || "");
     const timestamp = nowIso();
     await env.DB.batch([
       env.DB.prepare(`
@@ -5821,8 +5858,8 @@ async function adminUsers(request, env, id) {
             updated_at = ?
         WHERE id = ?
       `).bind(status, status, timestamp, timestamp, id),
-      env.DB.prepare("UPDATE user_profiles SET review_note = ?, updated_at = ? WHERE user_id = ?")
-        .bind(reviewNote, timestamp, id),
+      env.DB.prepare("UPDATE user_profiles SET review_note = ?, admin_note = ?, updated_at = ? WHERE user_id = ?")
+        .bind(reviewNote, adminNote, timestamp, id),
     ]);
     if (status !== existing.status) {
       const statusText = { approved: "账号审核已通过", rejected: "账号审核未通过", disabled: "账号已停用", pending: "账号状态已改为待审核" }[status];
@@ -5835,7 +5872,7 @@ async function adminUsers(request, env, id) {
       await env.DB.prepare("UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
         .bind(timestamp, id).run();
     }
-    return { id, status };
+    return { id, status, review_note: reviewNote, admin_note: adminNote };
   }
 
   throw new HttpError(405, "不支持的请求方法");

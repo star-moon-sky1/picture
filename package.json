@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "check": "node --check src/worker.js && wrangler deploy --dry-run",
+    "test:studio": "node test/studio-ui.mjs",
     "test:access": "node test/guest-mode-access.mjs",
     "test:upload": "node test/resumable-upload.mjs",
-    "test": "npm run test:access && npm run test:upload",
+    "test": "npm run test:studio && npm run test:access && npm run test:upload",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

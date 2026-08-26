@@ -492,6 +492,7 @@
 :root[data-theme="dark"] .upload-job,
 :root[data-theme="dark"] .resource-picker { color: var(--ink); border-color: var(--line); background: #11242b; }
 :root[data-theme="dark"] .user-note,
+:root[data-theme="dark"] .user-admin-note,
 :root[data-theme="dark"] .feedback-reply-editor,
 :root[data-theme="dark"] .reset-link { background: #102229; }
 :root[data-theme="dark"] .audience-picker {

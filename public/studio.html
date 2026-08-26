@@ -207,6 +207,7 @@
     .upload-job-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; font-size:.78rem; }
     .upload-job-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; text-align:right; }
     .upload-job-controls > span { min-width:0; overflow-wrap:anywhere; }
+    .upload-job-rate { min-width:104px !important; color:var(--muted); font-variant-numeric:tabular-nums; }
     .upload-job-controls .btn { min-width:58px; padding:5px 9px; }
     .upload-job.is-failed { border-color:#e4aaa5; }
     .upload-job.is-cancelled { opacity:.72; }
@@ -239,6 +240,9 @@
     .user-card,.reset-card { padding:17px; border:1px solid var(--line); border-radius:13px; background:#fff; }
     .user-card.pending,.reset-card.pending { border-color:#e6be65; box-shadow:inset 4px 0 0 #e6be65; }
     .user-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .user-admin-note { display:grid; gap:8px; margin-top:12px; padding:11px; border:1px solid var(--line); border-radius:11px; background:rgba(239,248,248,.72); }
+    .user-admin-note label { color:var(--muted); font-size:.78rem; font-weight:800; }
+    .user-admin-note textarea { min-height:74px; margin:0; resize:vertical; }
     .user-head h3 { margin:0; font-size:1rem; }
     .user-state { display:inline-flex; align-items:center; gap:6px; padding:5px 9px; border-radius:999px; background:#edf1f2; color:var(--muted); font-size:.72rem; font-weight:800; }
     .user-state.approved { color:#2e7158; background:#e5f5ed; }
@@ -430,6 +434,7 @@
               <div class="field"><label>名称</label><input id="subsection-name" maxlength="80" required placeholder="例如 所有、学习笔记"></div>
               <div class="field"><label>排序</label><input id="subsection-sort" type="number" value="0"></div>
               <div class="field"><label>访问权限</label><select id="subsection-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="subsection-user-picker" class="audience-picker hidden"></div></div>
+              <div class="field"><label>小板块文件下载权限</label><select id="subsection-download-policy"><option value="public">游客可下载其中允许公开下载的文件</option><option value="member">仅审核用户可下载</option></select><small>这是小板块总开关；设为“仅审核用户”后，即使单个文件允许游客下载，游客也不能下载。</small></div>
               <div class="field wide"><label>说明</label><input id="subsection-description" maxlength="500"></div>
             </div>
             <div class="actions"><button class="btn" type="submit">保存小板块</button><button id="delete-subsection" class="btn danger hidden" type="button">删除</button><span id="subsection-notice" class="status"></span></div>
@@ -1007,9 +1012,9 @@
     }
 
     async function loadSubsections(){app.subsections=await api("/api/admin/subsections");renderSubsectionList();refreshContentSubsectionOptions(document.getElementById("content-section").value);refreshMediaSubsectionOptions(document.getElementById("media-section").value);refreshAssetSubsectionOptions()}
-    function renderSubsectionList(){const list=document.getElementById("subsection-list");clear(list);if(!app.subsections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有小板块。每一种大板块都可以在这里建立小板块。";list.append(p);return}app.subsections.forEach(item=>{const section=app.sections.find(value=>value.id===item.section_id);const row=document.createElement("div");row.className=`list-item${document.getElementById("subsection-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";meta.textContent=`${section?.name||"未知大板块"} · ${visibilityLabels[item.visibility]||visibilityLabels.public} · 文章 ${item.content_count||0} · 图片 ${item.media_count||0} · 文件 ${item.asset_count||0} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editSubsection(item));list.append(row)})}
-    function resetSubsectionForm(){document.getElementById("subsection-form").reset();document.getElementById("subsection-id").value="";document.getElementById("subsection-sort").value="0";document.getElementById("delete-subsection").classList.add("hidden");document.getElementById("subsection-notice").textContent="";syncAudiencePicker("subsection-visibility","subsection-user-picker",[]);refreshSectionOptions();renderSubsectionList()}
-    function editSubsection(item){document.getElementById("subsection-id").value=item.id;document.getElementById("subsection-section").value=item.section_id;document.getElementById("subsection-name").value=item.name;document.getElementById("subsection-description").value=item.description||"";document.getElementById("subsection-sort").value=item.sort_order||0;document.getElementById("subsection-visibility").value=item.visibility||"public";syncAudiencePicker("subsection-visibility","subsection-user-picker",item.allowed_user_ids||[]);document.getElementById("delete-subsection").classList.remove("hidden");renderSubsectionList()}
+    function renderSubsectionList(){const list=document.getElementById("subsection-list");clear(list);if(!app.subsections.length){const p=document.createElement("p");p.className="status";p.textContent="还没有小板块。每一种大板块都可以在这里建立小板块。";list.append(p);return}app.subsections.forEach(item=>{const section=app.sections.find(value=>value.id===item.section_id);const row=document.createElement("div");row.className=`list-item${document.getElementById("subsection-id").value===item.id?" active":""}`;const title=document.createElement("div");title.className="list-title";title.textContent=item.name;const meta=document.createElement("div");meta.className="list-meta";const downloadLabel=item.download_policy==="member"?"仅审核用户下载":"按文件权限允许游客下载";meta.textContent=`${section?.name||"未知大板块"} · 查看：${visibilityLabels[item.visibility]||visibilityLabels.public} · 下载：${downloadLabel} · 文章 ${item.content_count||0} · 图片 ${item.media_count||0} · 文件 ${item.asset_count||0} · 排序 ${item.sort_order||0}`;row.append(title,meta);row.addEventListener("click",()=>editSubsection(item));list.append(row)})}
+    function resetSubsectionForm(){document.getElementById("subsection-form").reset();document.getElementById("subsection-id").value="";document.getElementById("subsection-sort").value="0";document.getElementById("subsection-download-policy").value="public";document.getElementById("delete-subsection").classList.add("hidden");document.getElementById("subsection-notice").textContent="";syncAudiencePicker("subsection-visibility","subsection-user-picker",[]);refreshSectionOptions();renderSubsectionList()}
+    function editSubsection(item){document.getElementById("subsection-id").value=item.id;document.getElementById("subsection-section").value=item.section_id;document.getElementById("subsection-name").value=item.name;document.getElementById("subsection-description").value=item.description||"";document.getElementById("subsection-sort").value=item.sort_order||0;document.getElementById("subsection-visibility").value=item.visibility||"public";document.getElementById("subsection-download-policy").value=item.download_policy||"public";syncAudiencePicker("subsection-visibility","subsection-user-picker",item.allowed_user_ids||[]);document.getElementById("delete-subsection").classList.remove("hidden");renderSubsectionList()}
     function fillSubsectionSelect(select,sectionId,selectedId="",noneText="未分类"){if(!select)return;const current=selectedId||select.value;clear(select);const none=document.createElement("option");none.value="";none.textContent=noneText;select.append(none);app.subsections.filter(item=>item.section_id===sectionId).forEach(item=>{const option=document.createElement("option");option.value=item.id;option.textContent=item.name;select.append(option)});if([...select.options].some(option=>option.value===current))select.value=current}
     function refreshContentSubsectionOptions(sectionId,selectedId=""){fillSubsectionSelect(document.getElementById("content-subsection"),sectionId,selectedId);renderContentSectionAssets()}
     function refreshMediaSubsectionOptions(sectionId,selectedId=""){fillSubsectionSelect(document.getElementById("media-subsection"),sectionId,selectedId,"全部");fillSubsectionSelect(document.getElementById("media-album"),sectionId,selectedId)}
@@ -1122,7 +1127,7 @@
        R2 大文件分片上传与文件夹管理
        ---------------------------------------------------------
        每个文件按服务器返回的 partSize 切片上传。某一片网络失败会自动重试
-       两次；只有所有片的 ETag 都返回后才请求 R2 合并，避免出现半个文件。
+       六次；只有所有片的 ETag 都返回后才请求 R2 合并，避免出现半个文件。
        ========================================================= */
     function formatBytes(value){
       const bytes=Number(value)||0;if(bytes<1024)return `${bytes} B`;
@@ -1130,6 +1135,7 @@
       do{size/=1024;unit+=1}while(size>=1024&&unit<units.length-1);
       return `${size>=10?size.toFixed(1):size.toFixed(2)} ${units[unit]}`;
     }
+    function formatUploadRate(value){const bytesPerSecond=Number(value)||0;return bytesPerSecond>0?`${formatBytes(bytesPerSecond)}/s`:"--"}
     function assetFolderPath(id){
       if(!id)return "根目录";const map=new Map(app.assetFolders.map(item=>[item.id,item]));const names=[];const seen=new Set();let cursor=map.get(id);
       while(cursor&&!seen.has(cursor.id)){seen.add(cursor.id);names.unshift(cursor.name);cursor=cursor.parent_id?map.get(cursor.parent_id):null}
@@ -1217,6 +1223,8 @@
     const UPLOAD_CHECKPOINT_DB="xingyueji-upload-checkpoints";
     const UPLOAD_CHECKPOINT_STORE="uploads";
     const UPLOAD_CHECKPOINT_FALLBACK="xingyueji-upload-checkpoints-v1";
+    const UPLOAD_STALL_TIMEOUT_MS=30*1000;
+    const UPLOAD_RESPONSE_TIMEOUT_MS=120*1000;
     let uploadCheckpointDbPromise=null;
 
     class UploadCancelledError extends Error{
@@ -1298,7 +1306,6 @@
       const notice=document.getElementById("asset-notice");if(notice&&!notice.textContent.trim())notice.textContent=`检测到 ${records.length} 个未完成上传；重新选择同一文件即可从已完成分片继续。`;
     }
     function uploadConcurrency(){const connection=navigator.connection;return connection?.saveData||["slow-2g","2g"].includes(connection?.effectiveType)?1:2}
-    function delay(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 
     window.addEventListener("beforeunload",event=>{if(!app.activeUploadJobs.size)return;event.preventDefault();event.returnValue=""});
 
@@ -1309,22 +1316,58 @@
       const name=document.createElement("strong");name.textContent=file.name;
       const controls=document.createElement("div");controls.className="upload-job-controls";
       const state=document.createElement("span");state.textContent="等待上传";
+      const rate=document.createElement("span");rate.className="upload-job-rate";rate.textContent="上传速率 --";
       const pause=button("暂停","btn small ghost");pause.setAttribute("aria-label",`暂停上传 ${file.name}`);
       const cancel=button("取消","btn small danger");cancel.setAttribute("aria-label",`取消上传 ${file.name}`);
-      controls.append(state,pause,cancel);head.append(name,controls);
+      controls.append(state,rate,pause,cancel);head.append(name,controls);
       const progress=document.createElement("div");progress.className="upload-progress";const bar=document.createElement("span");progress.append(bar);job.append(head,progress);queue.append(job);
 
       let paused=false;let terminal=false;let cancelled=false;let failureError=null;let lastState="等待上传";let resumeWaiters=[];
       const activeControllers=new Set();const stopListeners=new Set();
       const pauseAbortedRequests=new WeakSet();
+      const networkAbortedRequests=new WeakSet();
       const stoppedError=()=>cancelled?new UploadCancelledError():failureError;
       const throwIfStopped=()=>{const error=stoppedError();if(error)throw error};
       const settleStopped=error=>{const waiters=resumeWaiters;resumeWaiters=[];waiters.forEach(item=>item.reject(error));for(const listener of stopListeners)listener(error);stopListeners.clear()};
-      const resume=()=>{paused=false;pause.textContent="暂停";pause.setAttribute("aria-label",`暂停上传 ${file.name}`);state.textContent=lastState;const waiters=resumeWaiters;resumeWaiters=[];waiters.forEach(item=>item.resolve())};
+      const setRate=value=>{rate.textContent=paused?"上传速率 已暂停":`上传速率 ${formatUploadRate(value)}`};
+      const setState=text=>{lastState=text;if(!paused)state.textContent=text};
+      const waitUntilResumed=()=>{throwIfStopped();return paused?new Promise((resolve,reject)=>resumeWaiters.push({resolve,reject})):Promise.resolve()};
+      const waitForOnline=()=>{
+        throwIfStopped();if(navigator.onLine!==false)return Promise.resolve();setState("网络已断开，恢复联网后会继续…");setRate(0);
+        return new Promise((resolve,reject)=>{
+          const cleanup=()=>{window.removeEventListener("online",onOnline);stopListeners.delete(onStop)};
+          const onOnline=()=>{cleanup();resolve()};const onStop=error=>{cleanup();reject(error)};
+          stopListeners.add(onStop);window.addEventListener("online",onOnline,{once:true});
+          if(navigator.onLine!==false){cleanup();resolve()}
+        });
+      };
+      const waitUntilReady=async()=>{
+        while(true){await waitUntilResumed();await waitForOnline();throwIfStopped();if(!paused&&navigator.onLine!==false)return}
+      };
+      const waitForRetry=ms=>{
+        throwIfStopped();return new Promise((resolve,reject)=>{
+          const timer=setTimeout(()=>{stopListeners.delete(onStop);resolve()},ms);
+          const onStop=error=>{clearTimeout(timer);stopListeners.delete(onStop);reject(error)};stopListeners.add(onStop);
+        });
+      };
+      const abortForNetwork=message=>{
+        if(terminal||cancelled)return;setState(message);setRate(0);
+        for(const controller of activeControllers){networkAbortedRequests.add(controller);controller.abort()}
+      };
+      let observedConnectionType=navigator.connection?.type||"";
+      const onOffline=()=>abortForNetwork("网络已断开，恢复联网后会自动重连…");
+      const onConnectionChange=()=>{
+        const nextType=navigator.connection?.type||"";
+        if(observedConnectionType&&nextType&&observedConnectionType!==nextType)abortForNetwork("检测到网络切换，正在重新连接…");
+        observedConnectionType=nextType;
+      };
+      const cleanupNetworkListeners=()=>{window.removeEventListener("offline",onOffline);navigator.connection?.removeEventListener?.("change",onConnectionChange)};
+      window.addEventListener("offline",onOffline);navigator.connection?.addEventListener?.("change",onConnectionChange);
+      const resume=()=>{paused=false;pause.textContent="暂停";pause.setAttribute("aria-label",`暂停上传 ${file.name}`);lastState="正在恢复上传…";state.textContent=lastState;setRate(0);const waiters=resumeWaiters;resumeWaiters=[];waiters.forEach(item=>item.resolve())};
       pause.addEventListener("click",()=>{
         if(terminal)return;
         if(paused){resume();return}
-        paused=true;pause.textContent="恢复";pause.setAttribute("aria-label",`恢复上传 ${file.name}`);state.textContent="已暂停（恢复后会安全重传当前分片）";
+        paused=true;pause.textContent="恢复";pause.setAttribute("aria-label",`恢复上传 ${file.name}`);state.textContent="已暂停（恢复后会安全重传当前分片）";setRate(0);
         for(const controller of activeControllers){pauseAbortedRequests.add(controller);controller.abort()}
       });
       cancel.addEventListener("click",()=>{
@@ -1332,45 +1375,70 @@
         const error=new UploadCancelledError();for(const controller of activeControllers)controller.abort();settleStopped(error);
       });
       const update=(percent,text)=>{bar.style.width=`${Math.max(0,Math.min(100,percent))}%`;lastState=text;if(!paused)state.textContent=text};
-      const setState=text=>{lastState=text;if(!paused)state.textContent=text};
       const apiObject={
         update,
         setState,
-        waitUntilResumed(){throwIfStopped();return paused?new Promise((resolve,reject)=>resumeWaiters.push({resolve,reject})):Promise.resolve()},
-        waitForOnline(){
-          throwIfStopped();if(navigator.onLine!==false)return Promise.resolve();setState("网络已断开，恢复联网后会继续…");
-          return new Promise((resolve,reject)=>{const cleanup=()=>{window.removeEventListener("online",onOnline);stopListeners.delete(onStop)};const onOnline=()=>{cleanup();resolve()};const onStop=error=>{cleanup();reject(error)};stopListeners.add(onStop);window.addEventListener("online",onOnline,{once:true})});
-        },
+        setRate,
+        waitUntilResumed,
+        waitForOnline,
+        waitUntilReady,
+        waitForRetry,
         beginPartRequest(){throwIfStopped();const controller=new AbortController();activeControllers.add(controller);return controller},
         endPartRequest(controller){activeControllers.delete(controller)},
         wasPausedAbort(controller){return pauseAbortedRequests.has(controller)},
+        wasNetworkAbort(controller){return networkAbortedRequests.has(controller)},
         throwIfStopped,
         isCancelled(){return cancelled},
         abortForFailure(error){if(failureError||cancelled)return;failureError=error;for(const controller of activeControllers)controller.abort();settleStopped(error)},
-        lock(text){if(paused)resume();pause.disabled=true;cancel.disabled=true;pause.textContent="处理中";update(100,text)},
-        finish(text){terminal=true;pause.disabled=true;cancel.disabled=true;pause.textContent="完成";update(100,text);app.activeUploadJobs.delete(apiObject)},
-        fail(text){terminal=true;if(paused)resume();pause.disabled=true;cancel.disabled=true;pause.textContent="失败";job.classList.add("is-failed");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject)},
-        cancelled(text){terminal=true;pause.disabled=true;cancel.disabled=true;pause.textContent="已取消";job.classList.add("is-cancelled");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject)},
+        lock(text){if(paused)resume();cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="处理中";setRate(0);update(100,text)},
+        finish(text){terminal=true;cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="完成";rate.textContent="上传速率 已完成";update(100,text);app.activeUploadJobs.delete(apiObject)},
+        fail(text){terminal=true;if(paused)resume();cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="失败";rate.textContent="上传速率 已停止";job.classList.add("is-failed");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject)},
+        cancelled(text){terminal=true;cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="已取消";rate.textContent="上传速率 已停止";job.classList.add("is-cancelled");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject)},
       };
       app.activeUploadJobs.add(apiObject);return apiObject;
     }
-    async function uploadPartWithRetry(url,blob,job){
+    function uploadPartRequest(url,blob,controller,onProgress){
+      return new Promise((resolve,reject)=>{
+        const xhr=new XMLHttpRequest();let settled=false;let stallTimer=0;let forcedError=null;let sampleAt=performance.now();let sampleBytes=0;let smoothedRate=0;
+        const cleanup=()=>{clearTimeout(stallTimer);controller.signal.removeEventListener("abort",onAbortSignal)};
+        const finish=(callback,value)=>{if(settled)return;settled=true;cleanup();callback(value)};
+        const fail=error=>finish(reject,error);
+        const resetStallTimer=(timeout=UPLOAD_STALL_TIMEOUT_MS,message="上传连接超过 30 秒没有传输数据")=>{clearTimeout(stallTimer);stallTimer=setTimeout(()=>{forcedError=new Error(message);forcedError.code="UPLOAD_STALLED";xhr.abort()},timeout)};
+        const onAbortSignal=()=>xhr.abort();
+        controller.signal.addEventListener("abort",onAbortSignal,{once:true});
+        xhr.open("PUT",url,true);xhr.withCredentials=true;xhr.setRequestHeader("Content-Type","application/octet-stream");
+        xhr.upload.onprogress=event=>{
+          resetStallTimer();const now=performance.now();const elapsed=now-sampleAt;
+          if(elapsed>=250){const delta=Math.max(0,event.loaded-sampleBytes);const instant=delta*1000/elapsed;smoothedRate=smoothedRate?smoothedRate*.65+instant*.35:instant;sampleAt=now;sampleBytes=event.loaded}
+          try{onProgress?.({loaded:event.loaded,total:event.lengthComputable?event.total:blob.size,bytesPerSecond:smoothedRate})}catch{}
+        };
+        xhr.upload.onload=()=>resetStallTimer(UPLOAD_RESPONSE_TIMEOUT_MS,"服务器超过 120 秒未确认该分片");
+        xhr.onload=()=>{
+          let data=null;try{data=xhr.responseText?JSON.parse(xhr.responseText):null}catch{}
+          if(xhr.status>=200&&xhr.status<300){finish(resolve,data);return}
+          const error=new Error(data?.error||`分片上传失败（${xhr.status}）`);error.status=xhr.status;
+          const retryAfter=Number(xhr.getResponseHeader("Retry-After"));if(Number.isFinite(retryAfter)&&retryAfter>0)error.retryAfter=retryAfter*1000;fail(error);
+        };
+        xhr.onerror=()=>fail(new Error("上传连接已中断"));
+        xhr.onabort=()=>{if(forcedError){fail(forcedError);return}const error=new Error("上传请求已中止");error.name="AbortError";fail(error)};
+        resetStallTimer();if(controller.signal.aborted){xhr.abort();return}xhr.send(blob);
+      });
+    }
+    async function uploadPartWithRetry(url,blob,job,{label="当前分片",onProgress=null}={}){
       let lastError;let attempt=0;
       while(attempt<6){
-        await job.waitUntilResumed();await job.waitForOnline();job.throwIfStopped();
+        await job.waitUntilReady();job.throwIfStopped();job.setState(attempt?`正在重新连接并上传${label}…`:`正在上传${label}…`);
         const controller=job.beginPartRequest();
         try{
-          const response=await fetch(url,{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:blob,signal:controller.signal});
-          const data=await response.json().catch(()=>null);
-          if(!response.ok){const error=new Error(data?.error||`分片上传失败（${response.status}）`);error.status=response.status;const retryAfter=Number(response.headers.get("Retry-After"));if(Number.isFinite(retryAfter)&&retryAfter>0)error.retryAfter=retryAfter*1000;throw error}
-          return data;
+          return await uploadPartRequest(url,blob,controller,onProgress);
         }catch(error){
-          if(job.wasPausedAbort(controller))continue;
+          try{onProgress?.({loaded:0,total:blob.size,bytesPerSecond:0,reset:true})}catch{}
+          if(job.wasPausedAbort(controller)||job.wasNetworkAbort(controller))continue;
           job.throwIfStopped();lastError=error;attempt+=1;
           const retryable=!error.status||error.status===408||error.status===425||error.status===429||error.status>=500;
           if(!retryable||attempt>=6)break;
           const wait=Math.min(8000,error.retryAfter||((500*(2**(attempt-1)))+Math.floor(Math.random()*350)));
-          job.setState(`网络波动，${Math.ceil(wait/1000)} 秒后重试（${attempt}/6）…`);await delay(wait);
+          job.setRate(0);job.setState(`网络波动，${Math.ceil(wait/1000)} 秒后重试（${attempt}/6）…`);await job.waitForRetry(wait);
         }finally{job.endPartRequest(controller)}
       }
       throw lastError;
@@ -1415,20 +1483,23 @@
         }
         let uploadedBytes=[...parts.values()].reduce((sum,part)=>sum+part.sizeBytes,0);
         const missing=Array.from({length:count},(_,index)=>index+1).filter(partNumber=>!parts.has(partNumber));
-        let cursor=0;let firstFailure=null;
-        const worker=async()=>{
+        let cursor=0;let firstFailure=null;const activeRates=new Map();
+        const refreshUploadRate=()=>job.setRate([...activeRates.values()].reduce((sum,value)=>sum+(Number(value)||0),0));
+        const worker=async workerIndex=>{
           while(true){
             job.throwIfStopped();const position=cursor;cursor+=1;if(position>=missing.length)return;
             const partNumber=missing[position];const start=(partNumber-1)*partSize;const end=Math.min(file.size,start+partSize);
             await job.waitUntilResumed();job.update(uploadedBytes/file.size*100,`上传第 ${partNumber}/${count} 片…`);
+            const rateKey=`${workerIndex}:${partNumber}`;activeRates.set(rateKey,0);
             try{
-              const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${partNumber}`,file.slice(start,end),job);
+              const result=await uploadPartWithRetry(`/api/admin/asset-uploads/${session.sessionId}/part/${partNumber}`,file.slice(start,end),job,{label:`第 ${partNumber}/${count} 片`,onProgress:progress=>{activeRates.set(rateKey,progress.bytesPerSecond||0);refreshUploadRate()}});
               parts.set(partNumber,{partNumber:Number(result.partNumber),etag:String(result.etag),sizeBytes:end-start});uploadedBytes+=end-start;
               job.update(uploadedBytes/file.size*100,`已上传 ${formatBytes(uploadedBytes)} / ${formatBytes(file.size)}`);
             }catch(error){if(!job.isCancelled()&&!firstFailure){firstFailure=error;job.abortForFailure(error)}throw error}
+            finally{activeRates.delete(rateKey);refreshUploadRate()}
           }
         };
-        const results=await Promise.allSettled(Array.from({length:Math.min(uploadConcurrency(),Math.max(1,missing.length))},()=>worker()));
+        const results=await Promise.allSettled(Array.from({length:Math.min(uploadConcurrency(),Math.max(1,missing.length))},(_,index)=>worker(index)));
         if(firstFailure)throw firstFailure;const rejected=results.find(result=>result.status==="rejected");if(rejected)throw rejected.reason;
         await job.waitUntilResumed();job.lock("正在合并并校验…");
         const completedParts=[...parts.values()].sort((a,b)=>a.partNumber-b.partNumber).map(({partNumber,etag})=>({partNumber,etag}));
@@ -1658,13 +1729,18 @@
 
         const note=document.createElement("div");note.className="user-note";note.textContent=item.note?`申请备注：${item.note}`:"申请备注：未填写";
         const review=document.createElement("div");review.className="user-note";review.textContent=item.review_note?`审核备注：${item.review_note}`:"审核备注：未填写";
+        const adminNote=document.createElement("section");adminNote.className="user-admin-note";
+        const adminNoteLabel=document.createElement("label");adminNoteLabel.textContent="站长私有备注（仅后台可见）";
+        const adminNoteInput=document.createElement("textarea");adminNoteInput.maxLength=1200;adminNoteInput.placeholder="例如：姓名、关系、账号用途或需要记住的事项";adminNoteInput.value=item.admin_note||"";
+        const adminNoteActions=document.createElement("div");adminNoteActions.className="list-actions";
+        const saveAdminNote=button("保存私有备注","btn small");saveAdminNote.addEventListener("click",()=>saveUserAdminNote(item,adminNoteInput,saveAdminNote));adminNoteActions.append(saveAdminNote);adminNote.append(adminNoteLabel,adminNoteInput,adminNoteActions);
         const actions=document.createElement("div");actions.className="list-actions";
         if(item.status!=="approved"){const approve=button("批准账号","btn small");approve.addEventListener("click",()=>updateUserStatus(item,"approved"));actions.append(approve)}
         if(item.status!=="rejected"){const reject=button("拒绝申请","btn small ghost");reject.addEventListener("click",()=>updateUserStatus(item,"rejected"));actions.append(reject)}
         if(item.status!=="disabled"){const disable=button("停用账号","btn small danger");disable.addEventListener("click",()=>updateUserStatus(item,"disabled"));actions.append(disable)}
         else{const restore=button("恢复为待审核","btn small ghost");restore.addEventListener("click",()=>updateUserStatus(item,"pending"));actions.append(restore)}
         const traces=button("登录痕迹","btn small ghost");traces.addEventListener("click",()=>loadUserEvents(item));actions.append(traces);
-        card.append(head,data,note,review,actions);list.append(card);
+        card.append(head,data,note,review,adminNote,actions);list.append(card);
       });
     }
 
@@ -1675,6 +1751,15 @@
       if(status==="disabled"&&!confirm(`确定停用账号“${item.username}”并注销其全部会话吗？`))return;
       await api(`/api/admin/users/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({status,reviewNote})});
       await Promise.all([loadUsers(),loadDashboard()]);
+    }
+
+    async function saveUserAdminNote(item,input,control){
+      const oldText=control.textContent;control.disabled=true;control.textContent="正在保存…";
+      try{
+        const result=await api(`/api/admin/users/${item.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({adminNote:input.value})});
+        item.admin_note=result.admin_note||"";input.value=item.admin_note;control.textContent="已保存";
+        setTimeout(()=>{if(control.isConnected){control.textContent=oldText;control.disabled=false}},1200);
+      }catch(error){control.disabled=false;control.textContent=oldText;alert(`私有备注保存失败：${error.message}`)}
     }
 
     async function loadUserEvents(item){
@@ -1797,7 +1882,8 @@
       const next = control.value;
       const allowedUserIds = selectedAudienceIds(audiencePicker);
       if (visibilityUsesAudience(next) && !allowedUserIds.length) { alert("请至少勾选一个已审核账号"); return; }
-      control.disabled = true; saveButton.disabled = true;
+      const oldButtonText = saveButton.textContent;
+      control.disabled = true; saveButton.disabled = true; saveButton.textContent = "正在保存…";
       try {
         await api(`/api/admin/media/${item.id}`, {
           method: "PUT",
@@ -1814,11 +1900,19 @@
         });
         item.visibility = next;
         item.allowed_user_ids = visibilityUsesAudience(next) ? allowedUserIds : [];
-        renderMedia();
+        const summary = saveButton.closest(".media-info")?.querySelector("small");
+        if (summary) {
+          const locationLabel = item.subsection_name || app.subsections.find(value => value.id === item.subsection_id)?.name || "未分类";
+          const audienceCount = visibilityUsesAudience(item.visibility) ? `（${item.allowed_user_ids.length} 人）` : "";
+          summary.textContent = `${locationLabel} · ${visibilityLabels[item.visibility] || visibilityLabels.public}${audienceCount} · ${item.hasPreview ? "压缩预览已生成" : "旧图尚无压缩预览"}`;
+        }
+        document.getElementById("media-notice").textContent = `“${item.caption || item.filename}”的照片权限已保存。`;
+        control.disabled = false; saveButton.textContent = "已保存";
+        setTimeout(() => { if (saveButton.isConnected) { saveButton.disabled = false; saveButton.textContent = oldButtonText; } }, 1200);
       } catch (error) {
         control.value = previous;
         audiencePicker.classList.toggle("hidden", !visibilityUsesAudience(previous));
-        control.disabled = false; saveButton.disabled = false;
+        control.disabled = false; saveButton.disabled = false; saveButton.textContent = oldButtonText;
         alert(`可见范围保存失败：${error.message}`);
       }
     }
@@ -1836,7 +1930,14 @@
     document.getElementById("delete-section").addEventListener("click",async()=>{const id=document.getElementById("section-id").value;const item=app.sections.find(s=>s.id===id);if(!item)return;const warning=`确定删除大板块“${item.name}”吗？\n\n该板块内的文章、评论、小板块、图片和 R2 原文件都会一并永久删除，此操作不可撤销。`;if(!confirm(warning))return;await api(`/api/admin/sections/${id}`,{method:"DELETE"});resetSectionForm();await loadSections();await loadContent();await loadAlbumsAndMedia();await loadComments();await loadDashboard()});
     document.getElementById("new-subsection").addEventListener("click",resetSubsectionForm);document.getElementById("refresh-subsections").addEventListener("click",loadSubsections);
     document.getElementById("subsection-visibility").addEventListener("change",()=>syncAudiencePicker("subsection-visibility","subsection-user-picker",selectedAudienceIds("subsection-user-picker")));
-    document.getElementById("subsection-form").addEventListener("submit",async event=>{event.preventDefault();const id=document.getElementById("subsection-id").value;const notice=document.getElementById("subsection-notice");const access=visibilityPayload("subsection-visibility","subsection-user-picker");if(!validateVisibilityChoice(access,notice))return;try{await api(id?`/api/admin/subsections/${id}`:"/api/admin/subsections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sectionId:document.getElementById("subsection-section").value,name:document.getElementById("subsection-name").value,description:document.getElementById("subsection-description").value,sortOrder:Number(document.getElementById("subsection-sort").value||0),...access})});notice.textContent="小板块已保存。";resetSubsectionForm();await loadSubsections()}catch(error){notice.textContent=error.message}});
+    document.getElementById("subsection-form").addEventListener("submit",async event=>{
+      event.preventDefault();const id=document.getElementById("subsection-id").value;const notice=document.getElementById("subsection-notice");const access=visibilityPayload("subsection-visibility","subsection-user-picker");if(!validateVisibilityChoice(access,notice))return;
+      notice.textContent="正在保存…";
+      try{
+        const result=await api(id?`/api/admin/subsections/${id}`:"/api/admin/subsections",{method:id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sectionId:document.getElementById("subsection-section").value,name:document.getElementById("subsection-name").value,description:document.getElementById("subsection-description").value,sortOrder:Number(document.getElementById("subsection-sort").value||0),downloadPolicy:document.getElementById("subsection-download-policy").value,...access})});
+        await loadSubsections();const saved=app.subsections.find(item=>item.id===(id||result.id));if(saved)editSubsection(saved);notice.textContent="小板块的查看与下载权限已保存。";
+      }catch(error){notice.textContent=error.message}
+    });
     document.getElementById("delete-subsection").addEventListener("click",async()=>{const id=document.getElementById("subsection-id").value;if(!id||!confirm("删除后，原有文章、图片和文件都会保留并变为未分类。确定继续吗？"))return;await api(`/api/admin/subsections/${id}`,{method:"DELETE"});resetSubsectionForm();await Promise.all([loadSubsections(),loadContent(),loadAlbumsAndMedia(),loadAssets()])});
     document.getElementById("new-content").addEventListener("click",resetContentForm);document.getElementById("refresh-content").addEventListener("click",loadContent);
     document.getElementById("content-section").addEventListener("change",event=>refreshContentSubsectionOptions(event.target.value));
