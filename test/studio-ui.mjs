@@ -24,5 +24,10 @@ assert.match(studioHtml, /hardwareConcurrency/);
 assert.match(studioHtml, /activeLoaded/);
 assert.match(studioHtml, /pause\.hidden=true/);
 assert.match(studioHtml, /setTimeout\(\(\)=>job\.remove\(\),600\)/);
+assert.match(studioHtml, /finish\(text\)\{[^}]*job\.remove\(\)/);
+assert.match(studioHtml, /上传到图片小板块/);
+assert.match(studioHtml, /form\.append\("subsectionId", subsectionId\)/);
+assert.match(studioHtml, /refreshMediaSubsectionOptions\(sectionId,subsectionId\)/);
+assert.match(studioHtml, /uploadTarget\.value=event\.target\.value/);
 
 console.log("studio UI regression passed");

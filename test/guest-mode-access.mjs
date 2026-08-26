@@ -55,6 +55,11 @@ try {
       VALUES (?, 'section-resources', ?, '', 0, 'public', 'member', ?, ?)
     `).bind("member-download-subsection", "仅用户下载", timestamp, timestamp),
     db.prepare(`
+      INSERT INTO portfolio_subsections
+        (id, section_id, name, description, sort_order, visibility, download_policy, created_at, updated_at)
+      VALUES (?, 'section-photos', ?, '', 0, 'public', 'public', ?, ?)
+    `).bind("photo-upload-subsection", "照片上传目标", timestamp, timestamp),
+    db.prepare(`
       INSERT INTO assets
         (id, filename, display_name, object_key, mime_type, size_bytes, kind, visibility, download_policy,
          relative_path, status, created_at, updated_at, section_id, subsection_id, access_mode, scope, note)
@@ -86,6 +91,31 @@ try {
   });
   assert.equal(adminResponse.status, 200);
   const adminCookie = cookieValue(adminResponse, "xyj_admin");
+
+  const photoForm = new FormData();
+  photoForm.append("file", new File([new Uint8Array([137, 80, 78, 71])], "subsection-photo.png", { type: "image/png" }));
+  photoForm.append("sectionId", "section-photos");
+  photoForm.append("subsectionId", "photo-upload-subsection");
+  photoForm.append("caption", "小板块照片");
+  photoForm.append("kind", "photo");
+  photoForm.append("visibility", "public");
+  photoForm.append("allowedUserIds", "[]");
+  const photoRequest = new Request(`${baseUrl}/api/admin/media`, {
+    method: "POST",
+    headers: { Cookie: adminCookie, "User-Agent": userAgent },
+    body: photoForm,
+  });
+  const photoUpload = await miniflare.dispatchFetch(`${baseUrl}/api/admin/media`, {
+    method: "POST",
+    headers: photoRequest.headers,
+    body: await photoRequest.arrayBuffer(),
+  });
+  assert.equal(photoUpload.status, 200);
+  const photoUploadData = await photoUpload.json();
+  assert.equal(photoUploadData.subsection_id, "photo-upload-subsection");
+  const storedPhoto = await db.prepare("SELECT section_id, subsection_id FROM media WHERE id = ?")
+    .bind(photoUploadData.id).first();
+  assert.deepEqual(storedPhoto, { section_id: "section-photos", subsection_id: "photo-upload-subsection" });
 
   const adminBootstrap = await request("/api/bootstrap", { headers: { Cookie: adminCookie } });
   assert.equal(adminBootstrap.status, 200);

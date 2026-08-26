@@ -543,7 +543,7 @@
           <h3>上传图片</h3>
           <div class="form-grid">
             <div class="field"><label>图片文件（可多选，单张最大 20MB）</label><input id="media-file" type="file" multiple required accept="image/jpeg,image/png,image/webp,image/gif,image/avif"><small>原片完整保存在 R2；后台会另生成最长边 2560px、较高画质的 WebP 压缩预览，供照片专栏和登录背景显示。</small></div>
-            <div class="field"><label>所属小板块</label><select id="media-album"></select></div>
+            <div class="field"><label for="media-album">上传到图片小板块</label><select id="media-album"></select><small>可选择当前图片大板块下的任一小板块，也可以保留为“未分类”。上传完成后会自动显示目标小板块。</small></div>
             <div class="field">
               <label>照片可见范围</label>
               <select id="media-visibility">
@@ -1467,7 +1467,7 @@
         isCancelled(){return cancelled},
         abortForFailure(error){if(failureError||cancelled)return;failureError=error;for(const controller of activeControllers)controller.abort();settleStopped(error)},
         lock(text){if(paused)resume();cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="处理中";setRate(0);update(100,text)},
-        finish(text){terminal=true;job.dataset.uploadTerminal="true";cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="完成";rate.textContent="上传速率 已完成";update(100,text);app.activeUploadJobs.delete(apiObject)},
+        finish(text){terminal=true;job.dataset.uploadTerminal="true";cleanupNetworkListeners();pause.disabled=true;cancel.disabled=true;pause.textContent="完成";rate.textContent="上传速率 已完成";update(100,text);app.activeUploadJobs.delete(apiObject);job.remove()},
         fail(text){terminal=true;job.dataset.uploadTerminal="true";if(paused)resume();cleanupNetworkListeners();pause.hidden=true;cancel.disabled=false;cancel.textContent="移除此提示";rate.textContent="上传速率 已停止";job.classList.add("is-failed");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject)},
         cancelled(text,{autoRemove=true}={}){terminal=true;job.dataset.uploadTerminal="true";cleanupNetworkListeners();pause.hidden=true;rate.textContent="上传速率 已停止";job.classList.add("is-cancelled");lastState=text;state.textContent=text;app.activeUploadJobs.delete(apiObject);if(autoRemove){cancel.hidden=true;setTimeout(()=>job.remove(),600)}else{cancel.disabled=false;cancel.textContent="移除此提示"}},
       };
@@ -2073,7 +2073,7 @@
     document.getElementById("new-changelog").addEventListener("click",resetChangelog);document.getElementById("delete-changelog").addEventListener("click",async()=>{const id=document.getElementById("changelog-id").value;if(!id||!confirm("确定删除这条更新记录吗？"))return;await api(`/api/admin/changelogs/${id}`,{method:"DELETE"});resetChangelog();await loadChangelogs();await loadSettings();await loadDashboard()});
 
     document.getElementById("media-section").addEventListener("change",()=>{renderAlbums();renderMedia()});
-    document.getElementById("media-subsection").addEventListener("change",renderMedia);
+    document.getElementById("media-subsection").addEventListener("change",event=>{const uploadTarget=document.getElementById("media-album");if(event.target.value&&[...uploadTarget.options].some(option=>option.value===event.target.value))uploadTarget.value=event.target.value;renderMedia()});
     document.getElementById("media-visibility").addEventListener("change",()=>{
       const picker=document.getElementById("media-user-picker");
       picker.classList.toggle("hidden",!visibilityUsesAudience(document.getElementById("media-visibility").value));
@@ -2107,7 +2107,7 @@
             await api("/api/admin/media", { method: "POST", body: form });completed+=1;
           } catch (error) { failures.push(`${file.name}：${error.message}`); }
         }
-        if(completed){mediaForm.reset();syncAudiencePicker("media-visibility","media-user-picker",[]);await Promise.all([loadAlbumsAndMedia(),loadDashboard()])}
+        if(completed){mediaForm.reset();refreshMediaSubsectionOptions(sectionId,subsectionId);syncAudiencePicker("media-visibility","media-user-picker",[]);await Promise.all([loadAlbumsAndMedia(),loadDashboard()])}
         notice.textContent=failures.length?`已上传 ${completed}/${files.length} 张；${failures.length} 张失败：${failures.join("；")}`:`已上传 ${completed} 张图片，网页使用压缩预览并保留原片。`;
       }catch(error){notice.textContent=`图片列表刷新失败：${error.message}`}finally{submit.disabled=false}
     });
