@@ -833,40 +833,56 @@ h6,
     linear-gradient(108deg, rgba(181, 231, 238, .10), transparent 12% 84%, rgba(133, 112, 192, .08)) !important;
 }
 
-/* 侧栏使用较高模糊度的磨砂玻璃，正文操作保持低模糊的透明液态玻璃。 */
+/*
+   材质基准直接取自登录界面：
+   - 侧栏按钮复用登录按钮的 3px 低模糊磨砂与顶部光条；
+   - 正文按钮复用登录框的透明中心、0.45px 低模糊与边缘折射。
+*/
 :root {
-  --xyj-sidebar-frost:
-    linear-gradient(145deg, rgba(255,255,255,.56), rgba(208,235,241,.34) 55%, rgba(219,218,240,.27));
-  --xyj-sidebar-frost-active:
-    linear-gradient(135deg, rgba(42,174,169,.68), rgba(57,132,201,.66) 58%, rgba(112,87,180,.58));
-  --xyj-page-liquid:
-    linear-gradient(138deg, rgba(255,255,255,.17), rgba(192,230,238,.09) 52%, rgba(214,205,239,.08));
-  --xyj-page-liquid-tint:
-    linear-gradient(135deg, rgba(41,181,177,.24), rgba(51,137,210,.22) 58%, rgba(116,87,190,.18));
-  --xyj-page-liquid-active:
-    linear-gradient(135deg, rgba(35,169,165,.52), rgba(48,126,196,.50) 58%, rgba(104,78,174,.46));
+  --xyj-login-frost: rgba(104,158,194,.32);
+  --xyj-login-frost-hover: rgba(88,158,190,.43);
+  --xyj-login-frost-active: rgba(43,166,185,.56);
+  --xyj-login-frost-line: rgba(255,255,255,.72);
+  --xyj-login-frost-text: #17343d;
+  --xyj-liquid-text: #183740;
 }
 
 .sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) {
-  color: var(--ink);
-  border-color: rgba(255,255,255,.78);
-  background: var(--xyj-sidebar-frost);
+  color: var(--xyj-login-frost-text);
+  border-color: var(--xyj-login-frost-line);
+  background:
+    linear-gradient(90deg, transparent, rgba(255,255,255,.96), transparent) 50% 0 / 76% 2px no-repeat,
+    var(--xyj-login-frost);
   box-shadow:
-    0 9px 24px rgba(31,73,89,.14),
-    inset 0 1px 0 rgba(255,255,255,.94),
-    inset 0 -1px 0 rgba(58,103,122,.14);
-  -webkit-backdrop-filter: blur(19px) saturate(1.30);
-  backdrop-filter: blur(19px) saturate(1.30);
+    0 9px 24px rgba(23,60,74,.18),
+    inset 0 1px 0 rgba(255,255,255,.92),
+    inset 0 -1px 0 rgba(37,82,99,.20);
+  -webkit-backdrop-filter: blur(3px) saturate(1.12);
+  backdrop-filter: blur(3px) saturate(1.12);
+}
+
+.sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link):hover {
+  border-color: rgba(255,255,255,.96);
+  background:
+    linear-gradient(90deg, transparent, #fff, transparent) 50% 0 / 76% 2px no-repeat,
+    var(--xyj-login-frost-hover);
+  box-shadow:
+    0 13px 28px rgba(23,60,74,.22),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 0 -1px 0 rgba(37,82,99,.20);
 }
 
 .sidebar .nav button.active {
-  color: #fff;
-  border-color: rgba(255,255,255,.90);
-  background: var(--xyj-sidebar-frost-active);
+  color: #12343c;
+  border-color: rgba(255,255,255,.86);
+  background:
+    linear-gradient(90deg, transparent, #fff, transparent) 50% 0 / 76% 2px no-repeat,
+    var(--xyj-login-frost-active);
   box-shadow:
-    0 12px 29px rgba(39,111,147,.25),
-    inset 0 1px 0 rgba(255,255,255,.82),
-    inset 0 -1px 0 rgba(30,72,108,.22);
+    0 12px 28px rgba(16,105,122,.23),
+    inset 0 1px 0 rgba(255,255,255,.91),
+    inset 0 -1px 0 rgba(11,83,97,.22),
+    0 0 0 2px rgba(43,166,185,.18);
 }
 
 :is(
@@ -876,43 +892,96 @@ h6,
   .app-shell .main .sidebar-install-button,
   dialog .btn
 ) {
-  color: #183740;
-  border-color: rgba(255,255,255,.80);
-  background: var(--xyj-page-liquid);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: var(--xyj-liquid-text);
+  border-color: transparent;
+  background: transparent;
   box-shadow:
-    0 8px 22px rgba(29,77,96,.12),
-    inset 0 1px 0 rgba(255,255,255,.96),
-    inset 1px 0 0 rgba(255,255,255,.38),
-    inset 0 -1px 0 rgba(34,87,106,.19);
-  -webkit-backdrop-filter: blur(2px) saturate(1.42) contrast(1.07);
-  backdrop-filter: blur(2px) saturate(1.42) contrast(1.07);
+    0 9px 24px rgba(9,28,36,.14),
+    inset 0 1px 0 rgba(255,255,255,.82),
+    inset 1px 0 0 rgba(255,255,255,.42),
+    inset 0 -1px 0 rgba(30,63,76,.26),
+    inset -1px 0 0 rgba(255,255,255,.22);
+  -webkit-backdrop-filter: blur(.45px) saturate(1.08) contrast(1.025);
+  backdrop-filter: blur(.45px) saturate(1.08) contrast(1.025);
+}
+
+:is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 58%, rgba(255,255,255,.07) 72%, rgba(255,255,255,.34) 94%, rgba(255,255,255,.58) 100%),
+    linear-gradient(108deg, rgba(255,255,255,.28), transparent 12% 82%, rgba(174,222,232,.17));
+}
+
+:is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+):hover {
+  border-color: transparent;
+  background: transparent;
+  box-shadow:
+    0 13px 30px rgba(9,28,36,.20),
+    inset 0 1px 0 rgba(255,255,255,.94),
+    inset 1px 0 0 rgba(255,255,255,.50),
+    inset 0 -1px 0 rgba(30,63,76,.28),
+    inset -1px 0 0 rgba(255,255,255,.28);
 }
 
 :is(
   .app-shell .main .btn:not(.ghost):not(.light):not(.danger),
   dialog .btn:not(.ghost):not(.light):not(.danger)
 ) {
-  color: #173840;
-  border-color: rgba(255,255,255,.86);
-  background: var(--xyj-page-liquid-tint);
+  color: #12343c;
+  border-color: transparent;
+  background: transparent;
+  box-shadow:
+    0 9px 24px rgba(21,99,113,.16),
+    inset 0 1px 0 rgba(255,255,255,.88),
+    inset 1px 0 0 rgba(255,255,255,.42),
+    inset 0 -1px 0 rgba(27,143,160,.40),
+    inset -1px 0 0 rgba(255,255,255,.22);
 }
 
 :is(.app-shell .main .btn.ghost, dialog .btn.ghost, .app-shell .main .btn.light, dialog .btn.light) {
   color: var(--ink);
-  background: var(--xyj-page-liquid);
+  background: transparent;
 }
 
 :is(.app-shell .main .btn.danger, dialog .btn.danger) {
   color: #8c342f;
-  border-color: rgba(255,214,208,.74);
-  background: linear-gradient(138deg, rgba(255,255,255,.16), rgba(223,91,80,.15));
+  border-color: transparent;
+  background: rgba(223,91,80,.035);
+  box-shadow:
+    0 9px 24px rgba(110,45,40,.12),
+    inset 0 1px 0 rgba(255,255,255,.82),
+    inset 0 -1px 0 rgba(190,72,64,.34);
 }
 
 .app-shell .main :is(.tab-button, .theme-toggle).active {
-  color: #fff;
-  background: var(--xyj-page-liquid-active);
-  border-color: rgba(255,255,255,.90);
-  box-shadow: 0 10px 25px rgba(40,111,149,.20), inset 0 1px 0 rgba(255,255,255,.90);
+  color: #164a55;
+  background: rgba(43,166,185,.14);
+  border-color: transparent;
+  box-shadow:
+    0 10px 25px rgba(40,111,149,.18),
+    inset 0 1px 0 rgba(255,255,255,.90),
+    inset 0 -2px 0 rgba(27,143,160,.52),
+    0 0 0 2px rgba(43,166,185,.15);
 }
 
 /* 评论输入区固定高度，提交按钮固定在输入框右下角。 */
@@ -942,12 +1011,20 @@ h6,
   bottom: 11px;
   z-index: 2;
   min-width: 76px;
-  color: #15373f;
-  border-color: rgba(255,255,255,.84);
-  background: linear-gradient(145deg, rgba(240,251,252,.58), rgba(80,170,187,.34));
-  box-shadow: 0 8px 19px rgba(34,89,106,.16), inset 0 1px 0 rgba(255,255,255,.94);
-  -webkit-backdrop-filter: blur(18px) saturate(1.26);
-  backdrop-filter: blur(18px) saturate(1.26);
+  color: #12343c;
+  border-color: rgba(255,255,255,.72);
+  background: rgba(43,166,185,.56);
+  box-shadow: 0 9px 24px rgba(23,60,74,.18), inset 0 1px 0 rgba(255,255,255,.92), inset 0 -1px 0 rgba(37,82,99,.20);
+  -webkit-backdrop-filter: blur(3px) saturate(1.12);
+  backdrop-filter: blur(3px) saturate(1.12);
+}
+.app-shell .main .comment-composer .comment-submit::before {
+  inset: -1px 12% auto;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.96), transparent);
+  filter: blur(.4px);
+  box-shadow: 0 -2px 8px rgba(255,255,255,.40);
 }
 
 /* 照片可通过滚轮、双击、双指和拖拽在查看器内局部缩放。 */
@@ -1010,28 +1087,69 @@ h6,
 }
 
 :root[data-theme="dark"] {
-  --xyj-sidebar-frost:
-    linear-gradient(145deg, rgba(91,139,151,.34), rgba(34,72,86,.31) 56%, rgba(67,54,96,.29));
-  --xyj-sidebar-frost-active:
-    linear-gradient(135deg, rgba(28,148,145,.72), rgba(38,103,169,.72) 58%, rgba(93,68,153,.68));
-  --xyj-page-liquid:
-    linear-gradient(138deg, rgba(190,229,235,.10), rgba(75,137,151,.07) 54%, rgba(119,96,157,.07));
-  --xyj-page-liquid-tint:
-    linear-gradient(135deg, rgba(35,173,169,.25), rgba(47,119,190,.23) 58%, rgba(107,77,176,.20));
-  --xyj-page-liquid-active:
-    linear-gradient(135deg, rgba(27,151,148,.54), rgba(38,106,176,.52) 58%, rgba(91,65,159,.50));
+  --xyj-login-frost: rgba(71,124,143,.38);
+  --xyj-login-frost-hover: rgba(75,143,164,.48);
+  --xyj-login-frost-active: rgba(35,151,171,.62);
+  --xyj-login-frost-line: rgba(190,232,237,.30);
+  --xyj-login-frost-text: #edf8f9;
+  --xyj-liquid-text: #eaf6f7;
 }
+:root[data-theme="dark"] .sidebar .nav button.active { color: #f3fbfc; }
 :root[data-theme="dark"] :is(
   .app-shell .main .btn,
   .app-shell .main .tab-button,
   .app-shell .main .theme-toggle,
   .app-shell .main .sidebar-install-button,
   dialog .btn
-) { color: #eaf6f7; border-color: rgba(185,228,234,.28); }
+) { color: #eaf6f7; border-color: transparent; }
+:root[data-theme="dark"] :is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+)::before {
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 58%, rgba(188,232,239,.06) 74%, rgba(205,244,248,.22) 100%),
+    linear-gradient(108deg, rgba(181,231,238,.10), transparent 12% 84%, rgba(133,112,192,.08));
+}
 :root[data-theme="dark"] .comment-composer .comment-submit {
   color: #effafb;
   border-color: rgba(184,231,236,.30);
-  background: linear-gradient(145deg, rgba(96,158,171,.42), rgba(35,91,108,.38));
+  background: rgba(35,151,171,.62);
+}
+
+/* 查看器始终位于黑底上，所有操作文字（包括禁用态）固定为高对比白色。 */
+.image-dialog .image-toolbar .btn,
+.image-dialog .image-toolbar #image-download,
+.image-dialog .image-boundary-notice .btn {
+  color: #fff !important;
+  border-color: transparent !important;
+  background: rgba(255,255,255,.075) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.86) !important;
+  box-shadow:
+    0 9px 24px rgba(0,0,0,.28),
+    inset 0 1px 0 rgba(255,255,255,.64),
+    inset 1px 0 0 rgba(255,255,255,.22),
+    inset 0 -1px 0 rgba(0,0,0,.40),
+    inset -1px 0 0 rgba(255,255,255,.14) !important;
+}
+.image-dialog .image-toolbar .btn:hover,
+.image-dialog .image-toolbar #image-download:hover,
+.image-dialog .image-boundary-notice .btn:hover {
+  color: #fff !important;
+  background: rgba(255,255,255,.13) !important;
+}
+.image-dialog .image-toolbar .btn:disabled {
+  color: rgba(255,255,255,.78) !important;
+  opacity: .72;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.42),
+    inset 0 -1px 0 rgba(0,0,0,.30) !important;
+}
+.image-dialog #image-zoom-level {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.86);
 }
 
 @media (max-width: 760px) {
@@ -1041,6 +1159,6 @@ h6,
 }
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) { background: rgba(237,246,248,.96); }
-  :is(.app-shell .main .btn, .app-shell .main .tab-button, .app-shell .main .theme-toggle, dialog .btn) { background: rgba(216,238,242,.92); }
+  .sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) { background: rgba(213,231,237,.94); }
+  :is(.app-shell .main .btn, .app-shell .main .tab-button, .app-shell .main .theme-toggle, dialog .btn) { background: rgba(232,244,246,.90); }
 }
