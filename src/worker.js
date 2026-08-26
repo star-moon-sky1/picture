@@ -951,6 +951,7 @@ async function initializeSchema(env) {
       upload_id TEXT NOT NULL,
       object_key TEXT NOT NULL,
       mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      file_name TEXT NOT NULL DEFAULT '',
       expected_size INTEGER NOT NULL DEFAULT 0,
       part_size INTEGER NOT NULL DEFAULT 33554432,
       expires_at TEXT NOT NULL,
@@ -1049,6 +1050,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "assets", "poster_object_key", "TEXT");
   await ensureColumn(env, "assets", "note", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "asset_uploads", "part_size", "INTEGER NOT NULL DEFAULT 33554432");
+  await ensureColumn(env, "asset_uploads", "file_name", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "asset_folders", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "user_profiles", "admin_note", "TEXT NOT NULL DEFAULT ''");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
@@ -4840,7 +4842,16 @@ async function listAdminAssets(env) {
       SELECT id, asset_id, label, mime_type, size_bytes, status, created_at, updated_at
       FROM asset_variants ORDER BY created_at ASC
     `).all(),
-    env.DB.prepare("SELECT id, asset_id, variant_label, expected_size, expires_at, created_at FROM asset_uploads").all(),
+    env.DB.prepare(`
+      SELECT u.id, u.asset_id, u.variant_label, u.file_name, u.mime_type, u.expected_size,
+             u.part_size, u.expires_at, u.created_at,
+             COALESCE(SUM(p.size_bytes), 0) AS uploaded_size,
+             COUNT(p.part_number) AS uploaded_part_count
+      FROM asset_uploads u
+      LEFT JOIN asset_upload_parts p ON p.upload_session_id = u.id
+      GROUP BY u.id
+      ORDER BY u.created_at ASC
+    `).all(),
   ]);
   const variants = new Map();
   const uploads = new Map();
@@ -4869,17 +4880,22 @@ async function cleanupExpiredAssetUploads(env) {
       try { await env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id).abort(); }
       catch (error) { console.warn("Ignoring expired multipart abort", error); }
     }
-    if (upload.variant_label) {
-      await env.DB.prepare("UPDATE asset_variants SET status = 'failed', updated_at = ? WHERE asset_id = ? AND label = ?")
-        .bind(nowIso(), upload.asset_id, upload.variant_label).run();
-    } else {
-      await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
-        .bind(nowIso(), upload.asset_id).run();
-    }
-    await env.DB.batch([
+    if (env.BUCKET) await env.BUCKET.delete(upload.object_key).catch(() => null);
+    const statements = [
       env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
       env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
-    ]);
+    ];
+    if (upload.variant_label) {
+      statements.push(env.DB.prepare(
+        "DELETE FROM asset_variants WHERE asset_id = ? AND label = ? AND status = 'uploading'",
+      ).bind(upload.asset_id, upload.variant_label));
+    } else {
+      statements.push(
+        env.DB.prepare("DELETE FROM asset_access_users WHERE asset_id = ?").bind(upload.asset_id),
+        env.DB.prepare("DELETE FROM assets WHERE id = ? AND status = 'uploading'").bind(upload.asset_id),
+      );
+    }
+    await env.DB.batch(statements);
   }
 }
 
@@ -5066,10 +5082,10 @@ async function createAssetUpload(request, env) {
     await env.DB.prepare(`
       INSERT INTO asset_variants
         (id, asset_id, label, object_key, mime_type, size_bytes, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, 'uploading', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, 'uploading', ?, ?)
       ON CONFLICT(asset_id, label) DO UPDATE SET object_key = excluded.object_key,
-        mime_type = excluded.mime_type, size_bytes = 0, status = 'uploading', updated_at = excluded.updated_at
-    `).bind(crypto.randomUUID(), assetId, variantLabel, objectKey, mimeType, timestamp, timestamp).run();
+        mime_type = excluded.mime_type, size_bytes = excluded.size_bytes, status = 'uploading', updated_at = excluded.updated_at
+    `).bind(crypto.randomUUID(), assetId, variantLabel, objectKey, mimeType, expectedSize, timestamp, timestamp).run();
   } else {
     const kind = normalizedAssetKind(body.kind, mimeType, filename);
     const inferredScope = validId(body.sectionId) ? "section" : "library";
@@ -5130,10 +5146,10 @@ async function createAssetUpload(request, env) {
         (id, folder_id, section_id, subsection_id, album_id, content_id, filename, display_name, object_key,
          mime_type, size_bytes, kind, visibility, access_mode, scope, download_policy,
          relative_path, note, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?, ?)
     `).bind(
       assetId, folderId, sectionId, subsectionId, albumId, contentId, filename, displayName, objectKey,
-      mimeType, kind, legacyVisibility, visibility, scope, downloadPolicy, relativePath, note,
+      mimeType, expectedSize, kind, legacyVisibility, visibility, scope, downloadPolicy, relativePath, note,
       timestamp, timestamp,
     ).run();
     await replaceAllowedUsers(env, "asset", assetId, allowedUserIds, timestamp);
@@ -5149,16 +5165,18 @@ async function createAssetUpload(request, env) {
     const expiresAt = new Date(Date.now() + ASSET_UPLOAD_TTL_SECONDS * 1000).toISOString();
     await env.DB.prepare(`
       INSERT INTO asset_uploads
-        (id, asset_id, variant_label, upload_id, object_key, mime_type, expected_size, part_size, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, asset_id, variant_label, upload_id, object_key, mime_type, file_name,
+         expected_size, part_size, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      sessionId, assetId, variantLabel, multipart.uploadId, objectKey, mimeType,
+      sessionId, assetId, variantLabel, multipart.uploadId, objectKey, mimeType, filename,
       expectedSize, ASSET_UPLOAD_PART_BYTES, expiresAt, timestamp,
     ).run();
     return {
       sessionId,
       assetId,
       variantLabel,
+      fileName: filename,
       expectedSize,
       partSize: ASSET_UPLOAD_PART_BYTES,
       maxParts: MAX_UPLOAD_PARTS,
@@ -5175,7 +5193,7 @@ async function createAssetUpload(request, env) {
         env.DB.prepare("DELETE FROM assets WHERE id = ?").bind(assetId),
       ]).catch(() => null);
     }
-    else await env.DB.prepare("UPDATE asset_variants SET status = 'failed' WHERE asset_id = ? AND label = ?")
+    else await env.DB.prepare("DELETE FROM asset_variants WHERE asset_id = ? AND label = ? AND status = 'uploading'")
       .bind(assetId, variantLabel).run().catch(() => null);
     throw error;
   }
@@ -5218,6 +5236,7 @@ function assetUploadSessionDto(upload, uploadedParts) {
     sessionId: upload.id,
     assetId: upload.asset_id,
     variantLabel: upload.variant_label,
+    fileName: upload.file_name || "",
     expectedSize: Number(upload.expected_size),
     partSize: assetUploadPartSize(upload),
     maxParts: MAX_UPLOAD_PARTS,
@@ -5376,19 +5395,23 @@ async function adminAssetUploads(request, env, id, action, detail) {
 
   if (request.method === "DELETE" && !action) {
     await multipart.abort().catch(() => null);
-    const timestamp = nowIso();
-    if (upload.variant_label) {
-      await env.DB.prepare("UPDATE asset_variants SET status = 'failed', updated_at = ? WHERE asset_id = ? AND label = ?")
-        .bind(timestamp, upload.asset_id, upload.variant_label).run();
-    } else {
-      await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
-        .bind(timestamp, upload.asset_id).run();
-    }
-    await env.DB.batch([
+    await env.BUCKET.delete(upload.object_key).catch(() => null);
+    const statements = [
       env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
       env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
-    ]);
-    return { ok: true };
+    ];
+    if (upload.variant_label) {
+      statements.push(env.DB.prepare(
+        "DELETE FROM asset_variants WHERE asset_id = ? AND label = ? AND status = 'uploading'",
+      ).bind(upload.asset_id, upload.variant_label));
+    } else {
+      statements.push(
+        env.DB.prepare("DELETE FROM asset_access_users WHERE asset_id = ?").bind(upload.asset_id),
+        env.DB.prepare("DELETE FROM assets WHERE id = ? AND status = 'uploading'").bind(upload.asset_id),
+      );
+    }
+    await env.DB.batch(statements);
+    return { ok: true, removed: true };
   }
   throw new HttpError(405, "不支持的上传操作");
 }

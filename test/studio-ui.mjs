@@ -17,5 +17,12 @@ assert.match(studioHtml, /UPLOAD_STALL_TIMEOUT_MS=30\*1000/);
 assert.match(studioHtml, /waitUntilReady/);
 assert.match(studioHtml, /wasNetworkAbort/);
 assert.match(studioHtml, /照片权限已保存/);
+assert.match(studioHtml, /选择原文件继续/);
+assert.match(studioHtml, /刷新后待续传/);
+assert.match(studioHtml, /取消并删除/);
+assert.match(studioHtml, /hardwareConcurrency/);
+assert.match(studioHtml, /activeLoaded/);
+assert.match(studioHtml, /pause\.hidden=true/);
+assert.match(studioHtml, /setTimeout\(\(\)=>job\.remove\(\),600\)/);
 
 console.log("studio UI regression passed");

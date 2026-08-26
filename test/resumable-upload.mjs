@@ -58,6 +58,7 @@ try {
   assert.equal((await request("/api/guest/config")).status, 200);
   const uploadColumns = await database.prepare("PRAGMA table_info(asset_uploads)").all();
   assert.equal(uploadColumns.results.some((column) => column.name === "part_size"), true);
+  assert.equal(uploadColumns.results.some((column) => column.name === "file_name"), true);
 
   const anonymousCreate = await jsonRequest("/api/admin/asset-uploads", "", {
     filename: "blocked.zip",
@@ -104,6 +105,9 @@ try {
     headers: { Cookie: adminCookie },
   });
   assert.equal(cancelMaximum.status, 200);
+  const cancelledAsset = await database.prepare("SELECT id FROM assets WHERE id = ?")
+    .bind(maximumSession.assetId).first();
+  assert.equal(cancelledAsset, null);
 
   const tiny = await jsonRequest("/api/admin/asset-uploads", adminCookie, {
     filename: "tiny.zip",
@@ -114,6 +118,13 @@ try {
   });
   assert.equal(tiny.status, 200);
   const tinySession = await tiny.json();
+  const pendingAssets = await request("/api/admin/assets", { headers: { Cookie: adminCookie } });
+  const pendingAsset = (await pendingAssets.json()).find((asset) => asset.id === tinySession.assetId);
+  assert.equal(pendingAsset.size_bytes, 1);
+  assert.deepEqual(
+    pendingAsset.uploads.map((upload) => [upload.file_name, Number(upload.expected_size), Number(upload.uploaded_size)]),
+    [["tiny.zip", 1, 0]],
+  );
 
   const forgedCompletion = await jsonRequest(`/api/admin/asset-uploads/${tinySession.sessionId}/complete`, adminCookie, {
     parts: [{ partNumber: 1, etag: "browser-supplied-etag" }],
@@ -141,6 +152,11 @@ try {
   assert.equal(uploadedPartData.partNumber, 1);
   assert.equal(uploadedPartData.sizeBytes, 1);
   assert.ok(uploadedPartData.etag);
+  const assetsWithProgress = await request("/api/admin/assets", { headers: { Cookie: adminCookie } });
+  const uploadProgress = (await assetsWithProgress.json())
+    .find((asset) => asset.id === tinySession.assetId).uploads[0];
+  assert.equal(Number(uploadProgress.uploaded_size), 1);
+  assert.equal(Number(uploadProgress.uploaded_part_count), 1);
 
   const resumableState = await request(`/api/admin/asset-uploads/${tinySession.sessionId}`, {
     headers: { Cookie: adminCookie },
