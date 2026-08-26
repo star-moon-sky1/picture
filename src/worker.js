@@ -34,13 +34,16 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
 /*
  * 通用文件不再经过 request.formData() 整体读入 Worker，而是使用 R2 multipart
- * API 逐片写入。每片默认由 Studio 切成 32MiB，并在服务端限制为 95MiB，
+ * API 逐片写入。每片默认由 Studio 切成 64MiB，并在服务端限制为 95MiB，
  * 因而低于 Cloudflare Free/Pro 的 100MB 单次请求上限。
  */
-const MAX_ASSET_BYTES = 4.995 * 1024 * 1024 * 1024 * 1024;
+const MAX_ASSET_BYTES = 100 * 1024 * 1024 * 1024;
+const ASSET_UPLOAD_PART_BYTES = 64 * 1024 * 1024;
+const LEGACY_ASSET_UPLOAD_PART_BYTES = 32 * 1024 * 1024;
 const MAX_UPLOAD_PART_BYTES = 95 * 1024 * 1024;
 const MAX_UPLOAD_PARTS = 10_000;
-const ASSET_UPLOAD_TTL_SECONDS = 60 * 60 * 24;
+// R2 默认会在第七天清理未完成 multipart，会话提前一天到期以留出安全余量。
+const ASSET_UPLOAD_TTL_SECONDS = 60 * 60 * 24 * 6;
 const VIDEO_QUALITY_LABELS = new Set(["360p", "480p", "720p", "1080p"]);
 const ASSET_VARIANT_LABELS = new Set(["preview", ...VIDEO_QUALITY_LABELS]);
 
@@ -946,10 +949,22 @@ async function initializeSchema(env) {
       object_key TEXT NOT NULL,
       mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
       expected_size INTEGER NOT NULL DEFAULT 0,
+      part_size INTEGER NOT NULL DEFAULT 33554432,
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       UNIQUE(asset_id, variant_label),
       FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+    )
+    `,
+    `
+    CREATE TABLE IF NOT EXISTS asset_upload_parts (
+      upload_session_id TEXT NOT NULL,
+      part_number INTEGER NOT NULL,
+      etag TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      uploaded_at TEXT NOT NULL,
+      PRIMARY KEY(upload_session_id, part_number),
+      FOREIGN KEY(upload_session_id) REFERENCES asset_uploads(id) ON DELETE CASCADE
     )
     `,
     `
@@ -999,6 +1014,7 @@ async function initializeSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_assets_visibility ON assets(visibility, status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_asset_variants_asset ON asset_variants(asset_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_asset_uploads_expiry ON asset_uploads(expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_asset_upload_parts_session ON asset_upload_parts(upload_session_id, part_number)",
     "CREATE INDEX IF NOT EXISTS idx_qq_webhook_events_received ON qq_webhook_events(received_at)",
   ];
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
@@ -1028,6 +1044,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "assets", "content_id", "TEXT");
   await ensureColumn(env, "assets", "poster_object_key", "TEXT");
   await ensureColumn(env, "assets", "note", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(env, "asset_uploads", "part_size", "INTEGER NOT NULL DEFAULT 33554432");
   await ensureColumn(env, "asset_folders", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
   await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
@@ -4831,7 +4848,10 @@ async function cleanupExpiredAssetUploads(env) {
       await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
         .bind(nowIso(), upload.asset_id).run();
     }
-    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
+      env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
+    ]);
   }
 }
 
@@ -4855,6 +4875,10 @@ async function deleteAssetObjects(env, assetId) {
   }
   await env.DB.batch([
     env.DB.prepare("UPDATE asset_folders SET archive_asset_id = NULL WHERE archive_asset_id = ?").bind(assetId),
+    env.DB.prepare(`
+      DELETE FROM asset_upload_parts
+      WHERE upload_session_id IN (SELECT id FROM asset_uploads WHERE asset_id = ?)
+    `).bind(assetId),
     env.DB.prepare("DELETE FROM asset_uploads WHERE asset_id = ?").bind(assetId),
     env.DB.prepare("DELETE FROM asset_variants WHERE asset_id = ?").bind(assetId),
     env.DB.prepare("DELETE FROM asset_access_users WHERE asset_id = ?").bind(assetId),
@@ -4967,7 +4991,10 @@ async function abortExistingAssetUpload(env, assetId, variantLabel) {
   if (!existing) return;
   try { await env.BUCKET.resumeMultipartUpload(existing.object_key, existing.upload_id).abort(); }
   catch (error) { console.warn("Ignoring stale multipart upload abort", error); }
-  await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(existing.id).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(existing.id),
+    env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(existing.id),
+  ]);
 }
 
 async function createAssetUpload(request, env) {
@@ -4976,8 +5003,8 @@ async function createAssetUpload(request, env) {
   const filename = safeAssetFilename(body.filename);
   const mimeType = clampText(body.mimeType, 180) || "application/octet-stream";
   const expectedSize = Number(body.sizeBytes);
-  if (!Number.isFinite(expectedSize) || expectedSize <= 0 || expectedSize > MAX_ASSET_BYTES) {
-    throw new HttpError(413, "文件大小无效或超过 R2 单个对象上限");
+  if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0 || expectedSize > MAX_ASSET_BYTES) {
+    throw new HttpError(413, "文件大小无效或超过 100GiB 上传上限");
   }
   const variantLabel = body.variantLabel ? String(body.variantLabel) : "";
   if (variantLabel && !ASSET_VARIANT_LABELS.has(variantLabel)) throw new HttpError(400, "预览或清晰度标签无效");
@@ -5094,18 +5121,22 @@ async function createAssetUpload(request, env) {
     const expiresAt = new Date(Date.now() + ASSET_UPLOAD_TTL_SECONDS * 1000).toISOString();
     await env.DB.prepare(`
       INSERT INTO asset_uploads
-        (id, asset_id, variant_label, upload_id, object_key, mime_type, expected_size, expires_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, asset_id, variant_label, upload_id, object_key, mime_type, expected_size, part_size, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       sessionId, assetId, variantLabel, multipart.uploadId, objectKey, mimeType,
-      Math.floor(expectedSize), expiresAt, timestamp,
+      expectedSize, ASSET_UPLOAD_PART_BYTES, expiresAt, timestamp,
     ).run();
     return {
       sessionId,
       assetId,
       variantLabel,
-      partSize: 32 * 1024 * 1024,
+      expectedSize,
+      partSize: ASSET_UPLOAD_PART_BYTES,
       maxParts: MAX_UPLOAD_PARTS,
+      maxFileBytes: MAX_ASSET_BYTES,
+      uploadedParts: [],
+      resumable: true,
       expiresAt,
     };
   } catch (error) {
@@ -5130,42 +5161,171 @@ async function getAssetUpload(env, id) {
   return upload;
 }
 
+function assetUploadPartSize(upload) {
+  const partSize = Number(upload?.part_size);
+  if (Number.isInteger(partSize) && partSize > 0 && partSize <= MAX_UPLOAD_PART_BYTES) return partSize;
+  return LEGACY_ASSET_UPLOAD_PART_BYTES;
+}
+
+function assetUploadPartCount(upload) {
+  return Math.ceil(Number(upload.expected_size) / assetUploadPartSize(upload));
+}
+
+async function listAssetUploadParts(env, sessionId) {
+  return rows(await env.DB.prepare(`
+    SELECT part_number, etag, size_bytes, uploaded_at
+    FROM asset_upload_parts
+    WHERE upload_session_id = ?
+    ORDER BY part_number ASC
+  `).bind(sessionId).all()).map((part) => ({
+    partNumber: Number(part.part_number),
+    etag: String(part.etag || ""),
+    sizeBytes: Number(part.size_bytes),
+    uploadedAt: part.uploaded_at,
+  }));
+}
+
+function assetUploadSessionDto(upload, uploadedParts) {
+  return {
+    sessionId: upload.id,
+    assetId: upload.asset_id,
+    variantLabel: upload.variant_label,
+    expectedSize: Number(upload.expected_size),
+    partSize: assetUploadPartSize(upload),
+    maxParts: MAX_UPLOAD_PARTS,
+    maxFileBytes: MAX_ASSET_BYTES,
+    expiresAt: upload.expires_at,
+    uploadedParts,
+    resumable: true,
+  };
+}
+
 async function adminAssetUploads(request, env, id, action, detail) {
   if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
   if (request.method === "POST" && !id) return createAssetUpload(request, env);
   const upload = await getAssetUpload(env, id);
+
+  if (request.method === "GET" && !action) {
+    return assetUploadSessionDto(upload, await listAssetUploadParts(env, upload.id));
+  }
+
   const multipart = env.BUCKET.resumeMultipartUpload(upload.object_key, upload.upload_id);
 
   if (request.method === "PUT" && action === "part") {
     const partNumber = Number(detail);
-    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > MAX_UPLOAD_PARTS) {
+    const expectedPartCount = assetUploadPartCount(upload);
+    if (!Number.isInteger(partNumber) || partNumber < 1
+      || partNumber > expectedPartCount || partNumber > MAX_UPLOAD_PARTS) {
       throw new HttpError(400, "分片编号无效");
     }
-    const contentLength = Number(request.headers.get("Content-Length"));
-    if (Number.isFinite(contentLength) && (contentLength <= 0 || contentLength > MAX_UPLOAD_PART_BYTES)) {
+    const contentLengthHeader = request.headers.get("Content-Length");
+    const contentLength = contentLengthHeader === null ? null : Number(contentLengthHeader);
+    const partSize = assetUploadPartSize(upload);
+    const expectedPartSize = Math.min(
+      partSize,
+      Number(upload.expected_size) - ((partNumber - 1) * partSize),
+    );
+    if (contentLength !== null && (!Number.isFinite(contentLength) || contentLength !== expectedPartSize)) {
+      throw new HttpError(400, `第 ${partNumber} 个分片大小不正确`);
+    }
+    if (contentLength !== null && (contentLength <= 0 || contentLength > MAX_UPLOAD_PART_BYTES)) {
       throw new HttpError(413, "单个上传分片不能超过 95MB");
     }
     if (!request.body) throw new HttpError(400, "上传分片为空");
-    const uploadedPart = await multipart.uploadPart(partNumber, request.body);
-    return { partNumber: uploadedPart.partNumber, etag: uploadedPart.etag };
+    // FixedLengthStream 保留 R2 所需的已知长度标记，并在不缓存整片的前提下
+    // 拒绝短片或超长片；64MiB 分片始终以流的形式穿过 Worker。
+    const fixedLengthBody = new FixedLengthStream(expectedPartSize);
+    const piping = request.body.pipeTo(fixedLengthBody.writable);
+    let uploadedPart;
+    try {
+      [uploadedPart] = await Promise.all([
+        multipart.uploadPart(partNumber, fixedLengthBody.readable),
+        piping,
+      ]);
+    } catch (error) {
+      if (contentLength === null && /length|fixed|bytes|stream/i.test(String(error?.message || ""))) {
+        throw new HttpError(400, `第 ${partNumber} 个分片大小不正确`);
+      }
+      throw error;
+    }
+    const uploadedAt = nowIso();
+    await env.DB.prepare(`
+      INSERT INTO asset_upload_parts (upload_session_id, part_number, etag, size_bytes, uploaded_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(upload_session_id, part_number) DO UPDATE SET
+        etag = excluded.etag,
+        size_bytes = excluded.size_bytes,
+        uploaded_at = excluded.uploaded_at
+    `).bind(upload.id, uploadedPart.partNumber, uploadedPart.etag, expectedPartSize, uploadedAt).run();
+    return {
+      partNumber: uploadedPart.partNumber,
+      etag: uploadedPart.etag,
+      sizeBytes: expectedPartSize,
+      uploadedAt,
+    };
   }
 
   if (request.method === "POST" && action === "complete") {
     const body = await readJson(request);
-    const completedParts = Array.isArray(body.parts) ? body.parts.map((part) => ({
-      partNumber: Number(part.partNumber),
-      etag: String(part.etag || ""),
-    })).sort((a, b) => a.partNumber - b.partNumber) : [];
-    if (!completedParts.length || completedParts.length > MAX_UPLOAD_PARTS
+    const persistedParts = await listAssetUploadParts(env, upload.id);
+    const partMap = new Map();
+    // 兼容升级前只把 ETag 保存在当前浏览器内存中的 32MiB 会话。
+    if (assetUploadPartSize(upload) === LEGACY_ASSET_UPLOAD_PART_BYTES && Array.isArray(body.parts)) {
+      for (const part of body.parts) {
+        const partNumber = Number(part?.partNumber);
+        const etag = String(part?.etag || "");
+        if (Number.isInteger(partNumber) && partNumber > 0 && etag) {
+          partMap.set(partNumber, { partNumber, etag, sizeBytes: null });
+        }
+      }
+    }
+    for (const part of persistedParts) partMap.set(part.partNumber, part);
+    const completedPartRecords = [...partMap.values()].sort((a, b) => a.partNumber - b.partNumber);
+    const expectedPartCount = assetUploadPartCount(upload);
+    if (completedPartRecords.length !== expectedPartCount || completedPartRecords.length > MAX_UPLOAD_PARTS
+      || completedPartRecords.some((part, index) => !Number.isInteger(part.partNumber)
+        || part.partNumber !== index + 1 || !part.etag)) {
+      throw new HttpError(400, "上传分片清单不完整");
+    }
+    const partSize = assetUploadPartSize(upload);
+    if (completedPartRecords.some((part, index) => part.sizeBytes !== null
+      && part.sizeBytes !== Math.min(partSize, Number(upload.expected_size) - (index * partSize)))) {
+      throw new HttpError(400, "上传分片大小校验失败");
+    }
+    if (partSize !== LEGACY_ASSET_UPLOAD_PART_BYTES && persistedParts.length !== expectedPartCount) {
+      throw new HttpError(400, "服务器未记录完整的上传分片");
+    }
+    const completedParts = completedPartRecords.map(({ partNumber, etag }) => ({ partNumber, etag }));
+    if (!completedParts.length
       || completedParts.some((part, index) => !Number.isInteger(part.partNumber)
         || part.partNumber !== index + 1 || !part.etag)) {
       throw new HttpError(400, "上传分片清单不完整");
     }
-    await multipart.complete(completedParts);
-    const object = await env.BUCKET.head(upload.object_key);
+    let object = null;
+    try {
+      await multipart.complete(completedParts);
+    } catch (error) {
+      // 合并响应若在网络途中丢失，R2 中的对象可能已经完成；先核验对象，
+      // 避免管理员重新选择 100GiB 文件后被迫从零上传。
+      object = await env.BUCKET.head(upload.object_key).catch(() => null);
+      if (!object || Number(object.size) !== Number(upload.expected_size)) throw error;
+    }
+    if (!object) object = await env.BUCKET.head(upload.object_key);
     if (!object) throw new HttpError(500, "R2 合并完成后未找到文件");
     if (Number(upload.expected_size) && Number(object.size) !== Number(upload.expected_size)) {
       await env.BUCKET.delete(upload.object_key);
+      const timestamp = nowIso();
+      if (upload.variant_label) {
+        await env.DB.prepare("UPDATE asset_variants SET status = 'failed', updated_at = ? WHERE asset_id = ? AND label = ?")
+          .bind(timestamp, upload.asset_id, upload.variant_label).run();
+      } else {
+        await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
+          .bind(timestamp, upload.asset_id).run();
+      }
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
+        env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
+      ]);
       throw new HttpError(400, "上传后的文件大小与原文件不一致，请重试");
     }
     const timestamp = nowIso();
@@ -5179,7 +5339,10 @@ async function adminAssetUploads(request, env, id, action, detail) {
         UPDATE assets SET size_bytes = ?, status = 'ready', updated_at = ? WHERE id = ?
       `).bind(object.size, timestamp, upload.asset_id).run();
     }
-    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
+      env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
+    ]);
     return { ok: true, assetId: upload.asset_id, variantLabel: upload.variant_label, sizeBytes: object.size };
   }
 
@@ -5193,7 +5356,10 @@ async function adminAssetUploads(request, env, id, action, detail) {
       await env.DB.prepare("UPDATE assets SET status = 'failed', updated_at = ? WHERE id = ?")
         .bind(timestamp, upload.asset_id).run();
     }
-    await env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id).run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM asset_upload_parts WHERE upload_session_id = ?").bind(upload.id),
+      env.DB.prepare("DELETE FROM asset_uploads WHERE id = ?").bind(upload.id),
+    ]);
     return { ok: true };
   }
   throw new HttpError(405, "不支持的上传操作");

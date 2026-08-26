@@ -6,6 +6,8 @@
     "dev": "wrangler dev",
     "check": "node --check src/worker.js && wrangler deploy --dry-run",
     "test:access": "node test/guest-mode-access.mjs",
+    "test:upload": "node test/resumable-upload.mjs",
+    "test": "npm run test:access && npm run test:upload",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
