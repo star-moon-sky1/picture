@@ -1162,3 +1162,331 @@ h6,
   .sidebar :is(.nav button, .sidebar-toggle, .notification-bell, .studio-link) { background: rgba(213,231,237,.94); }
   :is(.app-shell .main .btn, .app-shell .main .tab-button, .app-shell .main .theme-toggle, dialog .btn) { background: rgba(232,244,246,.90); }
 }
+
+/* ==========================================================
+   玻璃材质与按钮动效精修
+   ----------------------------------------------------------
+   液态玻璃降低填充和模糊，让背后的环境色真正透出；磨砂玻璃则用
+   更深的环境底色、较高模糊和细颗粒区分材质。侧栏按钮按下及单次
+   回弹期间暂时“融化”为液态玻璃，回到原位后再柔和凝回磨砂。
+   ========================================================== */
+:root {
+  --xyj-motion-rebound: .58s;
+  --xyj-motion-settle: .46s;
+  --xyj-frost-fill: rgba(78, 139, 159, .38);
+  --xyj-frost-fill-hover: rgba(61, 145, 168, .47);
+  --xyj-frost-fill-active: rgba(36, 157, 178, .59);
+  --xyj-frost-line: rgba(255, 255, 255, .76);
+  --xyj-frost-text: #153840;
+  --xyj-frost-grain-opacity: .22;
+  --xyj-liquid-press-fill: rgba(218, 247, 250, .055);
+  --xyj-liquid-press-line: rgba(224, 250, 252, .68);
+
+  /* 最终液态玻璃比旧版减少约一半乳白填充，并保留清晰边缘。 */
+  --xyj-glass-surface: linear-gradient(148deg, rgba(255,255,255,.27), rgba(219,240,245,.13) 55%, rgba(220,219,239,.09));
+  --xyj-glass-surface-strong: linear-gradient(148deg, rgba(252,254,255,.49), rgba(224,243,247,.31) 58%, rgba(229,229,247,.24));
+  --xyj-glass-control: linear-gradient(140deg, rgba(255,255,255,.22), rgba(207,235,241,.13) 54%, rgba(220,217,238,.10));
+  --xyj-glass-line: rgba(255,255,255,.64);
+}
+
+:root[data-theme="dark"] {
+  --xyj-frost-fill: rgba(61, 112, 130, .46);
+  --xyj-frost-fill-hover: rgba(61, 132, 153, .55);
+  --xyj-frost-fill-active: rgba(30, 145, 165, .66);
+  --xyj-frost-line: rgba(190, 232, 237, .32);
+  --xyj-frost-text: #edf8f9;
+  --xyj-frost-grain-opacity: .18;
+  --xyj-liquid-press-fill: rgba(153, 218, 226, .045);
+  --xyj-liquid-press-line: rgba(191, 236, 241, .35);
+  --xyj-glass-surface: linear-gradient(148deg, rgba(29,50,58,.47), rgba(12,29,36,.34) 58%, rgba(31,27,49,.28));
+  --xyj-glass-surface-strong: linear-gradient(148deg, rgba(30,52,61,.69), rgba(12,29,36,.58) 58%, rgba(31,27,49,.50));
+  --xyj-glass-control: linear-gradient(140deg, rgba(103,151,162,.14), rgba(42,82,97,.13) 56%, rgba(77,63,107,.11));
+  --xyj-glass-line: rgba(184,229,235,.20);
+}
+
+/* 全站按钮不再急促切换；位移稍快，材质和阴影稍慢，形成柔和收束。 */
+:is(
+  button,
+  a.btn,
+  .tab-button,
+  .studio-link,
+  [role="button"],
+  .workspace .list-item,
+  .side-footer a
+) {
+  transition:
+    transform .22s cubic-bezier(.20,.78,.22,1),
+    color .30s ease,
+    background-color var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
+    border-color .34s ease,
+    box-shadow var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
+    filter .34s ease,
+    opacity .30s ease,
+    -webkit-backdrop-filter var(--xyj-motion-settle) ease,
+    backdrop-filter var(--xyj-motion-settle) ease !important;
+}
+
+/* 指针或键盘按住期间先压下；松开后只越过原尺寸一次。 */
+:is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card, .workspace .list-item):not(.image-nav).is-control-pressed {
+  transform: translate3d(0, 1px, 0) scale(.962) !important;
+}
+:is(button, a.btn, .tab-button, .studio-link, [role="button"], .content-card, .photo-card, .workspace .list-item):not(.image-nav).control-bounce-release {
+  animation: control-single-rebound var(--xyj-motion-rebound) cubic-bezier(.16,.80,.22,1) both !important;
+}
+@keyframes control-single-rebound {
+  0% { transform: translate3d(0, 1px, 0) scale(.962); }
+  58% { transform: translate3d(0, -2px, 0) scale(1.034); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes auth-control-single-rebound {
+  0% { transform: translate3d(0, 1px, 0) scale(.962); }
+  58% { transform: translate3d(0, -2px, 0) scale(1.034); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes studio-control-single-rebound {
+  0% { transform: translate3d(0, 1px, 0) scale(.962); }
+  58% { transform: translate3d(0, -2px, 0) scale(1.034); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* 液态玻璃：减少乳白遮罩与模糊，保留折射边缘和文字对比度。 */
+:is(
+  .content-card,
+  .info-card,
+  .updates,
+  .usage-guide,
+  .feedback-form,
+  .feedback-board,
+  .feedback-item,
+  .account-card,
+  .settings-card,
+  .notification-card,
+  .message-card,
+  .notification-shell,
+  .notification-item,
+  .message-contact,
+  .resource-card,
+  .resource-view,
+  .reader-wrap,
+  .chat-shell,
+  .workspace .panel,
+  .workspace .stat,
+  .workspace .list-item,
+  .workspace .media-card,
+  .workspace .album-chip,
+  .workspace .feedback-admin-row,
+  .workspace .user-card,
+  .workspace .reset-card,
+  .workspace .asset-row,
+  .workspace .resource-picker-item,
+  body > .shell
+) {
+  -webkit-backdrop-filter: blur(17px) saturate(1.34) contrast(1.018);
+  backdrop-filter: blur(17px) saturate(1.34) contrast(1.018);
+}
+
+.entry-card,
+.auth-card {
+  -webkit-backdrop-filter: blur(.24px) saturate(1.11) contrast(1.035) !important;
+  backdrop-filter: blur(.24px) saturate(1.11) contrast(1.035) !important;
+}
+.entry-card::before,
+.auth-card::before {
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 73%, rgba(255,255,255,.045) 82%, rgba(255,255,255,.20) 95%, rgba(255,255,255,.38) 100%),
+    linear-gradient(108deg, rgba(221,249,252,.18), transparent 10% 84%, rgba(158,217,228,.11)) !important;
+}
+.liquid-glass-refraction > img {
+  transform: scale(1.046);
+  filter: blur(.18px) saturate(1.17) contrast(1.06);
+}
+:is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+) {
+  -webkit-backdrop-filter: blur(.24px) saturate(1.12) contrast(1.035);
+  backdrop-filter: blur(.24px) saturate(1.12) contrast(1.035);
+}
+:is(
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .theme-toggle,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn
+)::before {
+  background:
+    radial-gradient(ellipse 98% 94% at 50% 48%, transparent 0 70%, rgba(255,255,255,.045) 81%, rgba(255,255,255,.20) 95%, rgba(255,255,255,.36) 100%),
+    linear-gradient(108deg, rgba(221,249,252,.18), transparent 12% 84%, rgba(158,217,228,.10));
+}
+
+/* 磨砂玻璃：侧栏、登录按钮与提交按钮使用同一层细颗粒。 */
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger),
+  .entry-card button,
+  .entry-card .btn,
+  .auth-card button,
+  .auth-card .btn,
+  .login-card button,
+  .comment-composer .comment-submit
+) {
+  position: relative;
+  isolation: isolate;
+  color: var(--xyj-frost-text);
+  border-color: var(--xyj-frost-line);
+  background-color: var(--xyj-frost-fill) !important;
+  background-image: linear-gradient(90deg, transparent, rgba(226,250,252,.84), transparent) !important;
+  background-position: 50% 0 !important;
+  background-size: 76% 2px !important;
+  background-repeat: no-repeat !important;
+  box-shadow:
+    0 10px 25px rgba(23,60,74,.19),
+    inset 0 1px 0 rgba(255,255,255,.88),
+    inset 0 -1px 0 rgba(32,78,94,.25) !important;
+  -webkit-backdrop-filter: blur(13px) saturate(1.20) contrast(1.025) !important;
+  backdrop-filter: blur(13px) saturate(1.20) contrast(1.025) !important;
+}
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger),
+  .entry-card button,
+  .entry-card .btn,
+  .auth-card button,
+  .auth-card .btn,
+  .login-card button,
+  .comment-composer .comment-submit
+)::after {
+  content: "";
+  display: block !important;
+  position: absolute;
+  z-index: -1;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128' viewBox='0 0 128 128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' seed='19' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.58'/%3E%3C/svg%3E") !important;
+  background-size: 128px 128px !important;
+  background-repeat: repeat !important;
+  opacity: var(--xyj-frost-grain-opacity);
+  mix-blend-mode: soft-light;
+  transition: opacity .32s ease !important;
+}
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger),
+  .entry-card button,
+  .entry-card .btn,
+  .auth-card button,
+  .auth-card .btn,
+  .login-card button,
+  .comment-composer .comment-submit
+) > * {
+  position: relative;
+  z-index: 1;
+}
+
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger),
+  .entry-card button,
+  .entry-card .btn,
+  .auth-card button,
+  .auth-card .btn,
+  .login-card button,
+  .comment-composer .comment-submit
+):hover {
+  background-color: var(--xyj-frost-fill-hover) !important;
+}
+:is(.sidebar .nav button.active, .studio .side-nav button.active) {
+  background-color: var(--xyj-frost-fill-active) !important;
+}
+
+/* Studio 的侧栏底板始终为深色，因此不沿用公开站白天模式的深色文字。 */
+:is(.studio .side-nav button, .studio .side-footer a, .studio .side-footer .btn:not(.danger)) {
+  color: #edf7f8;
+}
+
+/* 侧栏控件按下和回弹时去掉颗粒、降低模糊；回弹类移除后按上方 .46s
+   过渡自动恢复更深的磨砂底色和颗粒，不产生额外玻璃外圈。 */
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger)
+):is(.is-control-pressed, .control-bounce-release) {
+  border-color: var(--xyj-liquid-press-line) !important;
+  background-color: var(--xyj-liquid-press-fill) !important;
+  background-image: linear-gradient(90deg, transparent, rgba(217,248,251,.58), transparent) !important;
+  box-shadow:
+    0 13px 31px rgba(14,47,59,.15),
+    inset 0 1px 0 rgba(255,255,255,.88),
+    inset 1px 0 0 rgba(214,247,251,.34),
+    inset 0 -1px 0 rgba(33,82,98,.18) !important;
+  -webkit-backdrop-filter: blur(.58px) saturate(1.30) contrast(1.045) !important;
+  backdrop-filter: blur(.58px) saturate(1.30) contrast(1.045) !important;
+}
+:is(
+  .sidebar .nav button,
+  .sidebar .sidebar-toggle,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .studio .side-footer .btn:not(.danger)
+):is(.is-control-pressed, .control-bounce-release)::after {
+  opacity: .025;
+}
+
+/* 侧栏底板本身也补一层更弱的颗粒，避免按钮有纹理而底板仍像塑料。 */
+.sidebar::before,
+.studio .side::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.66' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.46'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: .075;
+  mix-blend-mode: soft-light;
+}
+.sidebar > *,
+.studio .side > * { position: relative; z-index: 1; }
+
+/* 白光释放稍慢于旧版，但按住时仍停留，不会提前消失。 */
+.harmony-light-bloom.is-releasing {
+  animation-duration: .46s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(button, a.btn, .tab-button, .studio-link, [role="button"], .workspace .list-item, .side-footer a) {
+    transition: none !important;
+  }
+  .is-control-pressed,
+  .control-bounce-release { animation: none !important; transform: none !important; }
+}
