@@ -8,6 +8,7 @@ const theme = await readFile(new URL("public/theme.js", root), "utf8");
 const vnext = await readFile(new URL("public/vnext.css", root), "utf8");
 const deepseekWhale = await readFile(new URL("public/deepseek-whale.svg", root), "utf8");
 const envelope = await readFile(new URL("public/envelope-line.svg", root), "utf8");
+const bell = await readFile(new URL("public/bell-line.svg", root), "utf8");
 const pages = await Promise.all([
   "public/index.html",
   "public/login.html",
@@ -39,6 +40,19 @@ assert.match(css, /background-color:\s*rgba\(15, 78, 116, \.88\)/);
 assert.doesNotMatch(css, /--xyj-(?:violet|green)|rgba\(109,\s*80,\s*189|rgba\(0,\s*105,\s*99/);
 assert.match(css, /\.sidebar \.nav-icon\s*\{[\s\S]*?width:\s*22px;[\s\S]*?height:\s*22px;[\s\S]*?flex:\s*0 0 22px/);
 assert.match(css, /\.sidebar \.nav-icon-glyph\s*\{[\s\S]*?font-weight:\s*900;[\s\S]*?-webkit-text-stroke:\s*\.42px currentColor/);
+assert.match(css, /--xyj-button-font:\s*"汉仪颜简体"[\s\S]*?"DuBai Medium"[\s\S]*?"Dubai Medium"/);
+const neutralControlLayer = css.indexOf("无色玻璃按钮与字体分区");
+assert.ok(neutralControlLayer > css.indexOf("background-color: rgba(15, 78, 116, .88)"), "neutral controls must override all earlier colored button rules");
+assert.match(css.slice(neutralControlLayer), /background-color:\s*rgba\(255, 255, 255, \.10\)\s*!important/);
+assert.match(css.slice(neutralControlLayer), /background-color:\s*#fff\s*!important/);
+assert.match(css.slice(neutralControlLayer), /background-color:\s*rgba\(255, 255, 255, \.018\)\s*!important/);
+assert.match(css.slice(neutralControlLayer), /blur\(\.20px\) saturate\(1\.55\) contrast\(1\.08\)/);
+assert.match(css.slice(neutralControlLayer), /scale\(1\.07\)\s*!important/);
+assert.match(css.slice(neutralControlLayer), /@keyframes xyj-switch-like-button-release/);
+assert.match(css.slice(neutralControlLayer), /@keyframes xyj-liquid-lens-slide/);
+assert.match(css.slice(neutralControlLayer), /\.entry-card h1[\s\S]*?font-family:\s*var\(--font-song\)\s*!important[\s\S]*?font-weight:\s*820\s*!important/);
+assert.match(css.slice(neutralControlLayer), /\.auth-card \.field label[\s\S]*?font-size:\s*\.89rem\s*!important/);
+assert.match(css.slice(neutralControlLayer), /\.sidebar \.nav-label[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
 assert.match(css, /@keyframes xyj-unified-control-rebound/);
 assert.match(css, /animation:\s*xyj-unified-control-rebound var\(--xyj-motion-rebound\)/);
 assert.match(css, /:root\[data-theme="light"\][\s\S]*?:is\(h1, h2, h3, h4, h5, h6, \.section-title\)\s*\{\s*color:\s*#000\s*!important/);
@@ -56,6 +70,9 @@ assert.match(deepseekWhale, /fill="#000"/);
 assert.match(envelope, /viewBox="0 0 24 24"/);
 assert.match(envelope, /<rect x="2\.75" y="4\.75"/);
 assert.match(envelope, /stroke-width="2\.25"/);
+assert.match(bell, /viewBox="0 0 24 24"/);
+assert.match(bell, /stroke-width="2\.25"/);
+assert.match(bell, /M6\.5 10a5\.5 5\.5/);
 
 new Function(theme);
 assert.match(theme, /value === "dark" \|\| value === "light"/);
@@ -150,6 +167,8 @@ for (const [path, html] of pages) {
   if (path === "public/index.html") {
     assert.match(html, /data-section="feedback"[\s\S]*?src="\/envelope-line\.svg"/);
     assert.match(html, /data-section="ai-helper"[\s\S]*?src="\/deepseek-whale\.svg"/);
+    assert.match(html, /id="notification-bell"[\s\S]*?src="\/bell-line\.svg"/);
+    assert.doesNotMatch(html, /🔔/);
     assert.equal((html.match(/class="nav-icon nav-icon-glyph"/g) || []).length, 4, "the four text navigation icons must share the bold glyph treatment");
   }
   if (path === "public/login.html") {

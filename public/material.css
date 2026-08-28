@@ -13,6 +13,7 @@
   --xyj-coral: #a9454f;
   --xyj-navy: #284e78;
   --xyj-steel: #356b7e;
+  --xyj-button-font: "汉仪颜简体", "汉仪颜楷简", "汉仪颜楷W", "HYYanKaiW", "DuBai Medium", "Dubai Medium", "Dubai", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
   --xyj-readable-ink: #1b3036;
   --xyj-readable-muted: #586b70;
 
@@ -180,6 +181,7 @@
   transition: filter .42s ease, opacity .42s ease;
 }
 .sidebar .nav-symbol-envelope { width: 21px; height: 21px; }
+.sidebar .nav-symbol-bell { width: 21px; height: 21px; }
 .sidebar .nav-symbol-deepseek { width: 22px; height: 16px; }
 :root[data-theme="dark"] .sidebar .nav-symbol,
 .sidebar .nav button.active .nav-symbol {
@@ -935,6 +937,273 @@
   .home-link
 ):not(.night-mode-switch):is(.is-control-pressed, .control-bounce-release) { color: #102f38 !important; }
 .harmony-light-bloom.is-releasing { animation-duration: .64s !important; }
+
+/* ========================= 无色玻璃按钮与字体分区 =========================
+   这一层放在所有旧按钮配色之后，并用只负责提高级联优先级的虚拟 ID
+   统一覆盖内联页面、公开站和 Studio 的历史样式；虚拟 ID 不对应真实节点。 */
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+) {
+  font-family: var(--xyj-button-font) !important;
+  font-weight: 650;
+  font-synthesis: weight;
+  color: #20343d !important;
+  text-shadow: none !important;
+  border-color: rgba(255, 255, 255, .66) !important;
+  background-color: rgba(255, 255, 255, .10) !important;
+  background-image: none !important;
+  box-shadow:
+    0 11px 27px rgba(29, 45, 52, .13),
+    inset 0 1px 0 rgba(255, 255, 255, .90),
+    inset 1px 0 0 rgba(255, 255, 255, .28),
+    inset 0 -1px 0 rgba(39, 52, 58, .22),
+    inset -1px 0 0 rgba(255, 255, 255, .18) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.06) contrast(1.025) !important;
+  backdrop-filter: blur(16px) saturate(1.06) contrast(1.025) !important;
+}
+/* 只改已有的玻璃折射伪层；侧栏收起键的 ::before 仍保留给移动端箭头。 */
+:is(
+  #xyj-neutral-glass-specificity,
+  .sidebar .nav button,
+  .sidebar .notification-bell,
+  .sidebar .studio-link,
+  .studio .side-nav button,
+  .studio .side-footer a,
+  .entry-card button,
+  .entry-card .btn,
+  .auth-card button,
+  .auth-card .btn,
+  .login-card button,
+  .login-card .btn,
+  .app-shell .main .btn,
+  .app-shell .main .tab-button,
+  .app-shell .main .sidebar-install-button,
+  dialog .btn,
+  .workspace .btn,
+  .home-link
+)::before {
+  background:
+    radial-gradient(ellipse 97% 92% at 50% 49%, transparent 0 59%, rgba(255,255,255,.07) 72%, rgba(255,255,255,.34) 94%, rgba(255,255,255,.58) 100%),
+    linear-gradient(108deg, rgba(255,255,255,.27), transparent 13% 82%, rgba(24,34,39,.12)) !important;
+}
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+) :is(span:not(.nav-icon):not(.nav-label):not(.sidebar-install-label), strong, small) {
+  font-family: var(--xyj-button-font) !important;
+  font-synthesis: weight;
+}
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+):hover {
+  color: #172b34 !important;
+  border-color: rgba(255, 255, 255, .82) !important;
+  background-color: rgba(255, 255, 255, .18) !important;
+}
+:root[data-theme="dark"] :is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+) {
+  color: #f3f8f9 !important;
+  border-color: rgba(218, 239, 242, .25) !important;
+  background-color: rgba(255, 255, 255, .065) !important;
+  box-shadow:
+    0 11px 27px rgba(0, 0, 0, .24),
+    inset 0 1px 0 rgba(230, 246, 248, .22),
+    inset 0 -1px 0 rgba(0, 0, 0, .34) !important;
+}
+
+/* 选中项使用真正的纯白底，并强制深色文字与黑色单色图标。 */
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+):is(.active, .selected, .is-selected, [aria-selected="true"], [aria-pressed="true"], [aria-current="page"]) {
+  color: #172a32 !important;
+  border-color: #fff !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  text-shadow: none !important;
+  box-shadow:
+    0 13px 30px rgba(28, 44, 51, .18),
+    inset 0 1px 0 #fff,
+    inset 0 -1px 0 rgba(62, 76, 82, .16) !important;
+}
+.sidebar .nav button.active .nav-symbol { filter: grayscale(1) brightness(.08) contrast(1.45); }
+
+/* 按住时像夜览滑纽一样略微放大、清空磨砂颗粒并出现横向折射光带。 */
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+):is(.is-control-pressed, .control-bounce-release) {
+  color: #162d36 !important;
+  border-color: rgba(245, 253, 255, .70) !important;
+  background-color: rgba(255, 255, 255, .018) !important;
+  background-image: linear-gradient(104deg, transparent 18%, rgba(255,255,255,.60) 46%, transparent 72%) !important;
+  background-size: 210% 100% !important;
+  box-shadow:
+    0 15px 32px rgba(14, 34, 42, .15),
+    inset 0 2px 3px rgba(255,255,255,.78),
+    inset 2px 0 4px rgba(255,255,255,.34),
+    inset 0 -3px 5px rgba(23,37,43,.24),
+    inset -2px 0 4px rgba(255,255,255,.25) !important;
+  -webkit-backdrop-filter: blur(.20px) saturate(1.55) contrast(1.08) !important;
+  backdrop-filter: blur(.20px) saturate(1.55) contrast(1.08) !important;
+}
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+).is-control-pressed {
+  transform: translate3d(0, 0, 0) scale(1.07) !important;
+  background-position: 100% 50% !important;
+}
+:is(
+  #xyj-neutral-glass-specificity,
+  button:not(.night-mode-switch),
+  .btn:not(.night-mode-switch),
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link,
+  .side-footer a,
+  [role="button"]
+).control-bounce-release {
+  animation:
+    xyj-switch-like-button-release var(--xyj-motion-rebound) cubic-bezier(.18,.82,.20,1) both,
+    xyj-liquid-lens-slide var(--xyj-motion-rebound) cubic-bezier(.18,.82,.20,1) both !important;
+}
+@keyframes xyj-switch-like-button-release {
+  0% { transform: translate3d(0, 0, 0) scale(1.07); }
+  56% { transform: translate3d(0, 1px, 0) scale(.985); }
+  80% { transform: translate3d(0, -1px, 0) scale(1.018); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes xyj-liquid-lens-slide {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+:is(#xyj-neutral-glass-specificity, .image-nav):active {
+  background-color: rgba(255, 255, 255, .018) !important;
+  -webkit-backdrop-filter: blur(.20px) saturate(1.55) contrast(1.08) !important;
+  backdrop-filter: blur(.20px) saturate(1.55) contrast(1.08) !important;
+}
+
+/* 登录正文加大、加粗并保留宋体；标题进一步强化，按钮由上面的按钮字体覆盖。 */
+:is(.entry-card, .auth-card, .login-card) {
+  font-size: 1.035rem;
+  font-weight: 650;
+}
+:is(.entry-card, .auth-card, .login-card) :is(label, p, input, select, textarea, .notice, small, a:not(.btn)) {
+  font-family: var(--font-song) !important;
+  font-weight: 650 !important;
+  font-synthesis: weight;
+}
+.entry-card h1 {
+  font-family: var(--font-song) !important;
+  font-size: clamp(2rem, 6.3vw, 2.62rem) !important;
+  font-weight: 820 !important;
+}
+.auth-card .card-head h2 {
+  font-family: var(--font-song) !important;
+  font-size: clamp(2.12rem, 5.3vw, 2.95rem) !important;
+  font-weight: 820 !important;
+}
+.login-card h1 {
+  font-family: var(--font-song) !important;
+  font-size: 2.38rem !important;
+  font-weight: 820 !important;
+}
+.entry-card .entry-field { font-size: .93rem !important; font-weight: 720 !important; }
+.entry-card .entry-options { font-size: .86rem !important; font-weight: 650 !important; }
+.auth-card .field label { font-size: .89rem !important; font-weight: 720 !important; }
+.auth-card :is(.field small, .notice, .privacy-note, .remember) { font-weight: 650 !important; }
+.login-card .field label { font-size: .86rem !important; font-weight: 720 !important; }
+.login-card :is(.field small, .notice) { font-size: .84rem !important; font-weight: 650 !important; }
+
+/* 侧栏文案采用楷体；图标继续使用独立的单色图形字体/矢量资源。 */
+:is(
+  #xyj-sidebar-kai-specificity,
+  .sidebar .brand h2,
+  .sidebar .brand small,
+  .sidebar .nav-label,
+  .sidebar .sidebar-install-label,
+  .sidebar .sidebar-note,
+  .sidebar .studio-link,
+  .sidebar #site-version,
+  .studio .side-brand h1,
+  .studio .side-brand small,
+  .studio .side-nav button,
+  .studio .side-footer a
+) {
+  font-family: var(--font-kai) !important;
+  font-synthesis: weight;
+}
 
 @media (max-width: 760px) {
   .floating-night-mode-control {
