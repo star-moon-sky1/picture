@@ -33,9 +33,12 @@ for (const color of ["--xyj-blue", "--xyj-teal", "--xyj-amber", "--xyj-coral", "
 assert.match(css, /--xyj-blue:\s*#0f6baa/);
 assert.match(css, /--xyj-teal:\s*#246f84/);
 assert.match(css, /--xyj-coral:\s*#a9454f/);
-assert.match(css, /\.sidebar\s*\{[\s\S]*?background-color:\s*rgba\(76, 147, 184, \.72\)/);
+assert.match(css, /\.sidebar\s*\{[\s\S]*?background-color:\s*rgba\(223, 215, 201, \.72\)/);
+assert.doesNotMatch(css, /background-color:\s*rgba\(76, 147, 184, \.72\)/);
 assert.match(css, /background-color:\s*rgba\(15, 78, 116, \.88\)/);
 assert.doesNotMatch(css, /--xyj-(?:violet|green)|rgba\(109,\s*80,\s*189|rgba\(0,\s*105,\s*99/);
+assert.match(css, /\.sidebar \.nav-icon\s*\{[\s\S]*?width:\s*22px;[\s\S]*?height:\s*22px;[\s\S]*?flex:\s*0 0 22px/);
+assert.match(css, /\.sidebar \.nav-icon-glyph\s*\{[\s\S]*?font-weight:\s*900;[\s\S]*?-webkit-text-stroke:\s*\.42px currentColor/);
 assert.match(css, /@keyframes xyj-unified-control-rebound/);
 assert.match(css, /animation:\s*xyj-unified-control-rebound var\(--xyj-motion-rebound\)/);
 assert.match(css, /:root\[data-theme="light"\][\s\S]*?:is\(h1, h2, h3, h4, h5, h6, \.section-title\)\s*\{\s*color:\s*#000\s*!important/);
@@ -43,11 +46,16 @@ assert.match(css, /:root\[data-theme="dark"\] :is\([\s\S]*?button:not\(\.night-m
 assert.doesNotMatch(css, /#home > \.section-inner > h1[\s\S]{0,100}color:\s*#366f98/);
 assert.match(vnext, /data-section="ai-helper"[\s\S]*?xyj-icon-whale/);
 assert.doesNotMatch(vnext, /xyj-icon-star/);
+assert.match(vnext, /--font-song:\s*"Songti SC"[\s\S]*?"SimSun"[\s\S]*?serif/);
+assert.match(vnext, /--font-kai:\s*"Kaiti SC"[\s\S]*?"KaiTi"[\s\S]*?serif/);
+assert.match(vnext, /:is\(\.entry-screen, \.auth-document, \.login-shell\) \*[\s\S]*?font-family:\s*var\(--font-song\)\s*!important/);
+assert.match(vnext, /\.app-shell \.main :is\(h1, h2, h3, h4, h5, h6, \.section-title\)[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
 assert.match(deepseekWhale, /viewBox="0 0 57 42"/);
 assert.match(deepseekWhale, /M55\.6128 3\.47119/);
 assert.match(deepseekWhale, /fill="#000"/);
 assert.match(envelope, /viewBox="0 0 24 24"/);
 assert.match(envelope, /<rect x="2\.75" y="4\.75"/);
+assert.match(envelope, /stroke-width="2\.25"/);
 
 new Function(theme);
 assert.match(theme, /value === "dark" \|\| value === "light"/);
@@ -142,6 +150,10 @@ for (const [path, html] of pages) {
   if (path === "public/index.html") {
     assert.match(html, /data-section="feedback"[\s\S]*?src="\/envelope-line\.svg"/);
     assert.match(html, /data-section="ai-helper"[\s\S]*?src="\/deepseek-whale\.svg"/);
+    assert.equal((html.match(/class="nav-icon nav-icon-glyph"/g) || []).length, 4, "the four text navigation icons must share the bold glyph treatment");
+  }
+  if (path === "public/login.html") {
+    assert.match(html, /<body class="auth-document">/, "the account page must opt into the Song typeface scope");
   }
 }
 

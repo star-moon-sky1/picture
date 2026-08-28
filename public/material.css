@@ -94,18 +94,18 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(76, 147, 184, .72) !important;
+  background-color: rgba(223, 215, 201, .72) !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, .58) !important;
   box-shadow:
-    12px 0 36px rgba(25, 75, 104, .22),
-    inset -1px 0 0 rgba(24, 74, 104, .22),
-    inset 1px 0 0 rgba(255, 255, 255, .76) !important;
-  -webkit-backdrop-filter: blur(25px) saturate(1.34) contrast(1.06);
-  backdrop-filter: blur(25px) saturate(1.34) contrast(1.06);
+    12px 0 34px rgba(62, 70, 66, .10),
+    inset -1px 0 0 rgba(91, 106, 105, .14),
+    inset 1px 0 0 rgba(255, 255, 255, .72) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(1.12) contrast(1.035);
+  backdrop-filter: blur(25px) saturate(1.12) contrast(1.035);
 }
 :root[data-theme="dark"] .sidebar {
-  background-color: rgba(17, 55, 79, .90) !important;
+  background-color: rgba(27, 48, 54, .78) !important;
   border-color: rgba(202, 236, 238, .14) !important;
   box-shadow:
     12px 0 34px rgba(0, 0, 0, .26),
@@ -116,13 +116,13 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(20, 58, 84, .96) !important;
+  background-color: rgba(27, 67, 73, .95) !important;
   background-image: none !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.16);
   backdrop-filter: blur(24px) saturate(1.16);
 }
 :root[data-theme="dark"] .studio .side {
-  background-color: rgba(12, 37, 56, .97) !important;
+  background-color: rgba(17, 39, 45, .96) !important;
 }
 .sidebar::before,
 .studio .side::before {
@@ -154,17 +154,33 @@
 .studio .side-nav button[data-view="users"],
 .studio .side-nav button[data-view="settings"] { --xyj-nav-rest: rgba(43,83,151,.58); --xyj-nav-hover: rgba(51,95,168,.72); --xyj-nav-active: rgba(60,108,184,.91); }
 
-/* 导航图标统一为单色图形；普通状态为黑，深色或选中状态自动转白。 */
-.sidebar .nav-icon { display: grid; place-items: center; }
+/* 六个导航图标共用同一个 22px 视觉框；字符图标加粗后与鲸鱼、信封保持同量级。 */
+.sidebar .nav-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  line-height: 1;
+}
+.sidebar .nav-icon-glyph {
+  font-family: "Arial Black", "Segoe UI Symbol", "SF Pro Text", sans-serif !important;
+  font-size: 1.12rem;
+  font-weight: 900;
+  font-synthesis: weight;
+  -webkit-text-stroke: .42px currentColor;
+  text-rendering: geometricPrecision;
+}
 .sidebar .nav-symbol {
   display: block;
-  width: 20px;
-  height: 20px;
+  width: 21px;
+  height: 21px;
   object-fit: contain;
   filter: grayscale(1) brightness(.10) contrast(1.35);
   transition: filter .42s ease, opacity .42s ease;
 }
-.sidebar .nav-symbol-deepseek { width: 22px; height: 17px; }
+.sidebar .nav-symbol-envelope { width: 21px; height: 21px; }
+.sidebar .nav-symbol-deepseek { width: 22px; height: 16px; }
 :root[data-theme="dark"] .sidebar .nav-symbol,
 .sidebar .nav button.active .nav-symbol {
   filter: grayscale(1) brightness(0) invert(1) contrast(1.2);

@@ -779,6 +779,8 @@ dialog.xyj-origin-dialog > * { max-width: 100%; overflow-x: hidden; }
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
   --font-hei: -apple-system, BlinkMacSystemFont, "SF Pro Text", "HarmonyOS Sans SC", "HarmonyOS Sans", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-song: "Songti SC", "STSong", "SimSun", "宋体", "Noto Serif CJK SC", "Noto Serif SC", serif;
+  --font-kai: "Kaiti SC", "STKaiti", "KaiTi", "KaiTi_GB2312", "楷体", "Noto Serif CJK SC", "Noto Serif SC", serif;
 }
 
 html,
@@ -813,6 +815,20 @@ h6,
 .side-brand h1 {
   font-family: var(--font-display) !important;
   letter-spacing: -.018em;
+}
+
+/* 访客登录、账户注册/找回与 Studio 登录统一使用宋体。 */
+:is(.entry-screen, .auth-document, .login-shell),
+:is(.entry-screen, .auth-document, .login-shell) * {
+  font-family: var(--font-song) !important;
+  font-synthesis: weight;
+}
+
+/* 进入网站后的内容区只让标题使用楷体，正文继续保留清晰的系统无衬线字体。 */
+.app-shell .main :is(h1, h2, h3, h4, h5, h6, .section-title) {
+  font-family: var(--font-kai) !important;
+  font-synthesis: weight;
+  letter-spacing: normal;
 }
 
 /* 注册页夜览与登录入口使用同一层次的环境色，卡片中部不再形成黑色实心块。 */
