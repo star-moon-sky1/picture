@@ -14,8 +14,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="星月集">
-  <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6efe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111b21" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
   <style>
@@ -343,10 +343,18 @@
   </style>
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/vnext.css">
+  <link rel="stylesheet" href="/material.css">
 </head>
 <body>
   <!-- ==================== 后台登录界面 ==================== -->
   <section id="login-shell" class="login-shell">
+    <div class="night-mode-control floating-night-mode-control studio-login-night-mode-control" data-theme-switch>
+      <span id="studio-login-night-mode-label" class="night-mode-label">夜览模式</span>
+      <button class="night-mode-switch" type="button" role="switch" aria-checked="false" aria-labelledby="studio-login-night-mode-label" data-theme-switch-button>
+        <span class="night-mode-fill" aria-hidden="true"></span>
+        <span class="night-mode-knob" aria-hidden="true"></span>
+      </button>
+    </div>
     <form id="login-form" class="login-card">
       <div class="login-brand">
         <img class="studio-avatar" src="/assets/avatar-glass.png?v=312c1e75" alt="星月集渐变毛玻璃头像">
@@ -392,8 +400,17 @@
     <main class="workspace">
       <header class="topbar">
         <div><h2 id="view-title">概览</h2><p id="view-desc">查看网站目前的内容状态。</p></div>
-        <!-- 顶部预览入口同样使用当前标签页，保持两个返回入口的行为一致。 -->
-        <a class="btn ghost" href="/">预览网站</a>
+        <div class="studio-topbar-actions">
+          <div class="night-mode-control studio-night-mode-control" data-theme-switch>
+            <span id="studio-night-mode-label" class="night-mode-label">夜览模式</span>
+            <button class="night-mode-switch" type="button" role="switch" aria-checked="false" aria-labelledby="studio-night-mode-label" data-theme-switch-button>
+              <span class="night-mode-fill" aria-hidden="true"></span>
+              <span class="night-mode-knob" aria-hidden="true"></span>
+            </button>
+          </div>
+          <!-- 顶部预览入口同样使用当前标签页，保持两个返回入口的行为一致。 -->
+          <a class="btn ghost" href="/">预览网站</a>
+        </div>
       </header>
 
       <!-- ==================== 后台概览 ==================== -->

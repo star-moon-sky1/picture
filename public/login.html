@@ -14,8 +14,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="星月集">
-  <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6efe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111b21" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
   <script src="/i18n.js" defer></script>
@@ -383,21 +383,18 @@
   </style>
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/vnext.css">
+  <link rel="stylesheet" href="/material.css">
 </head>
 <body>
   <!-- 仅由公开图片专栏生成；不会把会员照片放到未登录页面。 -->
   <div id="auth-photo-background" class="auth-photo-background" aria-hidden="true"></div>
-  <!-- 注册、找回密码与重置密码页面共用右上角白天/夜览/跟随系统入口。 -->
-  <div class="theme-picker floating-theme-picker" data-theme-picker>
-    <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
-      <span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span>
+  <!-- 注册、找回密码与重置密码页面共用右上角夜览开关。 -->
+  <div class="night-mode-control floating-night-mode-control" data-theme-switch>
+    <span id="auth-night-mode-label" class="night-mode-label">夜览模式</span>
+    <button class="night-mode-switch" type="button" role="switch" aria-checked="false" aria-labelledby="auth-night-mode-label" data-theme-switch-button>
+      <span class="night-mode-fill" aria-hidden="true"></span>
+      <span class="night-mode-knob" aria-hidden="true"></span>
     </button>
-    <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="登录与注册页面主题" hidden>
-      <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
-      <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
-      <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
-      <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
-    </div>
   </div>
   <main class="auth-page">
     <!-- 页面左下角只保留返回入口，登录与注册表单自身位于屏幕正中。 -->

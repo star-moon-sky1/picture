@@ -12,8 +12,8 @@
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
   <!-- PWA 清单决定安装后的名称、图标、启动地址与独立窗口外观。 -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#dceff2" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#17272d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6efe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111b21" media="(prefers-color-scheme: dark)">
   <!-- iOS/部分安卓浏览器从主屏幕启动时使用独立应用外观；不影响普通网页访问。 -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1511,9 +1511,10 @@
     }
 
   </style>
-  <!-- 三个页面共用的白天/夜览覆盖样式放在原页面样式之后。 -->
+  <!-- 主题与实体玻璃材质层放在原页面样式之后。 -->
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/vnext.css">
+  <link rel="stylesheet" href="/material.css">
 </head>
 <body>
   <!-- ========================================================
@@ -1524,19 +1525,15 @@
        ======================================================== -->
   <!-- 默认 hidden 可避免已登录用户刷新时短暂闪过登录框；boot() 完成会话检查后再决定显示哪一层。 -->
   <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title" hidden>
-    <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留渐变底色。 -->
+    <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留纯米白底色。 -->
     <div id="entry-photo-background" class="entry-photo-background" aria-hidden="true"></div>
-    <!-- 登录入口独立提供主题选择；进入网站后改用侧边栏中的外观按钮。 -->
-    <div class="theme-picker floating-theme-picker" data-theme-picker>
-      <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false">
-        <span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span>
+    <!-- 单一开关同时控制白天与夜览，不再展开多级主题菜单。 -->
+    <div class="night-mode-control floating-night-mode-control" data-theme-switch>
+      <span id="entry-night-mode-label" class="night-mode-label">夜览模式</span>
+      <button class="night-mode-switch" type="button" role="switch" aria-checked="false" aria-labelledby="entry-night-mode-label" data-theme-switch-button>
+        <span class="night-mode-fill" aria-hidden="true"></span>
+        <span class="night-mode-knob" aria-hidden="true"></span>
       </button>
-      <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="登录页面主题" hidden>
-        <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
-        <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
-        <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
-        <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
-      </div>
     </div>
     <div class="entry-card">
       <h1 id="entry-title">欢迎来到星月集</h1>
@@ -1768,19 +1765,12 @@
           <div class="settings-grid">
             <article class="settings-card">
               <h2>显示与语言</h2>
-              <div class="theme-picker settings-theme-picker" data-theme-picker>
-                <button class="theme-toggle" type="button" data-theme-toggle aria-haspopup="menu" aria-expanded="false"><span data-theme-icon aria-hidden="true">◐</span><span data-theme-label>跟随系统</span></button>
-                <div class="theme-menu" data-theme-menu role="radiogroup" aria-label="设置页面主题" hidden>
-                  <button type="button" role="radio" data-theme-choice="system"><span aria-hidden="true">◐</span>跟随系统</button>
-                  <button type="button" role="radio" data-theme-choice="light"><span aria-hidden="true">☀</span>白天模式</button>
-                  <button type="button" role="radio" data-theme-choice="dark"><span aria-hidden="true">☾</span>夜览模式</button>
-                  <button type="button" role="radio" data-theme-choice="scheduled"><span aria-hidden="true">◷</span>定时夜览</button>
-                </div>
-              </div>
-              <div class="theme-schedule-settings" data-theme-schedule-panel hidden>
-                <label>开启时间<input type="time" data-theme-schedule-start value="22:00"></label>
-                <label>关闭时间<input type="time" data-theme-schedule-end value="07:00"></label>
-                <button class="btn ghost" type="button" data-theme-schedule-save>保存定时</button>
+              <div class="night-mode-control settings-night-mode-control" data-theme-switch>
+                <span id="settings-night-mode-label" class="night-mode-label">夜览模式</span>
+                <button class="night-mode-switch" type="button" role="switch" aria-checked="false" aria-labelledby="settings-night-mode-label" data-theme-switch-button>
+                  <span class="night-mode-fill" aria-hidden="true"></span>
+                  <span class="night-mode-knob" aria-hidden="true"></span>
+                </button>
               </div>
               <div class="settings-install-slot" data-install-app-container hidden>
                 <button id="install-app-button" class="sidebar-install-button" type="button" title="创建桌面访问" data-install-app hidden>
@@ -4334,33 +4324,11 @@
       sidebarToggle.setAttribute("aria-label", collapsed ? "展开侧边栏" : "收起侧边栏");
       sidebarToggle.title = collapsed ? "展开侧边栏" : "收起侧边栏";
       updateSidebarToggleIcon(collapsed);
-      if (collapsed) {
-        document.querySelectorAll(".sidebar [data-theme-menu]").forEach((menu) => { menu.hidden = true; });
-        document.querySelectorAll(".sidebar [data-theme-toggle]").forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
-      }
       localStorage.setItem("xyj_sidebar_collapsed", collapsed ? "1" : "0");
     }
     setSidebarCollapsed(localStorage.getItem("xyj_sidebar_collapsed") === "1");
     mobileSidebarLayout.addEventListener?.("change", () => updateSidebarToggleIcon(appShell.classList.contains("sidebar-collapsed")));
     sidebarToggle.addEventListener("click", () => setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed")));
-    /* 收起状态点击主题图标时先展开侧栏，随后 /theme.js 会正常打开主题菜单。 */
-    document.querySelector(".sidebar [data-theme-toggle]")?.addEventListener("click", (event) => {
-      if (!appShell.classList.contains("sidebar-collapsed")) return;
-      /*
-       * 收起状态的菜单宽度大于 76px。先拦下 /theme.js 对本次 click 的即时
-       * 开菜单动作，等侧栏展开过半再显示，避免菜单在窄栏中被裁掉后突然跳出。
-       */
-      event.stopImmediatePropagation();
-      setSidebarCollapsed(false);
-      const toggle = event.currentTarget;
-      const menu = toggle.closest("[data-theme-picker]")?.querySelector("[data-theme-menu]");
-      window.setTimeout(() => {
-        if (!menu) return;
-        menu.hidden = false;
-        toggle.setAttribute("aria-expanded", "true");
-        menu.querySelector("[data-theme-choice].active")?.focus({ preventScroll: true });
-      }, 270);
-    });
     installSidebarEdgeBounce();
 
     const updatesPreview = document.getElementById("updates-preview");

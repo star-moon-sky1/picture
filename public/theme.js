@@ -1,32 +1,28 @@
 /*
- * 星月集全站主题控制器
+ * 星月集夜览模式开关
  * ------------------------------------------------------------------
- * 可选值：system（跟随系统）、light（白天）、dark（夜览）、scheduled（定时）。
- * 本文件在页面样式之前同步执行，先给 <html> 写入 data-theme，避免刷新时
- * 先出现白色页面再跳到夜览模式。公开网站、账户页和 Studio 共用同一个键。
+ * 全站只保留 light / dark 两种手动状态。旧版本保存的“跟随系统”或
+ * “定时夜览”会在首次加载时解析为当下实际主题，再迁移为新的固定状态，
+ * 因此升级后不会突然换色，也不会继续受到旧定时器影响。
  */
 (function initializeXingyuejiTheme() {
   "use strict";
 
   const STORAGE_KEY = "xyj_theme_preference";
-  const SCHEDULE_KEY = "xyj_theme_schedule";
-  const VALID_PREFERENCES = new Set(["system", "light", "dark", "scheduled"]);
-  const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+  const LEGACY_SCHEDULE_KEY = "xyj_theme_schedule";
   const root = document.documentElement;
+  const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 
-  function scheduleConfig() {
+  function legacyScheduledTheme() {
+    let start = "22:00";
+    let end = "07:00";
     try {
-      const parsed = JSON.parse(localStorage.getItem(SCHEDULE_KEY) || "{}");
+      const parsed = JSON.parse(localStorage.getItem(LEGACY_SCHEDULE_KEY) || "{}");
       const validTime = (value) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
-      return {
-        start: validTime(parsed.start) ? parsed.start : "22:00",
-        end: validTime(parsed.end) ? parsed.end : "07:00",
-      };
-    } catch { return { start: "22:00", end: "07:00" }; }
-  }
+      if (validTime(parsed.start)) start = parsed.start;
+      if (validTime(parsed.end)) end = parsed.end;
+    } catch { /* 使用旧版默认时间完成一次性迁移。 */ }
 
-  function scheduledTheme() {
-    const { start, end } = scheduleConfig();
     const minutes = (value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3));
     const startMinutes = minutes(start);
     const endMinutes = minutes(end);
@@ -40,152 +36,77 @@
     return dark ? "dark" : "light";
   }
 
-  /*
-   * 页面可以用 data-theme-default 指定特殊页面的初始外观；星月集当前所有
-   * 登录、注册和内容页面都不强制指定，因此首次访问默认跟随系统。用户在
-   * 右上角或侧边栏手动选择后，仍以浏览器中已保存的选择为最高优先级。
-   */
-  function pageDefaultPreference() {
-    const value = root.dataset.themeDefault || "system";
-    return VALID_PREFERENCES.has(value) ? value : "system";
+  function normalizePreference(value) {
+    if (value === "dark" || value === "light") return value;
+    if (value === "system") return systemDark.matches ? "dark" : "light";
+    if (value === "scheduled") return legacyScheduledTheme();
+    return root.dataset.themeDefault === "dark" ? "dark" : "light";
   }
 
-  function savedPreference() {
+  function readSavedPreference() {
     try {
-      const value = localStorage.getItem(STORAGE_KEY);
-      if (!value) return pageDefaultPreference();
-      return VALID_PREFERENCES.has(value) ? value : pageDefaultPreference();
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return { preference: normalizePreference(saved), migrated: Boolean(saved && saved !== "light" && saved !== "dark") };
     } catch {
-      return pageDefaultPreference();
+      return { preference: normalizePreference(null), migrated: false };
     }
   }
 
-  function resolvedTheme(preference) {
-    if (preference === "system") return systemDark.matches ? "dark" : "light";
-    if (preference === "scheduled") return scheduledTheme();
-    return preference;
-  }
-
-  function updateControls(preference, resolved) {
-    const labels = { system: "跟随系统", light: "白天模式", dark: "夜览模式", scheduled: "定时夜览" };
-    const icons = { system: "◐", light: "☀", dark: "☾", scheduled: "◷" };
-    document.querySelectorAll("[data-theme-choice]").forEach((control) => {
-      const selected = control.dataset.themeChoice === preference;
-      control.classList.toggle("active", selected);
-      control.setAttribute("aria-checked", String(selected));
+  function updateControls(theme) {
+    const enabled = theme === "dark";
+    document.querySelectorAll("[data-theme-switch]").forEach((control) => {
+      control.classList.toggle("is-on", enabled);
+      control.dataset.themeState = enabled ? "on" : "off";
     });
-    document.querySelectorAll("[data-theme-toggle]").forEach((control) => {
-      const icon = control.querySelector("[data-theme-icon]");
-      const text = control.querySelector("[data-theme-label]");
-      if (icon) icon.textContent = icons[preference];
-      if (text) text.textContent = labels[preference];
-      control.title = `当前：${labels[preference]}（实际为${resolved === "dark" ? "夜览" : "白天"}）`;
-      control.setAttribute("aria-label", control.title);
-    });
-    document.querySelectorAll("[data-theme-schedule-panel]").forEach((panel) => {
-      panel.hidden = preference !== "scheduled";
-      const config = scheduleConfig();
-      const start = panel.querySelector("[data-theme-schedule-start]");
-      const end = panel.querySelector("[data-theme-schedule-end]");
-      if (start && document.activeElement !== start) start.value = config.start;
-      if (end && document.activeElement !== end) end.value = config.end;
+    document.querySelectorAll("[data-theme-switch-button]").forEach((button) => {
+      button.classList.toggle("is-on", enabled);
+      button.setAttribute("aria-checked", String(enabled));
+      button.title = enabled ? "关闭夜览模式" : "打开夜览模式";
     });
   }
 
   function apply(preference, options = {}) {
-    const normalized = VALID_PREFERENCES.has(preference) ? preference : "system";
-    const resolved = resolvedTheme(normalized);
-    root.dataset.themePreference = normalized;
+    const resolved = normalizePreference(preference);
+    root.dataset.themePreference = resolved;
     root.dataset.theme = resolved;
     root.style.colorScheme = resolved;
 
     if (options.persist) {
-      try { localStorage.setItem(STORAGE_KEY, normalized); } catch { /* 隐私模式可能禁止写入。 */ }
+      try { localStorage.setItem(STORAGE_KEY, resolved); } catch { /* 隐私模式可能禁止写入。 */ }
     }
-    updateControls(normalized, resolved);
+    updateControls(resolved);
     if (options.announce !== false) {
       window.dispatchEvent(new CustomEvent("xyjthemechange", {
-        detail: { preference: normalized, resolved },
+        detail: { preference: resolved, resolved },
       }));
     }
-    return { preference: normalized, resolved };
-  }
-
-  function closeThemeMenus(except = null) {
-    document.querySelectorAll("[data-theme-menu]").forEach((menu) => {
-      if (menu !== except) menu.hidden = true;
-    });
-    document.querySelectorAll("[data-theme-toggle]").forEach((toggle) => {
-      const menu = toggle.closest("[data-theme-picker]")?.querySelector("[data-theme-menu]");
-      toggle.setAttribute("aria-expanded", String(menu && !menu.hidden));
-    });
+    return { preference: resolved, resolved };
   }
 
   function installControls() {
     root.dataset.themeReady = "true";
-    updateControls(root.dataset.themePreference || "system", root.dataset.theme || "light");
-
-    document.querySelectorAll("[data-theme-toggle]").forEach((toggle) => {
-      toggle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const picker = toggle.closest("[data-theme-picker]");
-        const menu = picker?.querySelector("[data-theme-menu]");
-        if (!menu) return;
-        const opening = menu.hidden;
-        closeThemeMenus(opening ? menu : null);
-        menu.hidden = !opening;
-        toggle.setAttribute("aria-expanded", String(opening));
-        if (opening) menu.querySelector("[data-theme-choice].active")?.focus({ preventScroll: true });
-      });
-    });
-
-    document.querySelectorAll("[data-theme-choice]").forEach((choice) => {
-      choice.addEventListener("click", () => {
-        apply(choice.dataset.themeChoice, { persist: true });
-        closeThemeMenus();
-      });
-    });
-
-    document.querySelectorAll("[data-theme-schedule-save]").forEach((button) => {
+    updateControls(root.dataset.theme || "light");
+    document.querySelectorAll("[data-theme-switch-button]").forEach((button) => {
       button.addEventListener("click", () => {
-        const panel = button.closest("[data-theme-schedule-panel]");
-        const start = panel?.querySelector("[data-theme-schedule-start]")?.value || "22:00";
-        const end = panel?.querySelector("[data-theme-schedule-end]")?.value || "07:00";
-        try { localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ start, end })); } catch { /* ignore */ }
-        apply("scheduled", { persist: true });
+        apply(root.dataset.theme === "dark" ? "light" : "dark", { persist: true });
       });
-    });
-
-    document.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest("[data-theme-picker]")) closeThemeMenus();
-    });
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeThemeMenus();
     });
   }
 
-  apply(savedPreference(), { announce: false });
-  systemDark.addEventListener?.("change", () => {
-    if ((root.dataset.themePreference || "system") === "system") apply("system", { announce: true });
-  });
-  window.setInterval(() => {
-    if ((root.dataset.themePreference || "system") === "scheduled") apply("scheduled", { announce: true });
-  }, 60_000);
+  const initial = readSavedPreference();
+  apply(initial.preference, { announce: false, persist: initial.migrated });
   window.addEventListener("storage", (event) => {
-    if (event.key === STORAGE_KEY) apply(savedPreference(), { announce: true });
+    if (event.key !== STORAGE_KEY) return;
+    const next = normalizePreference(event.newValue);
+    apply(next, { announce: true, persist: event.newValue !== next });
   });
   document.addEventListener("DOMContentLoaded", installControls, { once: true });
 
   window.XYJTheme = Object.freeze({
     apply: (preference) => apply(preference, { persist: true }),
     current: () => ({
-      preference: root.dataset.themePreference || "system",
+      preference: root.dataset.themePreference || "light",
       resolved: root.dataset.theme || "light",
     }),
-    schedule: () => scheduleConfig(),
-    updateSchedule: (start, end) => {
-      try { localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ start, end })); } catch { /* ignore */ }
-      return apply("scheduled", { persist: true });
-    },
   });
 })();
