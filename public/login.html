@@ -608,7 +608,7 @@
       if (!bloom?.isConnected || bloom.classList.contains("is-releasing")) return;
       bloom.classList.add("is-releasing");
       bloom.addEventListener("animationend", () => bloom.remove(), { once: true });
-      window.setTimeout(() => bloom.remove(), 560);
+      window.setTimeout(() => bloom.remove(), 700);
     }
 
     /* 所有静态和后续动态生成的按钮统一播放单次回弹与白光扩散。 */
@@ -631,7 +631,7 @@
         const timer = window.setTimeout(() => {
           control.classList.remove("control-bounce-release");
           reboundTimers.delete(control);
-        }, 680);
+        }, 820);
         reboundTimers.set(control, timer);
       };
       const beginPress = (control) => {

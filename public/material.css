@@ -7,21 +7,21 @@
 :root {
   --xyj-page-cream: #f6efe4;
   --xyj-night-page: #111b21;
-  --xyj-blue: #4389bd;
-  --xyj-teal: #3b9187;
-  --xyj-amber: #ba813d;
-  --xyj-coral: #bd695d;
-  --xyj-violet: #7668aa;
-  --xyj-green: #5b8c68;
+  --xyj-blue: #1676c4;
+  --xyj-teal: #008f83;
+  --xyj-amber: #c87812;
+  --xyj-coral: #d05449;
+  --xyj-violet: #6d50bd;
+  --xyj-green: #2f8d50;
   --xyj-readable-ink: #1b3036;
   --xyj-readable-muted: #586b70;
 
-  --xyj-motion-rebound: .64s;
-  --xyj-motion-settle: .56s;
-  --xyj-frost-grain-opacity: .36;
-  --xyj-frost-fill: rgba(106, 142, 146, .32);
-  --xyj-frost-fill-hover: rgba(91, 139, 145, .42);
-  --xyj-frost-fill-active: rgba(60, 135, 151, .55);
+  --xyj-motion-rebound: .74s;
+  --xyj-motion-settle: .64s;
+  --xyj-frost-grain-opacity: .40;
+  --xyj-frost-fill: rgba(55, 126, 141, .43);
+  --xyj-frost-fill-hover: rgba(33, 128, 145, .56);
+  --xyj-frost-fill-active: rgba(13, 116, 146, .76);
   --xyj-frost-line: rgba(255, 255, 255, .70);
   --xyj-frost-text: #17363d;
   --xyj-liquid-center: rgba(255, 255, 255, .075);
@@ -48,9 +48,9 @@
   --xyj-readable-ink: #edf5f4;
   --xyj-readable-muted: #aebfbe;
   --xyj-frost-grain-opacity: .29;
-  --xyj-frost-fill: rgba(62, 102, 109, .48);
-  --xyj-frost-fill-hover: rgba(64, 118, 124, .58);
-  --xyj-frost-fill-active: rgba(48, 128, 145, .68);
+  --xyj-frost-fill: rgba(29, 91, 108, .66);
+  --xyj-frost-fill-hover: rgba(22, 111, 130, .78);
+  --xyj-frost-fill-active: rgba(13, 125, 153, .88);
   --xyj-frost-line: rgba(205, 238, 239, .30);
   --xyj-frost-text: #edf7f6;
   --xyj-liquid-center: rgba(170, 220, 224, .035);
@@ -134,25 +134,25 @@
 :root[data-theme="dark"] :is(.sidebar, .studio .side)::before { opacity: .13 !important; }
 
 /* 多色只用于可辨识的导航语义，使用纯色透明填充，不使用彩色渐变。 */
-.nav button[data-section="home"] { --xyj-nav-rest: rgba(67,137,189,.28); --xyj-nav-hover: rgba(67,137,189,.39); --xyj-nav-active: rgba(51,125,180,.70); }
-.nav button[data-section="portfolio"] { --xyj-nav-rest: rgba(59,145,135,.27); --xyj-nav-hover: rgba(59,145,135,.39); --xyj-nav-active: rgba(44,131,120,.70); }
-.nav button[data-section="about"] { --xyj-nav-rest: rgba(186,129,61,.25); --xyj-nav-hover: rgba(186,129,61,.37); --xyj-nav-active: rgba(172,112,43,.70); }
-.nav button[data-section="feedback"] { --xyj-nav-rest: rgba(189,105,93,.25); --xyj-nav-hover: rgba(189,105,93,.37); --xyj-nav-active: rgba(175,87,76,.70); }
-.nav button[data-section="ai-helper"] { --xyj-nav-rest: rgba(118,104,170,.26); --xyj-nav-hover: rgba(118,104,170,.39); --xyj-nav-active: rgba(102,88,157,.72); }
-.nav button[data-section="settings"] { --xyj-nav-rest: rgba(91,140,104,.25); --xyj-nav-hover: rgba(91,140,104,.37); --xyj-nav-active: rgba(72,124,87,.70); }
+.nav button[data-section="home"] { --xyj-nav-rest: rgba(22,118,196,.42); --xyj-nav-hover: rgba(15,106,184,.57); --xyj-nav-active: rgba(8,91,164,.86); }
+.nav button[data-section="portfolio"] { --xyj-nav-rest: rgba(0,143,131,.40); --xyj-nav-hover: rgba(0,128,117,.56); --xyj-nav-active: rgba(0,108,101,.86); }
+.nav button[data-section="about"] { --xyj-nav-rest: rgba(200,120,18,.40); --xyj-nav-hover: rgba(189,103,6,.56); --xyj-nav-active: rgba(166,85,0,.86); }
+.nav button[data-section="feedback"] { --xyj-nav-rest: rgba(208,84,73,.40); --xyj-nav-hover: rgba(194,68,58,.56); --xyj-nav-active: rgba(172,50,43,.86); }
+.nav button[data-section="ai-helper"] { --xyj-nav-rest: rgba(109,80,189,.41); --xyj-nav-hover: rgba(94,64,174,.57); --xyj-nav-active: rgba(76,48,151,.87); }
+.nav button[data-section="settings"] { --xyj-nav-rest: rgba(47,141,80,.40); --xyj-nav-hover: rgba(35,127,67,.56); --xyj-nav-active: rgba(24,107,54,.86); }
 
 .studio .side-nav button[data-view="dashboard"],
 .studio .side-nav button[data-view="sections"],
-.studio .side-nav button[data-view="content"] { --xyj-nav-rest: rgba(67,137,189,.31); --xyj-nav-hover: rgba(67,137,189,.43); --xyj-nav-active: rgba(65,151,204,.72); }
+.studio .side-nav button[data-view="content"] { --xyj-nav-rest: rgba(22,118,196,.48); --xyj-nav-hover: rgba(22,128,205,.63); --xyj-nav-active: rgba(12,139,219,.86); }
 .studio .side-nav button[data-view="media"],
 .studio .side-nav button[data-view="assets"],
-.studio .side-nav button[data-view="comments"] { --xyj-nav-rest: rgba(59,145,135,.30); --xyj-nav-hover: rgba(59,145,135,.43); --xyj-nav-active: rgba(58,159,145,.72); }
+.studio .side-nav button[data-view="comments"] { --xyj-nav-rest: rgba(0,143,131,.47); --xyj-nav-hover: rgba(0,157,142,.63); --xyj-nav-active: rgba(0,170,151,.86); }
 .studio .side-nav button[data-view="changelogs"],
-.studio .side-nav button[data-view="visitors"] { --xyj-nav-rest: rgba(186,129,61,.29); --xyj-nav-hover: rgba(186,129,61,.42); --xyj-nav-active: rgba(196,139,66,.72); }
+.studio .side-nav button[data-view="visitors"] { --xyj-nav-rest: rgba(200,120,18,.47); --xyj-nav-hover: rgba(210,130,23,.63); --xyj-nav-active: rgba(218,143,36,.87); }
 .studio .side-nav button[data-view="feedback"],
-.studio .side-nav button[data-view="messages"] { --xyj-nav-rest: rgba(189,105,93,.29); --xyj-nav-hover: rgba(189,105,93,.42); --xyj-nav-active: rgba(199,108,95,.73); }
+.studio .side-nav button[data-view="messages"] { --xyj-nav-rest: rgba(208,84,73,.47); --xyj-nav-hover: rgba(218,91,79,.63); --xyj-nav-active: rgba(225,102,88,.87); }
 .studio .side-nav button[data-view="users"],
-.studio .side-nav button[data-view="settings"] { --xyj-nav-rest: rgba(118,104,170,.30); --xyj-nav-hover: rgba(118,104,170,.43); --xyj-nav-active: rgba(128,111,185,.74); }
+.studio .side-nav button[data-view="settings"] { --xyj-nav-rest: rgba(109,80,189,.48); --xyj-nav-hover: rgba(120,89,201,.64); --xyj-nav-active: rgba(132,102,213,.88); }
 
 /* 磨砂玻璃控件：高模糊、实色环境层、显著微颗粒及柔和内缘。 */
 :is(
@@ -452,13 +452,14 @@
     inset 0 1px 0 rgba(211,247,247,.12) !important;
 }
 
-/* 主操作同样保持透明中心；色彩来自语义性的底缘，不做彩色渐变。 */
+/* 主操作使用饱和但仍可透光的琉璃色，不靠彩色渐变制造层次。 */
 :is(.app-shell .main .btn, .app-shell .main .tab-button, dialog .btn, .workspace .btn, .home-link) {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   border-color: rgba(255, 255, 255, .50) !important;
-  background-color: var(--xyj-liquid-center) !important;
+  color: #0b3d5e;
+  background-color: rgba(22, 118, 196, .25) !important;
   background-image: none !important;
   box-shadow:
     0 11px 27px rgba(33, 62, 66, .13),
@@ -470,41 +471,123 @@
   backdrop-filter: blur(.55px) saturate(1.38) contrast(1.06) !important;
 }
 :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)) {
-  color: #17414a;
+  color: #fff !important;
+  background-color: rgba(0, 105, 99, .84) !important;
   box-shadow:
-    0 12px 28px rgba(43, 116, 120, .15),
+    0 13px 29px rgba(0, 91, 86, .25),
     inset 0 2px 3px rgba(255,255,255,.72),
     inset 2px 0 4px rgba(255,255,255,.24),
-    inset 0 -3px 4px rgba(46,145,138,.42),
+    inset 0 -3px 5px rgba(0,58,57,.55),
     inset -2px 0 4px rgba(255,255,255,.16) !important;
 }
+:is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)):hover {
+  background-color: rgba(0, 94, 89, .92) !important;
+}
+:is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary) {
+  color: #3d2878;
+  background-color: rgba(109, 80, 189, .27) !important;
+}
+:is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary):hover {
+  background-color: rgba(109, 80, 189, .40) !important;
+}
+:is(.app-shell .main .tab-button, .workspace .album-chip) {
+  color: #0a4f68;
+  background-color: rgba(0, 143, 131, .28) !important;
+}
+:is(.app-shell .main .tab-button, .workspace .album-chip):hover {
+  background-color: rgba(0, 143, 131, .43) !important;
+}
+:is(.app-shell .main .tab-button.active, .workspace .album-chip.active) {
+  color: #fff !important;
+  background-color: rgba(88, 56, 166, .86) !important;
+}
+.home-link { background-color: rgba(22, 118, 196, .34) !important; }
 :root[data-theme="dark"] :is(.app-shell .main .btn, .app-shell .main .tab-button, dialog .btn, .workspace .btn, .home-link) {
-  color: #edf7f6;
-  border-color: rgba(205,238,239,.20) !important;
+  color: #f7fcff !important;
+  border-color: rgba(220,245,247,.32) !important;
+  background-color: rgba(18, 104, 170, .55) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .62);
+}
+:root[data-theme="dark"] :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)) {
+  background-color: rgba(0, 132, 121, .76) !important;
+}
+:root[data-theme="dark"] :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)):hover {
+  background-color: rgba(0, 148, 135, .88) !important;
+}
+:root[data-theme="dark"] :is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary) {
+  background-color: rgba(99, 73, 177, .62) !important;
+}
+:root[data-theme="dark"] :is(.app-shell .main .tab-button.active, .workspace .album-chip.active) {
+  background-color: rgba(112, 82, 202, .86) !important;
 }
 :is(.app-shell .main .btn.danger, dialog .btn.danger, .workspace .btn.danger) {
-  color: #8f3932;
+  color: #fff !important;
+  background-color: rgba(174, 49, 42, .82) !important;
   box-shadow:
-    0 11px 27px rgba(108, 52, 46, .13),
+    0 12px 28px rgba(132, 38, 33, .24),
     inset 0 2px 3px rgba(255,255,255,.64),
-    inset 0 -3px 4px rgba(189, 89, 77, .42) !important;
+    inset 0 -3px 4px rgba(108, 25, 22, .54) !important;
 }
-:root[data-theme="dark"] :is(.app-shell .main .btn.danger, dialog .btn.danger, .workspace .btn.danger) { color: #ffc2ba; }
+:is(.app-shell .main .btn.danger, dialog .btn.danger, .workspace .btn.danger):hover {
+  background-color: rgba(160, 38, 33, .92) !important;
+}
+:root[data-theme="dark"] :is(.app-shell .main .btn.danger, dialog .btn.danger, .workspace .btn.danger) {
+  color: #fff !important;
+  background-color: rgba(190, 60, 51, .70) !important;
+}
 
-/* 板块标题以低饱和纯色区分，正文仍保持高对比度。 */
-#home > .section-inner > h1,
-#home .home-heading-row h1 { color: #366f98; }
-#portfolio > .section-inner > h1 { color: #347b72; }
-#about > .section-inner > h1 { color: #9a682d; }
-#feedback > .section-inner > h1 { color: #9f554b; }
-#ai-helper > .section-inner > h1 { color: #675a94; }
-#settings > .section-inner > h1 { color: #52775c; }
+/* 页面内的小型操作也使用清晰的宝石色，避免只有侧栏有颜色。 */
+:is(.app-shell .main .text-button, .app-shell .main .icon-button) {
+  color: #0b4e72;
+  border-color: rgba(22,118,196,.38) !important;
+  background-color: rgba(22,118,196,.20) !important;
+}
+.app-shell .main .icon-button { color: #432d83; background-color: rgba(109,80,189,.23) !important; }
+.updates-more { color: #075f9e !important; }
+.article-link-action { color: #006f66 !important; }
+
+/* 夜览模式的所有真实按钮统一用亮字，避免文字落入同色玻璃底。 */
 :root[data-theme="dark"] :is(
-  #home > .section-inner > h1, #home .home-heading-row h1,
-  #portfolio > .section-inner > h1, #about > .section-inner > h1,
-  #feedback > .section-inner > h1, #ai-helper > .section-inner > h1,
-  #settings > .section-inner > h1
-) { color: #dceceb; }
+  button:not(.night-mode-switch),
+  a.btn,
+  .tab-button,
+  .text-button,
+  .icon-button,
+  .sidebar-install-button,
+  .studio-link,
+  .home-link
+) {
+  color: #f7fcff !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.64);
+}
+:root[data-theme="dark"] :is(button, a.btn, .tab-button, .text-button, .icon-button):disabled {
+  color: rgba(247,252,255,.76) !important;
+  opacity: .70;
+}
+:root[data-theme="dark"] :is(.updates-more, .article-link-action) { color: #79dcff !important; }
+
+/* 色彩只留在控件与状态中；日间标题统一纯黑，夜览则统一中性亮色。 */
+:root[data-theme="light"] :is(
+  .app-shell .main,
+  .sidebar,
+  .entry-card,
+  .auth-card,
+  .login-card,
+  .workspace,
+  body > .shell,
+  dialog:not(.image-dialog)
+) :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #000 !important; }
+:root[data-theme="dark"] :is(
+  .app-shell .main,
+  .sidebar,
+  .entry-card,
+  .auth-card,
+  .login-card,
+  .workspace,
+  body > .shell,
+  dialog:not(.image-dialog)
+) :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #f4f7f7 !important; }
+:is(.studio .side, .image-dialog) :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #fff !important; }
 
 /* ========================= 夜览模式滑动开关 ========================= */
 .night-mode-control {
@@ -735,20 +818,91 @@
 }
 .studio-night-mode-control { min-width: 166px; }
 
-/* 全站回弹和材质过渡略微延长，仍然只越过原尺寸一次。 */
+/* 侧栏与页面按钮共用同一套较慢的按压、单次回弹和材质恢复节奏。 */
 :is(button, a.btn, .tab-button, .studio-link, [role="button"], .workspace .list-item, .side-footer a) {
   transition:
-    transform .25s cubic-bezier(.20,.78,.22,1),
-    color .34s ease,
+    transform .30s cubic-bezier(.20,.78,.22,1),
+    color .42s ease,
     background-color var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
-    border-color .40s ease,
+    border-color .48s ease,
     box-shadow var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
-    filter .40s ease,
-    opacity .34s ease,
+    filter .48s ease,
+    opacity .42s ease,
     -webkit-backdrop-filter var(--xyj-motion-settle) ease,
     backdrop-filter var(--xyj-motion-settle) ease !important;
 }
-.harmony-light-bloom.is-releasing { animation-duration: .54s !important; }
+:is(
+  button,
+  a.btn,
+  .tab-button,
+  .studio-link,
+  [role="button"],
+  .content-card,
+  .photo-card,
+  .workspace .list-item,
+  .side-footer a
+):not(.image-nav).is-control-pressed {
+  transform: translate3d(0, 2px, 0) scale(.955) !important;
+}
+:is(
+  button,
+  a.btn,
+  .tab-button,
+  .studio-link,
+  [role="button"],
+  .content-card,
+  .photo-card,
+  .workspace .list-item,
+  .side-footer a
+):not(.image-nav).control-bounce-release {
+  animation: xyj-unified-control-rebound var(--xyj-motion-rebound) cubic-bezier(.16,.80,.22,1) both !important;
+}
+@keyframes xyj-unified-control-rebound {
+  0% { transform: translate3d(0, 2px, 0) scale(.955); }
+  56% { transform: translate3d(0, -3px, 0) scale(1.052); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+/* 页面内控件按下和回弹时也转为清澈液态玻璃，结束后平滑恢复琉璃色。 */
+:is(
+  .app-shell .main button,
+  .app-shell .main a.btn,
+  dialog button,
+  dialog a.btn,
+  .entry-card button,
+  .entry-card a.btn,
+  .auth-card button,
+  .auth-card a.btn,
+  .login-card button,
+  .login-card a.btn,
+  .workspace button,
+  .workspace a.btn,
+  .home-link
+):not(.night-mode-switch):is(.is-control-pressed, .control-bounce-release) {
+  background-color: var(--xyj-liquid-press-fill) !important;
+  border-color: var(--xyj-liquid-press-line) !important;
+  box-shadow:
+    0 15px 32px rgba(14,42,48,.16),
+    inset 0 2px 3px rgba(255,255,255,.74),
+    inset 2px 0 4px rgba(220,250,251,.32),
+    inset 0 -3px 5px rgba(32,76,84,.24),
+    inset -2px 0 4px rgba(255,255,255,.24) !important;
+  -webkit-backdrop-filter: blur(.28px) saturate(1.52) contrast(1.08) !important;
+  backdrop-filter: blur(.28px) saturate(1.52) contrast(1.08) !important;
+}
+:root[data-theme="light"] :is(
+  .app-shell .main button,
+  .app-shell .main a.btn,
+  dialog button,
+  dialog a.btn,
+  .entry-card button,
+  .auth-card button,
+  .login-card button,
+  .workspace button,
+  .workspace a.btn,
+  .home-link
+):not(.night-mode-switch):is(.is-control-pressed, .control-bounce-release) { color: #102f38 !important; }
+.harmony-light-bloom.is-releasing { animation-duration: .64s !important; }
 
 @media (max-width: 760px) {
   .floating-night-mode-control {

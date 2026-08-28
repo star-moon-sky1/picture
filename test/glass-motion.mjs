@@ -11,22 +11,30 @@ const pages = await Promise.all([
   "public/studio.html",
 ].map(async (path) => [path, await readFile(new URL(path, root), "utf8")]));
 
-assert.match(css, /--xyj-motion-rebound:\s*\.64s/);
-assert.match(css, /--xyj-motion-settle:\s*\.56s/);
+assert.match(css, /--xyj-motion-rebound:\s*\.74s/);
+assert.match(css, /--xyj-motion-settle:\s*\.64s/);
 assert.match(css, /--xyj-page-cream:\s*#f6efe4/);
 assert.match(css, /background-image:\s*none\s*!important/);
-assert.match(css, /--xyj-frost-grain-opacity:\s*\.36/);
+assert.match(css, /--xyj-frost-grain-opacity:\s*\.40/);
 assert.match(css, /feTurbulence/);
 assert.match(css, /--xyj-liquid-press-fill/);
 assert.match(css, /\.is-control-pressed,\s*\.control-bounce-release/);
 assert.match(css, /blur\(\.35px\)\s+saturate\(1\.46\)/);
-assert.match(css, /\.harmony-light-bloom\.is-releasing\s*\{\s*animation-duration:\s*\.54s/);
+assert.match(css, /\.harmony-light-bloom\.is-releasing\s*\{\s*animation-duration:\s*\.64s/);
 assert.match(css, /\.night-mode-switch\.is-on\s*\{\s*--xyj-knob-x:\s*30px/);
 assert.match(css, /\.night-mode-switch\.is-on \.night-mode-fill[\s\S]*?background-color:\s*#3d8fd0/);
 assert.match(css, /\.night-mode-switch:is\(\.is-control-pressed, \.control-bounce-release\) \.night-mode-knob[\s\S]*?blur\(\.20px\)/);
 for (const color of ["--xyj-blue", "--xyj-teal", "--xyj-amber", "--xyj-coral", "--xyj-violet"]) {
-  assert.match(css, new RegExp(`${color}:\\s*#`), `${color} must be present in the restrained color palette`);
+  assert.match(css, new RegExp(`${color}:\\s*#`), `${color} must be present in the jewel color palette`);
 }
+assert.match(css, /--xyj-blue:\s*#1676c4/);
+assert.match(css, /--xyj-teal:\s*#008f83/);
+assert.match(css, /--xyj-coral:\s*#d05449/);
+assert.match(css, /@keyframes xyj-unified-control-rebound/);
+assert.match(css, /animation:\s*xyj-unified-control-rebound var\(--xyj-motion-rebound\)/);
+assert.match(css, /:root\[data-theme="light"\][\s\S]*?:is\(h1, h2, h3, h4, h5, h6, \.section-title\)\s*\{\s*color:\s*#000\s*!important/);
+assert.match(css, /:root\[data-theme="dark"\] :is\([\s\S]*?button:not\(\.night-mode-switch\)[\s\S]*?color:\s*#f7fcff\s*!important/);
+assert.doesNotMatch(css, /#home > \.section-inner > h1[\s\S]{0,100}color:\s*#366f98/);
 
 new Function(theme);
 assert.match(theme, /value === "dark" \|\| value === "light"/);
@@ -114,8 +122,8 @@ for (const [path, html] of pages) {
   assert.match(html, /const beginPress = \(control\) =>/, `${path} must restart rapid repeated presses cleanly`);
   assert.match(html, /control\.classList\.add\("is-control-pressed"\)/, `${path} must enter the pressed state`);
   assert.match(html, /control\.classList\.remove\("is-control-pressed"\)/, `${path} must leave the pressed state`);
-  assert.match(html, /}, 680\)/, `${path} must keep the rebound class for the full animation`);
-  assert.match(html, /bloom\.remove\(\), 560\)/, `${path} must allow the longer light release to finish`);
+  assert.match(html, /}, 820\)/, `${path} must keep the rebound class for the full animation`);
+  assert.match(html, /bloom\.remove\(\), 700\)/, `${path} must allow the longer light release to finish`);
   assert.doesNotMatch(html, /control\.classList\.remove\("control-bounce-release"\), 340/);
 }
 
