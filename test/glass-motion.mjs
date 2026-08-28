@@ -5,6 +5,9 @@ import { runInNewContext } from "node:vm";
 const root = new URL("../", import.meta.url);
 const css = await readFile(new URL("public/material.css", root), "utf8");
 const theme = await readFile(new URL("public/theme.js", root), "utf8");
+const vnext = await readFile(new URL("public/vnext.css", root), "utf8");
+const deepseekWhale = await readFile(new URL("public/deepseek-whale.svg", root), "utf8");
+const envelope = await readFile(new URL("public/envelope-line.svg", root), "utf8");
 const pages = await Promise.all([
   "public/index.html",
   "public/login.html",
@@ -24,17 +27,27 @@ assert.match(css, /\.harmony-light-bloom\.is-releasing\s*\{\s*animation-duration
 assert.match(css, /\.night-mode-switch\.is-on\s*\{\s*--xyj-knob-x:\s*30px/);
 assert.match(css, /\.night-mode-switch\.is-on \.night-mode-fill[\s\S]*?background-color:\s*#3d8fd0/);
 assert.match(css, /\.night-mode-switch:is\(\.is-control-pressed, \.control-bounce-release\) \.night-mode-knob[\s\S]*?blur\(\.20px\)/);
-for (const color of ["--xyj-blue", "--xyj-teal", "--xyj-amber", "--xyj-coral", "--xyj-violet"]) {
-  assert.match(css, new RegExp(`${color}:\\s*#`), `${color} must be present in the jewel color palette`);
+for (const color of ["--xyj-blue", "--xyj-teal", "--xyj-amber", "--xyj-coral", "--xyj-navy", "--xyj-steel"]) {
+  assert.match(css, new RegExp(`${color}:\\s*#`), `${color} must be present in the formal glass palette`);
 }
-assert.match(css, /--xyj-blue:\s*#1676c4/);
-assert.match(css, /--xyj-teal:\s*#008f83/);
-assert.match(css, /--xyj-coral:\s*#d05449/);
+assert.match(css, /--xyj-blue:\s*#0f6baa/);
+assert.match(css, /--xyj-teal:\s*#246f84/);
+assert.match(css, /--xyj-coral:\s*#a9454f/);
+assert.match(css, /\.sidebar\s*\{[\s\S]*?background-color:\s*rgba\(76, 147, 184, \.72\)/);
+assert.match(css, /background-color:\s*rgba\(15, 78, 116, \.88\)/);
+assert.doesNotMatch(css, /--xyj-(?:violet|green)|rgba\(109,\s*80,\s*189|rgba\(0,\s*105,\s*99/);
 assert.match(css, /@keyframes xyj-unified-control-rebound/);
 assert.match(css, /animation:\s*xyj-unified-control-rebound var\(--xyj-motion-rebound\)/);
 assert.match(css, /:root\[data-theme="light"\][\s\S]*?:is\(h1, h2, h3, h4, h5, h6, \.section-title\)\s*\{\s*color:\s*#000\s*!important/);
 assert.match(css, /:root\[data-theme="dark"\] :is\([\s\S]*?button:not\(\.night-mode-switch\)[\s\S]*?color:\s*#f7fcff\s*!important/);
 assert.doesNotMatch(css, /#home > \.section-inner > h1[\s\S]{0,100}color:\s*#366f98/);
+assert.match(vnext, /data-section="ai-helper"[\s\S]*?xyj-icon-whale/);
+assert.doesNotMatch(vnext, /xyj-icon-star/);
+assert.match(deepseekWhale, /viewBox="0 0 57 42"/);
+assert.match(deepseekWhale, /M55\.6128 3\.47119/);
+assert.match(deepseekWhale, /fill="#000"/);
+assert.match(envelope, /viewBox="0 0 24 24"/);
+assert.match(envelope, /<rect x="2\.75" y="4\.75"/);
 
 new Function(theme);
 assert.match(theme, /value === "dark" \|\| value === "light"/);
@@ -125,6 +138,11 @@ for (const [path, html] of pages) {
   assert.match(html, /}, 820\)/, `${path} must keep the rebound class for the full animation`);
   assert.match(html, /bloom\.remove\(\), 700\)/, `${path} must allow the longer light release to finish`);
   assert.doesNotMatch(html, /control\.classList\.remove\("control-bounce-release"\), 340/);
+
+  if (path === "public/index.html") {
+    assert.match(html, /data-section="feedback"[\s\S]*?src="\/envelope-line\.svg"/);
+    assert.match(html, /data-section="ai-helper"[\s\S]*?src="\/deepseek-whale\.svg"/);
+  }
 }
 
 console.log("glass material and motion regression passed");

@@ -7,21 +7,21 @@
 :root {
   --xyj-page-cream: #f6efe4;
   --xyj-night-page: #111b21;
-  --xyj-blue: #1676c4;
-  --xyj-teal: #008f83;
-  --xyj-amber: #c87812;
-  --xyj-coral: #d05449;
-  --xyj-violet: #6d50bd;
-  --xyj-green: #2f8d50;
+  --xyj-blue: #0f6baa;
+  --xyj-teal: #246f84;
+  --xyj-amber: #a86413;
+  --xyj-coral: #a9454f;
+  --xyj-navy: #284e78;
+  --xyj-steel: #356b7e;
   --xyj-readable-ink: #1b3036;
   --xyj-readable-muted: #586b70;
 
   --xyj-motion-rebound: .74s;
   --xyj-motion-settle: .64s;
   --xyj-frost-grain-opacity: .40;
-  --xyj-frost-fill: rgba(55, 126, 141, .43);
-  --xyj-frost-fill-hover: rgba(33, 128, 145, .56);
-  --xyj-frost-fill-active: rgba(13, 116, 146, .76);
+  --xyj-frost-fill: rgba(35, 96, 138, .50);
+  --xyj-frost-fill-hover: rgba(23, 101, 149, .64);
+  --xyj-frost-fill-active: rgba(10, 84, 137, .82);
   --xyj-frost-line: rgba(255, 255, 255, .70);
   --xyj-frost-text: #17363d;
   --xyj-liquid-center: rgba(255, 255, 255, .075);
@@ -37,7 +37,7 @@
   --ink: var(--xyj-readable-ink);
   --muted: var(--xyj-readable-muted);
   --line: rgba(68, 92, 98, .20);
-  --soft: rgba(224, 232, 224, .64);
+  --soft: rgba(220, 228, 232, .64);
   --xyj-glass-surface: rgba(255, 255, 255, .16);
   --xyj-glass-surface-strong: rgba(255, 255, 255, .25);
   --xyj-glass-control: rgba(255, 255, 255, .10);
@@ -48,9 +48,9 @@
   --xyj-readable-ink: #edf5f4;
   --xyj-readable-muted: #aebfbe;
   --xyj-frost-grain-opacity: .29;
-  --xyj-frost-fill: rgba(29, 91, 108, .66);
-  --xyj-frost-fill-hover: rgba(22, 111, 130, .78);
-  --xyj-frost-fill-active: rgba(13, 125, 153, .88);
+  --xyj-frost-fill: rgba(22, 72, 108, .72);
+  --xyj-frost-fill-hover: rgba(16, 89, 132, .82);
+  --xyj-frost-fill-active: rgba(10, 103, 158, .91);
   --xyj-frost-line: rgba(205, 238, 239, .30);
   --xyj-frost-text: #edf7f6;
   --xyj-liquid-center: rgba(170, 220, 224, .035);
@@ -66,7 +66,7 @@
   --ink: var(--xyj-readable-ink);
   --muted: var(--xyj-readable-muted);
   --line: rgba(185, 221, 222, .17);
-  --soft: rgba(31, 56, 60, .74);
+  --soft: rgba(36, 49, 61, .74);
   --xyj-glass-surface: rgba(126, 182, 188, .055);
   --xyj-glass-surface-strong: rgba(126, 182, 188, .095);
   --xyj-glass-control: rgba(126, 182, 188, .055);
@@ -94,18 +94,18 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(223, 215, 201, .72) !important;
+  background-color: rgba(76, 147, 184, .72) !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, .58) !important;
   box-shadow:
-    12px 0 34px rgba(62, 70, 66, .10),
-    inset -1px 0 0 rgba(91, 106, 105, .14),
-    inset 1px 0 0 rgba(255, 255, 255, .72) !important;
-  -webkit-backdrop-filter: blur(25px) saturate(1.12) contrast(1.035);
-  backdrop-filter: blur(25px) saturate(1.12) contrast(1.035);
+    12px 0 36px rgba(25, 75, 104, .22),
+    inset -1px 0 0 rgba(24, 74, 104, .22),
+    inset 1px 0 0 rgba(255, 255, 255, .76) !important;
+  -webkit-backdrop-filter: blur(25px) saturate(1.34) contrast(1.06);
+  backdrop-filter: blur(25px) saturate(1.34) contrast(1.06);
 }
 :root[data-theme="dark"] .sidebar {
-  background-color: rgba(27, 48, 54, .78) !important;
+  background-color: rgba(17, 55, 79, .90) !important;
   border-color: rgba(202, 236, 238, .14) !important;
   box-shadow:
     12px 0 34px rgba(0, 0, 0, .26),
@@ -116,13 +116,13 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(27, 67, 73, .95) !important;
+  background-color: rgba(20, 58, 84, .96) !important;
   background-image: none !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.16);
   backdrop-filter: blur(24px) saturate(1.16);
 }
 :root[data-theme="dark"] .studio .side {
-  background-color: rgba(17, 39, 45, .96) !important;
+  background-color: rgba(12, 37, 56, .97) !important;
 }
 .sidebar::before,
 .studio .side::before {
@@ -134,25 +134,41 @@
 :root[data-theme="dark"] :is(.sidebar, .studio .side)::before { opacity: .13 !important; }
 
 /* 多色只用于可辨识的导航语义，使用纯色透明填充，不使用彩色渐变。 */
-.nav button[data-section="home"] { --xyj-nav-rest: rgba(22,118,196,.42); --xyj-nav-hover: rgba(15,106,184,.57); --xyj-nav-active: rgba(8,91,164,.86); }
-.nav button[data-section="portfolio"] { --xyj-nav-rest: rgba(0,143,131,.40); --xyj-nav-hover: rgba(0,128,117,.56); --xyj-nav-active: rgba(0,108,101,.86); }
-.nav button[data-section="about"] { --xyj-nav-rest: rgba(200,120,18,.40); --xyj-nav-hover: rgba(189,103,6,.56); --xyj-nav-active: rgba(166,85,0,.86); }
-.nav button[data-section="feedback"] { --xyj-nav-rest: rgba(208,84,73,.40); --xyj-nav-hover: rgba(194,68,58,.56); --xyj-nav-active: rgba(172,50,43,.86); }
-.nav button[data-section="ai-helper"] { --xyj-nav-rest: rgba(109,80,189,.41); --xyj-nav-hover: rgba(94,64,174,.57); --xyj-nav-active: rgba(76,48,151,.87); }
-.nav button[data-section="settings"] { --xyj-nav-rest: rgba(47,141,80,.40); --xyj-nav-hover: rgba(35,127,67,.56); --xyj-nav-active: rgba(24,107,54,.86); }
+.nav button[data-section="home"] { --xyj-nav-rest: rgba(10,104,174,.58); --xyj-nav-hover: rgba(8,91,160,.73); --xyj-nav-active: rgba(4,75,139,.93); }
+.nav button[data-section="portfolio"] { --xyj-nav-rest: rgba(12,112,135,.56); --xyj-nav-hover: rgba(9,96,119,.72); --xyj-nav-active: rgba(5,78,101,.92); }
+.nav button[data-section="about"] { --xyj-nav-rest: rgba(169,102,18,.55); --xyj-nav-hover: rgba(151,85,10,.71); --xyj-nav-active: rgba(130,68,2,.91); }
+.nav button[data-section="feedback"] { --xyj-nav-rest: rgba(164,57,69,.54); --xyj-nav-hover: rgba(146,43,55,.71); --xyj-nav-active: rgba(126,31,43,.92); }
+.nav button[data-section="ai-helper"] { --xyj-nav-rest: rgba(43,83,151,.58); --xyj-nav-hover: rgba(34,69,133,.74); --xyj-nav-active: rgba(25,55,113,.93); }
+.nav button[data-section="settings"] { --xyj-nav-rest: rgba(39,99,121,.57); --xyj-nav-hover: rgba(29,83,104,.73); --xyj-nav-active: rgba(20,67,88,.92); }
 
 .studio .side-nav button[data-view="dashboard"],
 .studio .side-nav button[data-view="sections"],
-.studio .side-nav button[data-view="content"] { --xyj-nav-rest: rgba(22,118,196,.48); --xyj-nav-hover: rgba(22,128,205,.63); --xyj-nav-active: rgba(12,139,219,.86); }
+.studio .side-nav button[data-view="content"] { --xyj-nav-rest: rgba(10,104,174,.58); --xyj-nav-hover: rgba(8,115,188,.72); --xyj-nav-active: rgba(5,127,202,.91); }
 .studio .side-nav button[data-view="media"],
 .studio .side-nav button[data-view="assets"],
-.studio .side-nav button[data-view="comments"] { --xyj-nav-rest: rgba(0,143,131,.47); --xyj-nav-hover: rgba(0,157,142,.63); --xyj-nav-active: rgba(0,170,151,.86); }
+.studio .side-nav button[data-view="comments"] { --xyj-nav-rest: rgba(12,112,135,.56); --xyj-nav-hover: rgba(10,126,151,.71); --xyj-nav-active: rgba(7,139,165,.90); }
 .studio .side-nav button[data-view="changelogs"],
-.studio .side-nav button[data-view="visitors"] { --xyj-nav-rest: rgba(200,120,18,.47); --xyj-nav-hover: rgba(210,130,23,.63); --xyj-nav-active: rgba(218,143,36,.87); }
+.studio .side-nav button[data-view="visitors"] { --xyj-nav-rest: rgba(169,102,18,.55); --xyj-nav-hover: rgba(181,111,20,.70); --xyj-nav-active: rgba(193,123,27,.90); }
 .studio .side-nav button[data-view="feedback"],
-.studio .side-nav button[data-view="messages"] { --xyj-nav-rest: rgba(208,84,73,.47); --xyj-nav-hover: rgba(218,91,79,.63); --xyj-nav-active: rgba(225,102,88,.87); }
+.studio .side-nav button[data-view="messages"] { --xyj-nav-rest: rgba(164,57,69,.55); --xyj-nav-hover: rgba(177,63,75,.70); --xyj-nav-active: rgba(190,72,84,.90); }
 .studio .side-nav button[data-view="users"],
-.studio .side-nav button[data-view="settings"] { --xyj-nav-rest: rgba(109,80,189,.48); --xyj-nav-hover: rgba(120,89,201,.64); --xyj-nav-active: rgba(132,102,213,.88); }
+.studio .side-nav button[data-view="settings"] { --xyj-nav-rest: rgba(43,83,151,.58); --xyj-nav-hover: rgba(51,95,168,.72); --xyj-nav-active: rgba(60,108,184,.91); }
+
+/* 导航图标统一为单色图形；普通状态为黑，深色或选中状态自动转白。 */
+.sidebar .nav-icon { display: grid; place-items: center; }
+.sidebar .nav-symbol {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  filter: grayscale(1) brightness(.10) contrast(1.35);
+  transition: filter .42s ease, opacity .42s ease;
+}
+.sidebar .nav-symbol-deepseek { width: 22px; height: 17px; }
+:root[data-theme="dark"] .sidebar .nav-symbol,
+.sidebar .nav button.active .nav-symbol {
+  filter: grayscale(1) brightness(0) invert(1) contrast(1.2);
+}
 
 /* 磨砂玻璃控件：高模糊、实色环境层、显著微颗粒及柔和内缘。 */
 :is(
@@ -472,34 +488,34 @@
 }
 :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)) {
   color: #fff !important;
-  background-color: rgba(0, 105, 99, .84) !important;
+  background-color: rgba(15, 78, 116, .88) !important;
   box-shadow:
-    0 13px 29px rgba(0, 91, 86, .25),
+    0 13px 29px rgba(12, 61, 91, .26),
     inset 0 2px 3px rgba(255,255,255,.72),
     inset 2px 0 4px rgba(255,255,255,.24),
-    inset 0 -3px 5px rgba(0,58,57,.55),
+    inset 0 -3px 5px rgba(5,43,69,.58),
     inset -2px 0 4px rgba(255,255,255,.16) !important;
 }
 :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)):hover {
-  background-color: rgba(0, 94, 89, .92) !important;
+  background-color: rgba(9, 66, 104, .94) !important;
 }
 :is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary) {
-  color: #3d2878;
-  background-color: rgba(109, 80, 189, .27) !important;
+  color: #24394c;
+  background-color: rgba(62, 86, 109, .25) !important;
 }
 :is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary):hover {
-  background-color: rgba(109, 80, 189, .40) !important;
+  background-color: rgba(54, 80, 105, .38) !important;
 }
 :is(.app-shell .main .tab-button, .workspace .album-chip) {
-  color: #0a4f68;
-  background-color: rgba(0, 143, 131, .28) !important;
+  color: #1d485e;
+  background-color: rgba(34, 100, 132, .24) !important;
 }
 :is(.app-shell .main .tab-button, .workspace .album-chip):hover {
-  background-color: rgba(0, 143, 131, .43) !important;
+  background-color: rgba(31, 91, 122, .38) !important;
 }
 :is(.app-shell .main .tab-button.active, .workspace .album-chip.active) {
   color: #fff !important;
-  background-color: rgba(88, 56, 166, .86) !important;
+  background-color: rgba(28, 69, 108, .88) !important;
 }
 .home-link { background-color: rgba(22, 118, 196, .34) !important; }
 :root[data-theme="dark"] :is(.app-shell .main .btn, .app-shell .main .tab-button, dialog .btn, .workspace .btn, .home-link) {
@@ -509,16 +525,16 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, .62);
 }
 :root[data-theme="dark"] :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)) {
-  background-color: rgba(0, 132, 121, .76) !important;
+  background-color: rgba(19, 95, 134, .82) !important;
 }
 :root[data-theme="dark"] :is(.app-shell .main .btn:not(.ghost):not(.light):not(.danger), dialog .btn:not(.ghost):not(.light):not(.danger), .workspace .btn:not(.ghost):not(.danger)):hover {
-  background-color: rgba(0, 148, 135, .88) !important;
+  background-color: rgba(20, 109, 151, .91) !important;
 }
 :root[data-theme="dark"] :is(.app-shell .main .btn.ghost, .app-shell .main .btn.light, dialog .btn.ghost, dialog .btn.light, .workspace .btn.ghost, .workspace .btn.secondary) {
-  background-color: rgba(99, 73, 177, .62) !important;
+  background-color: rgba(57, 79, 103, .72) !important;
 }
 :root[data-theme="dark"] :is(.app-shell .main .tab-button.active, .workspace .album-chip.active) {
-  background-color: rgba(112, 82, 202, .86) !important;
+  background-color: rgba(35, 81, 126, .90) !important;
 }
 :is(.app-shell .main .btn.danger, dialog .btn.danger, .workspace .btn.danger) {
   color: #fff !important;
@@ -542,9 +558,9 @@
   border-color: rgba(22,118,196,.38) !important;
   background-color: rgba(22,118,196,.20) !important;
 }
-.app-shell .main .icon-button { color: #432d83; background-color: rgba(109,80,189,.23) !important; }
+.app-shell .main .icon-button { color: #29465d; background-color: rgba(58,84,108,.24) !important; }
 .updates-more { color: #075f9e !important; }
-.article-link-action { color: #006f66 !important; }
+.article-link-action { color: #165f7a !important; }
 
 /* 夜览模式的所有真实按钮统一用亮字，避免文字落入同色玻璃底。 */
 :root[data-theme="dark"] :is(

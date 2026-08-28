@@ -359,13 +359,13 @@ body:has(.entry-screen:not([hidden])) { overflow:hidden; }
 .nav button[data-section="portfolio"] .nav-icon-activated { animation:xyj-icon-portfolio .52s cubic-bezier(.18,.82,.22,1); }
 .nav button[data-section="about"] .nav-icon-activated { animation:xyj-icon-about .54s cubic-bezier(.18,.82,.22,1); }
 .nav button[data-section="feedback"] .nav-icon-activated { animation:xyj-icon-feedback .50s cubic-bezier(.18,.82,.22,1); }
-.nav button[data-section="ai-helper"] .nav-icon-activated { animation:xyj-icon-star .52s cubic-bezier(.18,.82,.22,1); }
+.nav button[data-section="ai-helper"] .nav-icon-activated { animation:xyj-icon-whale .56s cubic-bezier(.18,.82,.22,1); }
 .nav button[data-section="settings"] .nav-icon-activated { animation:xyj-icon-gear .58s cubic-bezier(.18,.82,.22,1); }
 @keyframes xyj-icon-home { 0%,100%{transform:none} 42%{transform:translateY(-4px) scale(1.14)} 70%{transform:translateY(1px) scale(.97)} }
 @keyframes xyj-icon-portfolio { 0%,100%{transform:none} 48%{transform:perspective(80px) rotateY(34deg) scale(1.17)} }
 @keyframes xyj-icon-about { 0%,100%{transform:none} 50%{transform:rotate(180deg) scale(1.12)} }
 @keyframes xyj-icon-feedback { 0%,100%{transform:none} 30%{transform:rotate(-13deg) scale(1.12)} 66%{transform:rotate(9deg)} }
-@keyframes xyj-icon-star { 0%,100%{transform:none;filter:none} 48%{transform:scale(1.46);filter:drop-shadow(0 0 7px rgba(255,220,118,.85))} }
+@keyframes xyj-icon-whale { 0%,100%{transform:none} 42%{transform:translateY(-3px) rotate(-6deg) scale(1.14)} 72%{transform:translateY(1px) rotate(3deg) scale(.98)} }
 @keyframes xyj-icon-gear { from{transform:rotate(0)} 65%{transform:rotate(155deg) scale(1.12)} to{transform:rotate(180deg)} }
 
 .comment-pin-badge { display:inline-flex; margin-left:7px; padding:2px 7px; border-radius:999px; color:#744f0b; background:rgba(247,205,105,.35); font-size:.68rem; }
