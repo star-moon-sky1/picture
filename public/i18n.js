@@ -172,6 +172,7 @@
     "下载音频": "Download audio",
     "原始文件": "Original file",
     "自动画质": "Auto quality",
+    "键盘：←/→ 快退/快进 5 秒，↑/↓ 调节音量": "Keyboard: ←/→ seek 5 seconds; ↑/↓ adjust volume",
     "当前浏览器不支持 HLS 自动画质": "This browser does not support automatic HLS quality.",
     "文件预览": "File preview",
     "图片预览": "Image preview",

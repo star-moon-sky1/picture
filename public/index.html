@@ -2007,6 +2007,7 @@
       currentResourceFolder: "",
       resourceRootLocked: false,
       activeResourceAsset: null,
+      activeResourceVideo: null,
       hlsPlayer: null,
       hlsLibraryPromise: null,
     };
@@ -2968,8 +2969,48 @@
       return button;
     }
 
+    const RESOURCE_VIDEO_SEEK_SECONDS = 5;
+    const RESOURCE_VIDEO_VOLUME_STEP = .05;
+
+    /*
+     * 浏览器原生视频控件只有在恰好取得焦点时才可能响应方向键，而且不同
+     * 浏览器的行为并不一致。资源弹窗因此统一接管方向键：左右跳转时间，
+     * 上下调节音量；输入控件与带修饰键的快捷键不受影响。
+     */
+    function handleResourceVideoKeyboard(event) {
+      const video = state.activeResourceVideo;
+      const dialog = document.getElementById("resource-dialog");
+      if (!dialog.open || !video?.isConnected || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.target instanceof Element
+        && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+
+      const currentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      const duration = Number.isFinite(video.duration) && video.duration > 0
+        ? video.duration
+        : Number.POSITIVE_INFINITY;
+      let handled = true;
+
+      if (event.key === "ArrowLeft") {
+        video.currentTime = Math.max(0, currentTime - RESOURCE_VIDEO_SEEK_SECONDS);
+      } else if (event.key === "ArrowRight") {
+        video.currentTime = Math.min(duration, currentTime + RESOURCE_VIDEO_SEEK_SECONDS);
+      } else if (event.key === "ArrowUp") {
+        video.muted = false;
+        video.volume = Math.min(1, Math.round((video.volume + RESOURCE_VIDEO_VOLUME_STEP) * 100) / 100);
+      } else if (event.key === "ArrowDown") {
+        video.volume = Math.max(0, Math.round((video.volume - RESOURCE_VIDEO_VOLUME_STEP) * 100) / 100);
+        video.muted = video.volume === 0;
+      } else {
+        handled = false;
+      }
+
+      if (!handled) return;
+      event.preventDefault();
+    }
+
     function openResourceAsset(asset) {
       state.activeResourceAsset = asset;
+      state.activeResourceVideo = null;
       const dialog = document.getElementById("resource-dialog");
       const viewer = document.getElementById("resource-viewer");
       const quality = document.getElementById("resource-quality-options");
@@ -2981,6 +3022,11 @@
       const variants = (asset.variants || []).filter((item) => item.status === "ready");
       if (asset.kind === "video") {
         const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "metadata";
+        video.tabIndex = 0;
+        video.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
+        video.setAttribute("aria-label", `播放视频：${asset.display_name}`);
+        video.title = "键盘：←/→ 快退/快进 5 秒，↑/↓ 调节音量";
+        state.activeResourceVideo = video;
         if (asset.poster_url) video.poster = asset.poster_url;
         const qualityOrder = { "360p": 360, "480p": 480, "720p": 720, "1080p": 1080 };
         const videoVariants = variants.filter((item) => qualityOrder[item.label]).sort((a, b) => qualityOrder[a.label] - qualityOrder[b.label]);
@@ -3015,6 +3061,9 @@
         downloads.append(resourceDownloadButton("下载原文件", asset.downloadUrl));
       }
       if (!dialog.open) dialog.showModal();
+      if (state.activeResourceVideo) {
+        requestAnimationFrame(() => state.activeResourceVideo?.focus({ preventScroll: true }));
+      }
     }
 
     /*
@@ -4390,7 +4439,9 @@
     });
     const imageDialog = document.getElementById("image-dialog");
     const resourceDialog = document.getElementById("resource-dialog");
+    resourceDialog.addEventListener("keydown", handleResourceVideoKeyboard);
     resourceDialog.addEventListener("close", () => {
+      state.activeResourceVideo = null;
       state.hlsPlayer?.destroy?.(); state.hlsPlayer = null;
       document.getElementById("resource-viewer").querySelectorAll("video,audio,iframe").forEach((node) => {
         if ("src" in node) node.src = "";

@@ -63,6 +63,11 @@ assert.match(mobileControlCss, /#notification-bell\[hidden\]\s*\{\s*display:\s*n
 assert.match(mobileControlCss, /#portfolio \.tab-button[\s\S]*?--xyj-motion-rebound:\s*\.94s;[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
 assert.match(mobileControlCss, /background-color:\s*rgba\(255,255,255,\.048\)\s*!important/);
 assert.match(mobileControlCss, /blur\(12px\) saturate\(1\.24\) contrast\(1\.045\)/);
+assert.match(css, /--xyj-content-radius:\s*14px/);
+assert.match(css, /--xyj-chatgpt-reading-font:\s*ui-sans-serif[\s\S]*?"Segoe UI"[\s\S]*?"PingFang SC"/);
+assert.match(mobileControlCss, /#xyj-main-content-control-specificity[\s\S]*?\.app-shell \.main button:not\(\.night-mode-switch\)[\s\S]*?--xyj-motion-rebound:\s*\.94s;[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
+assert.match(mobileControlCss, /#xyj-content-frame-radius-specificity[\s\S]*?\.app-shell \.main \.usage-guide[\s\S]*?dialog \.reader-wrap[\s\S]*?border-radius:\s*var\(--xyj-content-radius\)\s*!important/);
+assert.match(mobileControlCss, /#xyj-chatgpt-reading-specificity[\s\S]*?#usage-guide-content[\s\S]*?\.timeline-item p[\s\S]*?\.reader-body[\s\S]*?font-family:\s*var\(--xyj-chatgpt-reading-font\)\s*!important/);
 assert.match(mobileControlCss, /#notification-dialog[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
 assert.match(mobileControlCss, /#entry-screen\s*\{[\s\S]*?overflow-y:\s*auto\s*!important/);
 assert.match(mobileControlCss, /#entry-screen \.entry-card\s*\{[\s\S]*?max-height:\s*none\s*!important/);
@@ -199,5 +204,66 @@ for (const [path, html] of pages) {
     assert.match(html, /<body class="auth-document">/, "the account page must opt into the Song typeface scope");
   }
 }
+
+const indexHtml = pages.find(([path]) => path === "public/index.html")?.[1] || "";
+assert.match(indexHtml, /aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown"/);
+assert.match(indexHtml, /resourceDialog\.addEventListener\("keydown", handleResourceVideoKeyboard\)/);
+assert.match(indexHtml, /state\.activeResourceVideo = null;[\s\S]*?state\.hlsPlayer\?\.destroy/);
+
+const videoKeyboardSource = indexHtml.match(
+  /const RESOURCE_VIDEO_SEEK_SECONDS = 5;[\s\S]*?(?=\n    function openResourceAsset)/,
+)?.[0];
+assert.ok(videoKeyboardSource, "resource video keyboard controller must remain extractable");
+const activeResourceVideo = {
+  isConnected: true,
+  currentTime: 50,
+  duration: 100,
+  volume: .5,
+  muted: false,
+};
+const videoKeyboardContext = {
+  state: { activeResourceVideo },
+  document: { getElementById: () => ({ open: true }) },
+  Element: class Element {},
+  Number,
+  Math,
+};
+runInNewContext(
+  `${videoKeyboardSource}\nglobalThis.testResourceVideoKeyboard = handleResourceVideoKeyboard;`,
+  videoKeyboardContext,
+);
+const videoKey = (key, modifiers = {}) => ({
+  key,
+  target: {},
+  altKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  prevented: false,
+  preventDefault() { this.prevented = true; },
+  ...modifiers,
+});
+
+let event = videoKey("ArrowLeft");
+videoKeyboardContext.testResourceVideoKeyboard(event);
+assert.equal(activeResourceVideo.currentTime, 45);
+assert.equal(event.prevented, true);
+
+activeResourceVideo.currentTime = 98;
+event = videoKey("ArrowRight");
+videoKeyboardContext.testResourceVideoKeyboard(event);
+assert.equal(activeResourceVideo.currentTime, 100, "right arrow must clamp at the video duration");
+
+activeResourceVideo.volume = .98;
+activeResourceVideo.muted = true;
+event = videoKey("ArrowUp");
+videoKeyboardContext.testResourceVideoKeyboard(event);
+assert.equal(activeResourceVideo.volume, 1);
+assert.equal(activeResourceVideo.muted, false);
+
+activeResourceVideo.volume = .03;
+event = videoKey("ArrowDown");
+videoKeyboardContext.testResourceVideoKeyboard(event);
+assert.equal(activeResourceVideo.volume, 0);
+assert.equal(activeResourceVideo.muted, true);
 
 console.log("glass material and motion regression passed");

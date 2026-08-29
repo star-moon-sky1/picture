@@ -14,6 +14,9 @@
   --xyj-navy: #284e78;
   --xyj-steel: #356b7e;
   --xyj-button-font: "汉仪颜简体", "汉仪颜楷简", "汉仪颜楷W", "HYYanKaiW", "DuBai Medium", "Dubai Medium", "Dubai", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --xyj-chatgpt-reading-font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif;
+  --xyj-content-radius: 14px;
+  --font-reading: var(--xyj-chatgpt-reading-font);
   --xyj-readable-ink: #1b3036;
   --xyj-readable-muted: #586b70;
 
@@ -1250,6 +1253,10 @@
   .sidebar .nav button,
   .sidebar .sidebar-install-button,
   .sidebar .studio-link,
+  .app-shell .main button:not(.night-mode-switch),
+  .app-shell .main a.btn,
+  dialog button:not(.night-mode-switch):not(.image-nav),
+  dialog a.btn,
   #portfolio .tab-button,
   #portfolio .btn
 ) {
@@ -1271,10 +1278,15 @@
   margin: 0 !important;
 }
 
-/* 个人空间按钮采用侧栏同款楷体，但材质更透明：颗粒藏在玻璃内部，
-   清晰内沿负责勾出厚度；选中态继续由上方规则保持纯白。 */
+/* 主内容区与阅读/资源弹窗的按钮统一采用侧栏同款楷体，并完整复用个人
+   空间按钮的慢回弹和透明颗粒玻璃；选中态继续由上方规则保持纯白。 */
 :is(
   #xyj-portfolio-glass-specificity,
+  #xyj-main-content-control-specificity,
+  .app-shell .main button:not(.night-mode-switch),
+  .app-shell .main a.btn,
+  dialog button:not(.night-mode-switch):not(.image-nav),
+  dialog a.btn,
   #portfolio .tab-button,
   #portfolio .btn
 ) {
@@ -1293,12 +1305,24 @@
     -webkit-backdrop-filter var(--xyj-motion-settle) ease,
     backdrop-filter var(--xyj-motion-settle) ease !important;
 }
-#portfolio :is(.tab-button, .btn) :is(span, strong, small) {
+:is(
+  .app-shell .main button:not(.night-mode-switch),
+  .app-shell .main a.btn,
+  dialog button:not(.night-mode-switch):not(.image-nav),
+  dialog a.btn,
+  #portfolio .tab-button,
+  #portfolio .btn
+) :is(span, strong, small) {
   font-family: var(--font-kai) !important;
   font-synthesis: weight;
 }
 :is(
   #xyj-portfolio-glass-specificity,
+  #xyj-main-content-control-specificity,
+  .app-shell .main button:not(.night-mode-switch),
+  .app-shell .main a.btn,
+  dialog button:not(.night-mode-switch):not(.image-nav),
+  dialog a.btn,
   #portfolio .tab-button,
   #portfolio .btn
 ):not(.active):not(.selected):not(.is-selected):not([aria-selected="true"]):not([aria-pressed="true"]):not([aria-current="page"]):not(.is-control-pressed):not(.control-bounce-release) {
@@ -1320,6 +1344,11 @@
 }
 :root[data-theme="dark"] :is(
   #xyj-portfolio-glass-specificity,
+  #xyj-main-content-control-specificity,
+  .app-shell .main button:not(.night-mode-switch),
+  .app-shell .main a.btn,
+  dialog button:not(.night-mode-switch):not(.image-nav),
+  dialog a.btn,
   #portfolio .tab-button,
   #portfolio .btn
 ):not(.active):not(.selected):not(.is-selected):not([aria-selected="true"]):not([aria-pressed="true"]):not([aria-current="page"]):not(.is-control-pressed):not(.control-bounce-release) {
@@ -1337,6 +1366,52 @@
 #notification-dialog :is(button, .btn, .tab-button, .message-contact) :is(span, strong, small) {
   font-family: var(--font-kai) !important;
   font-synthesis: weight;
+}
+
+/* 主内容卡片收紧到同一组 14px 圆角；登录框、输入框、侧栏按钮和夜览
+   滑纽均不属于内容框，因此继续保留各自已经确认的轮廓。 */
+:is(
+  #xyj-content-frame-radius-specificity,
+  .app-shell .main .usage-guide,
+  .app-shell .main .updates,
+  .app-shell .main .timeline-item,
+  .app-shell .main .content-card,
+  .app-shell .main .info-card,
+  .app-shell .main .resource-card,
+  .app-shell .main .feedback-form,
+  .app-shell .main .feedback-board,
+  .app-shell .main .feedback-item,
+  .app-shell .main .account-card,
+  .app-shell .main .settings-card,
+  .app-shell .main .chat-shell,
+  dialog .reader-wrap,
+  dialog .resource-view,
+  dialog .resource-viewer,
+  dialog .notification-shell,
+  dialog .notification-item,
+  dialog .message-card,
+  dialog .message-contact,
+  .reader-body .article-link-card
+) {
+  border-radius: var(--xyj-content-radius) !important;
+}
+
+/* 正文采用 ChatGPT 同类的系统无衬线字体栈；标题与按钮分别继续使用
+   已确认的楷体，不在这里改动颜色、字号或加粗程度。 */
+:is(
+  #xyj-chatgpt-reading-specificity,
+  .app-shell .main p:not(.eyebrow),
+  #usage-guide-content,
+  #usage-guide-content p,
+  .timeline-item p,
+  .reader-body,
+  .reader-body p,
+  .reader-body li,
+  .reader-body blockquote,
+  .reader-body td,
+  .reader-body th
+) {
+  font-family: var(--xyj-chatgpt-reading-font) !important;
 }
 
 @media (max-width: 760px) and (hover: none),
