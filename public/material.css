@@ -1238,6 +1238,189 @@
   .night-mode-switch.is-on .night-mode-fill { width: 55px; }
 }
 
+/* ================= 手机入口、统一圆角与二级控件精修 =================
+   登录键继续作为圆角基准；侧栏与个人空间只统一控件轮廓，不改变卡片。 */
+:root {
+  --xyj-login-control-radius: 999px;
+}
+:is(
+  #xyj-unified-radius-specificity,
+  .entry-card .entry-field input,
+  .entry-card .entry-primary,
+  .sidebar .nav button,
+  .sidebar .sidebar-install-button,
+  .sidebar .studio-link,
+  #portfolio .tab-button,
+  #portfolio .btn
+) {
+  border-radius: var(--xyj-login-control-radius) !important;
+}
+.sidebar :is(.sidebar-toggle, .notification-bell) { border-radius: 50% !important; }
+
+/* 铃铛的图形使用按钮自身的几何中心；数字角标仍独立定位在右上角。 */
+#notification-bell {
+  display: grid;
+  place-items: center !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+}
+#notification-bell[hidden] { display: none !important; }
+#notification-bell > .nav-symbol-bell {
+  grid-area: 1 / 1;
+  place-self: center;
+  margin: 0 !important;
+}
+
+/* 个人空间按钮采用侧栏同款楷体，但材质更透明：颗粒藏在玻璃内部，
+   清晰内沿负责勾出厚度；选中态继续由上方规则保持纯白。 */
+:is(
+  #xyj-portfolio-glass-specificity,
+  #portfolio .tab-button,
+  #portfolio .btn
+) {
+  --xyj-motion-rebound: .94s;
+  --xyj-motion-settle: .82s;
+  font-family: var(--font-kai) !important;
+  font-weight: 650;
+  transition:
+    transform .38s cubic-bezier(.20,.78,.22,1),
+    color .56s ease,
+    background-color var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
+    border-color .62s ease,
+    box-shadow var(--xyj-motion-settle) cubic-bezier(.20,.72,.20,1),
+    filter .62s ease,
+    opacity .56s ease,
+    -webkit-backdrop-filter var(--xyj-motion-settle) ease,
+    backdrop-filter var(--xyj-motion-settle) ease !important;
+}
+#portfolio :is(.tab-button, .btn) :is(span, strong, small) {
+  font-family: var(--font-kai) !important;
+  font-synthesis: weight;
+}
+:is(
+  #xyj-portfolio-glass-specificity,
+  #portfolio .tab-button,
+  #portfolio .btn
+):not(.active):not(.selected):not(.is-selected):not([aria-selected="true"]):not([aria-pressed="true"]):not([aria-current="page"]):not(.is-control-pressed):not(.control-bounce-release) {
+  color: #20343d !important;
+  border-color: rgba(255,255,255,.76) !important;
+  background-color: rgba(255,255,255,.048) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='108' height='108' viewBox='0 0 108 108'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.96' numOctaves='4' seed='53' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.16'/%3E%3C/svg%3E") !important;
+  background-size: 108px 108px !important;
+  background-repeat: repeat !important;
+  background-blend-mode: soft-light !important;
+  box-shadow:
+    0 13px 31px rgba(23,48,57,.12),
+    inset 0 2px 2px rgba(255,255,255,.92),
+    inset 2px 0 3px rgba(255,255,255,.32),
+    inset 0 -2px 3px rgba(37,58,66,.20),
+    inset -2px 0 3px rgba(255,255,255,.20) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.24) contrast(1.045) !important;
+  backdrop-filter: blur(12px) saturate(1.24) contrast(1.045) !important;
+}
+:root[data-theme="dark"] :is(
+  #xyj-portfolio-glass-specificity,
+  #portfolio .tab-button,
+  #portfolio .btn
+):not(.active):not(.selected):not(.is-selected):not([aria-selected="true"]):not([aria-pressed="true"]):not([aria-current="page"]):not(.is-control-pressed):not(.control-bounce-release) {
+  color: #f3f8f9 !important;
+  border-color: rgba(218,239,242,.27) !important;
+  background-color: rgba(255,255,255,.032) !important;
+  box-shadow:
+    0 13px 31px rgba(0,0,0,.23),
+    inset 0 2px 2px rgba(230,246,248,.24),
+    inset 0 -2px 3px rgba(0,0,0,.34) !important;
+}
+
+/* 通知信箱由脚本在页面载入后创建，因此按对话框作用域统一其按钮文字。 */
+#notification-dialog :is(button, .btn, .tab-button, .message-contact),
+#notification-dialog :is(button, .btn, .tab-button, .message-contact) :is(span, strong, small) {
+  font-family: var(--font-kai) !important;
+  font-synthesis: weight;
+}
+
+@media (max-width: 760px) and (hover: none),
+       (max-width: 760px) and (pointer: coarse) {
+  /* 登录卡片随内容自然增高，外层负责滚动；验证码再高也不会裁掉入口按钮。 */
+  #entry-screen {
+    align-items: flex-start !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    padding: max(70px, calc(env(safe-area-inset-top) + 60px)) 14px max(20px, env(safe-area-inset-bottom)) !important;
+  }
+  #entry-screen .entry-card {
+    width: min(100%, 720px);
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin-block: 0 auto !important;
+    padding: 22px 18px !important;
+    overflow: hidden !important;
+  }
+  #entry-screen .entry-form { gap: 9px !important; margin-top: 14px !important; }
+  #entry-screen .guest-turnstile-wrap { margin: 0 auto 6px !important; }
+  #entry-screen .entry-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    margin-top: 7px !important;
+  }
+  #entry-screen .entry-actions .btn {
+    min-width: 0;
+    padding-inline: 8px;
+    font-size: .86rem;
+    white-space: nowrap;
+  }
+
+  /* 顶栏未操作时直接融入同一块玻璃底板；按压期间仍恢复液态折射反馈。 */
+  :is(
+    #xyj-mobile-topbar-specificity,
+    .sidebar .nav button:not(.active):not(.is-control-pressed):not(.control-bounce-release),
+    #sidebar-toggle:not(.is-control-pressed):not(.control-bounce-release),
+    #notification-bell:not(.is-control-pressed):not(.control-bounce-release)
+  ) {
+    border-color: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  :is(
+    #xyj-mobile-topbar-specificity,
+    .sidebar .nav button:not(.active):not(.is-control-pressed):not(.control-bounce-release),
+    #notification-bell:not(.is-control-pressed):not(.control-bounce-release)
+  )::before,
+  :is(
+    #xyj-mobile-topbar-specificity,
+    .sidebar .nav button:not(.active):not(.is-control-pressed):not(.control-bounce-release),
+    #sidebar-toggle:not(.is-control-pressed):not(.control-bounce-release),
+    #notification-bell:not(.is-control-pressed):not(.control-bounce-release)
+  )::after {
+    opacity: 0 !important;
+    background: none !important;
+  }
+
+  /* 后加载的玻璃伪层曾把 content 重置为空；移动端明确恢复上下三角。 */
+  #sidebar-toggle::before {
+    content: "▲" !important;
+    position: absolute !important;
+    z-index: 2 !important;
+    inset: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+    border-radius: inherit;
+    color: currentColor;
+    background: none !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    font-size: 1.05rem !important;
+    line-height: 1 !important;
+    opacity: 1 !important;
+  }
+  .app-shell.sidebar-collapsed #sidebar-toggle::before { content: "▼" !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .night-mode-fill,
   .night-mode-knob,

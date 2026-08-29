@@ -2333,8 +2333,9 @@
         const host = document.getElementById("guest-turnstile");
         host.hidden = false;
         const turnstile = await loadTurnstileScript();
-        /* 宽度不足 360px 时使用官方紧凑组件，避免验证码在手机卡片内被裁切。 */
-        const compact = matchMedia("(max-width: 420px)").matches || host.clientWidth < 300;
+        /* flexible 组件只需要约 300px 宽度；仅在卡片真实可用宽度不足时
+           才切换为更高的 compact 组件，避免普通手机被无谓增加约一倍高度。 */
+        const compact = host.clientWidth > 0 && host.clientWidth < 300;
         host.classList.toggle("is-compact", compact);
         state.turnstileWidgetId = turnstile.render(host, {
           sitekey: config.siteKey,
@@ -4078,10 +4079,15 @@
         control.classList.remove("control-bounce-release");
         void control.offsetWidth;
         control.classList.add("control-bounce-release");
+        const reboundDuration = getComputedStyle(control).getPropertyValue("--xyj-motion-rebound").trim();
+        const durationMatch = reboundDuration.match(/^([\d.]+)(ms|s)$/);
+        const reboundMs = durationMatch
+          ? Number(durationMatch[1]) * (durationMatch[2] === "s" ? 1000 : 1)
+          : 700;
         const timer = window.setTimeout(() => {
           control.classList.remove("control-bounce-release");
           reboundTimers.delete(control);
-        }, 820);
+        }, Math.max(820, Math.ceil(reboundMs) + 120));
         reboundTimers.set(control, timer);
       };
       const beginPress = (control) => {
