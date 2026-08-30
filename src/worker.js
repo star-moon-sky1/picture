@@ -4,6 +4,8 @@
  * 负责 D1 数据库、R2 图片与大文件、后台登录、评论互动和 AI 转发。
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
+import { initializeContentSecurity, createContentSecurity, SECURITY_TABLES } from "./content-security.mjs";
+
 const APP_VERSION = "2.2.0.0";
 const DEFAULT_CANONICAL_HOSTNAME = "xingyueji.com.cn";
 const DEFAULT_ALLOWED_HOSTNAMES = Object.freeze([DEFAULT_CANONICAL_HOSTNAME, `www.${DEFAULT_CANONICAL_HOSTNAME}`]);
@@ -32,6 +34,7 @@ const MAX_RICH_TEXT_LENGTH = 120_000;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 // 预览件由站长后台在浏览器中压缩为 WebP；限制体积可避免伪装文件占用 R2。
 const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+const PROTECTED_IMAGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><defs><pattern id="m" width="80" height="80" patternUnits="userSpaceOnUse"><path fill="#d4d5d6" d="M0 0h80v80H0z"/><path fill="#9da3a9" d="M0 0h40v40H0zm40 40h40v40H40z"/><path fill="#b7bcc1" d="M40 0h40v40H40z"/></pattern></defs><path fill="url(#m)" d="M0 0h320v240H0z"/><rect x="132" y="102" width="56" height="48" rx="8" fill="#fff"/><path d="M143 102V90a17 17 0 0134 0v12" fill="none" stroke="#fff" stroke-width="8"/></svg>';
 /*
  * 通用文件不再经过 request.formData() 整体读入 Worker，而是使用 R2 multipart
  * API 逐片写入。每片默认由 Studio 切成 64MiB，并在服务端限制为 95MiB，
@@ -1033,6 +1036,22 @@ async function initializeSchema(env) {
   await ensureColumn(env, "portfolio_sections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "portfolio_subsections", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "portfolio_subsections", "download_policy", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "portfolio_sections", "category", "TEXT");
+  await ensureColumn(env, "portfolio_sections", "download_policy", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "portfolio_subsections", "parent_id", "TEXT");
+  await ensureColumn(env, "media", "content_id", "TEXT");
+  await ensureColumn(env, "media", "note", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(env, "media", "sha256", "TEXT");
+  await ensureColumn(env, "media", "mosaic_object_key", "TEXT");
+  await ensureColumn(env, "media", "upload_token", "TEXT");
+  await initializeContentSecurity(env);
+  await env.DB.batch([
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_media_hash ON media(sha256)"),
+    env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_media_upload_token ON media(upload_token)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS photo_upload_cancellations(token TEXT PRIMARY KEY,created_at TEXT NOT NULL)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_subsection_parent ON portfolio_subsections(parent_id)"),
+    env.DB.prepare("DELETE FROM content_grants WHERE expires_at <= ?").bind(Date.now()),
+  ]);
   await ensureColumn(env, "albums", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   await ensureColumn(env, "content", "subsection_id", "TEXT");
@@ -1052,6 +1071,7 @@ async function initializeSchema(env) {
   await ensureColumn(env, "asset_uploads", "part_size", "INTEGER NOT NULL DEFAULT 33554432");
   await ensureColumn(env, "asset_uploads", "file_name", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(env, "asset_folders", "access_mode", "TEXT NOT NULL DEFAULT 'public'");
+  await ensureColumn(env, "asset_folders", "section_id", "TEXT NOT NULL DEFAULT 'section-resources'");
   await ensureColumn(env, "user_profiles", "admin_note", "TEXT NOT NULL DEFAULT ''");
   // 留言只能由 Studio 中已验证的站长回复；旧数据库会在这里安全补齐字段。
   await ensureColumn(env, "feedback", "admin_reply", "TEXT NOT NULL DEFAULT ''");
@@ -1402,6 +1422,25 @@ async function initializeSchema(env) {
   await env.DB.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('site_version', ?, ?)")
     .bind(latestLog?.version || APP_VERSION, timestamp).run();
 
+  const inlineMarker = await env.DB.prepare("SELECT value FROM settings WHERE key = 'inline_ownership_initialized'").first();
+  if (!inlineMarker) {
+    const articles = rows(await env.DB.prepare("SELECT id,section_id,subsection_id,body_html FROM content ORDER BY updated_at DESC").all());
+    const claims = new Map();
+    for (const article of articles) for (const mediaId of inlineMediaIdsFromHtml(article.body_html)) {
+      if (!claims.has(mediaId)) claims.set(mediaId, { id: mediaId, contentId: article.id, sectionId: article.section_id, subsectionId: article.subsection_id || null });
+    }
+    const ownership = [...claims.values()];
+    for (let offset = 0; offset < ownership.length; offset += 500) {
+      await env.DB.prepare(`WITH owners AS (SELECT value FROM json_each(?))
+        UPDATE media SET
+          content_id=(SELECT json_extract(value,'$.contentId') FROM owners WHERE json_extract(value,'$.id')=media.id),
+          section_id=(SELECT json_extract(value,'$.sectionId') FROM owners WHERE json_extract(value,'$.id')=media.id),
+          subsection_id=(SELECT json_extract(value,'$.subsectionId') FROM owners WHERE json_extract(value,'$.id')=media.id)
+        WHERE kind='inline' AND content_id IS NULL AND id IN (SELECT json_extract(value,'$.id') FROM owners)`)
+        .bind(JSON.stringify(ownership.slice(offset, offset + 500))).run();
+    }
+    await env.DB.prepare("INSERT OR IGNORE INTO settings(key,value,updated_at) VALUES('inline_ownership_initialized','1',?)").bind(timestamp).run();
+  }
   schemaReady = true;
 }
 
@@ -1508,7 +1547,13 @@ async function ownerUserId(env) {
   return validId(item?.value) ? item.value : "";
 }
 
+const requestAccessContexts = new WeakMap();
 async function websiteAccessContext(request, env) {
+  if (!requestAccessContexts.has(request)) requestAccessContexts.set(request, loadWebsiteAccessContext(request, env));
+  return requestAccessContexts.get(request);
+}
+
+async function loadWebsiteAccessContext(request, env) {
   /*
    * 点击“游客浏览”后，公开站点必须严格按游客权限运行。即使同一浏览器还
    * 保留 Studio 或普通账号 Cookie，也不能借这些 Cookie 读取指定用户文章。
@@ -1544,6 +1589,102 @@ async function canAccessTarget(env, kind, targetId, visibility, context) {
   return visibleToWebsite(mode, context.fullAccess, listed, context.ownerAccess);
 }
 
+const requestSecurity = new WeakMap();
+async function contentSecurity(request, env, seed = {}) {
+  if (!requestSecurity.has(request)) requestSecurity.set(request, (async () => createContentSecurity(
+    request, env, seed.context || await websiteAccessContext(request, env), {
+      error: (status, message) => new HttpError(status, message), hash: sha256,
+      visible: visibleToWebsite, accessTables: ACCESS_TABLES,
+    }, seed,
+  ))());
+  return requestSecurity.get(request);
+}
+
+async function adminSecurity(request, env, kind, id) {
+  if (request.method === "GET" && !kind) {
+    const [downloads, locks] = await Promise.all([
+      env.DB.prepare("SELECT * FROM download_rules").all(),
+      env.DB.prepare("SELECT target_kind,target_id,enabled,consumed_at,updated_at FROM content_locks").all(),
+    ]);
+    return { downloads: rows(downloads).map(row => ({ ...row, user_ids: JSON.parse(row.user_ids) })), locks: rows(locks) };
+  }
+  if (!SECURITY_TABLES[kind] || !validId(id)) throw new HttpError(400, "内容类型或 ID 无效");
+  const target = await env.DB.prepare(`SELECT id FROM ${SECURITY_TABLES[kind]} WHERE id = ?`).bind(id).first();
+  if (!target) throw new HttpError(404, "内容不存在");
+  if (request.method !== "PUT") throw new HttpError(405, "不支持的请求方法");
+  const input = await readJson(request);
+  const timestamp = nowIso();
+  // Validate the complete request before any write: a malformed password must
+  // not half-save the adjacent download settings.
+  let download;
+  if (input.download) {
+    const mode = input.download.mode;
+    if (!["inherit", "public", "member", "selected", "excluded", "private", "none"].includes(mode)) throw new HttpError(400, "下载权限无效");
+    download = { mode, ids: await validatedAllowedUserIds(env, mode, input.download.userIds) };
+  }
+  let password;
+  if (input.lock?.enabled === true) {
+    if (typeof input.lock.code !== "string" || !/^\d{6}$/.test(input.lock.code)) throw new HttpError(400, "请输入六位数字密码，可包含开头的 0");
+    password = await createPasswordRecord(input.lock.code);
+  } else if (input.lock && input.lock.enabled !== false) throw new HttpError(400, "锁定设置无效");
+  const statements = [];
+  if (download) {
+    if (download.mode === "inherit") statements.push(env.DB.prepare("DELETE FROM download_rules WHERE target_kind=? AND target_id=?").bind(kind, id));
+    else statements.push(env.DB.prepare(`INSERT INTO download_rules(target_kind,target_id,mode,user_ids,updated_at)
+      VALUES(?,?,?,?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET mode=excluded.mode,user_ids=excluded.user_ids,updated_at=excluded.updated_at`)
+      .bind(kind, id, download.mode, JSON.stringify(download.ids), timestamp));
+  }
+  if (input.lock) {
+    statements.push(env.DB.prepare(`INSERT INTO content_locks(target_kind,target_id,enabled,version,password_hash,password_salt,password_iterations,updated_at)
+      VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(target_kind,target_id) DO UPDATE SET enabled=excluded.enabled,version=excluded.version,
+      password_hash=excluded.password_hash,password_salt=excluded.password_salt,password_iterations=excluded.password_iterations,
+      consumed_at=NULL,redemption_id=NULL,updated_at=excluded.updated_at`)
+      .bind(kind, id, input.lock.enabled ? 1 : 0, crypto.randomUUID(), password?.hash || null, password?.salt || null, password?.iterations || null, timestamp));
+    statements.push(env.DB.prepare("DELETE FROM content_grants WHERE target_kind=? AND target_id=?").bind(kind, id));
+  }
+  if (!statements.length) throw new HttpError(400, "没有要保存的设置");
+  await env.DB.batch(statements);
+  return { ok: true };
+}
+
+async function unlockContent(request, env) {
+  const security = await contentSecurity(request, env);
+  const input = await readJson(request);
+  const { kind, id } = input;
+  if (!SECURITY_TABLES[kind] || !validId(id)) throw new HttpError(400, "内容参数无效");
+  // Deliberately before password lookup / rate count: unauthorized users cannot
+  // test a password or consume the intended recipient's one-use code.
+  security.requireView(kind, id, { allowLocked: true });
+  const firstLock = security.blockedLocks(kind, id)[0];
+  if (firstLock && (firstLock.kind !== kind || firstLock.id !== id)) throw new HttpError(423, "请先解锁上级板块");
+  await consumeRateLimit(env, `unlock:${security.principal}:${kind}:${id}`, 5, 600);
+  await consumeRateLimit(env, await clientRateKey(request, "unlock"), 30, 600);
+  const lock = await env.DB.prepare("SELECT * FROM content_locks WHERE target_kind=? AND target_id=? AND enabled=1").bind(kind, id).first();
+  if (!lock) throw new HttpError(409, "内容未上锁，请刷新页面");
+  if (lock.consumed_at) throw new HttpError(409, "密码已使用，请联系站长重新设置密码");
+  if (typeof input.code !== "string" || !/^\d{6}$/.test(input.code) || !(await verifyPassword(input.code, lock))) throw new HttpError(403, "密码错误");
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, "0")).join("");
+  const tokenHash = await sha256(token);
+  const expiresAt = Date.now() + 15 * 60 * 1000;
+  const result = await env.DB.batch([
+    env.DB.prepare(`UPDATE content_locks SET consumed_at=?,redemption_id=?,password_hash=NULL
+      WHERE target_kind=? AND target_id=? AND enabled=1 AND version=? AND consumed_at IS NULL AND password_hash=?`)
+      .bind(nowIso(), tokenHash, kind, id, lock.version, lock.password_hash),
+    env.DB.prepare(`INSERT INTO content_grants(token_hash,principal,target_kind,target_id,version,expires_at)
+      SELECT ?,?,?,?,?,? FROM content_locks WHERE target_kind=? AND target_id=? AND enabled=1 AND version=? AND redemption_id=?`)
+      .bind(tokenHash, security.principal, kind, id, lock.version, expiresAt, kind, id, lock.version, tokenHash),
+  ]);
+  if (!result[0].meta.changes || !result[1].meta.changes) throw new HttpError(409, "密码已使用或已被重新设置，请联系站长");
+  return { token, expiresAt, kind, id };
+}
+
+async function releaseContentGrants(request, env) {
+  const security = await contentSecurity(request, env);
+  await env.DB.prepare("DELETE FROM content_grants WHERE principal=? AND token_hash IN (SELECT value FROM json_each(?))")
+    .bind(security.principal, JSON.stringify(security.tokenHashes)).run();
+  return { ok: true };
+}
+
 async function validateChildAccessSubset(env, parentKind, parentId, childVisibility, childUserIds) {
   if (childVisibility !== "selected") return;
   const config = ACCESS_TABLES[parentKind];
@@ -1574,11 +1715,12 @@ async function validateChildAccessSubset(env, parentKind, parentId, childVisibil
 
 function mediaDto(row, { includeOriginal = true } = {}) {
   // R2 对象键只供 Worker 内部使用，公开接口和后台页面都只拿受控媒体地址。
-  const { object_key: _objectKey, preview_object_key: previewObjectKey, ...safeRow } = row;
+  const { object_key: _objectKey, preview_object_key: previewObjectKey, mosaic_object_key: mosaicKey, sha256: _hash, ...safeRow } = row;
   const previewVersion = encodeURIComponent(String(safeRow.updated_at || safeRow.created_at || "1"));
   return {
     ...safeRow,
     hasPreview: Boolean(previewObjectKey),
+    hasMosaic: Boolean(mosaicKey),
     // url/previewUrl 均为压缩预览；originalUrl 只用于明确需要原片的后台操作。
     url: `/media/${row.id}?preview=1&v=${previewVersion}`,
     previewUrl: `/media/${row.id}?preview=1&v=${previewVersion}`,
@@ -1710,15 +1852,15 @@ async function publicBootstrap(request, env) {
       "SELECT id, version, title, body, published_at, sort_order FROM changelogs ORDER BY sort_order DESC, published_at DESC, created_at DESC",
     ).all(),
     env.DB.prepare(`
-      SELECT id, name, kind, description, sort_order, show_all, visibility
+      SELECT id, name, kind, category, description, sort_order, show_all, visibility, download_policy
       FROM portfolio_sections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, section_id, name, description, sort_order, visibility, download_policy
+      SELECT id, section_id, parent_id, name, description, sort_order, visibility, download_policy
       FROM portfolio_subsections ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, type, section_id, subsection_id, title, slug, excerpt, cover_media_id, visibility,
+      SELECT id, type, section_id, subsection_id, title, slug, excerpt, cover_media_id, visibility, status,
              published_at, created_at, updated_at, like_count, dislike_count
       FROM content
       WHERE status = 'published'
@@ -1729,14 +1871,14 @@ async function publicBootstrap(request, env) {
       FROM albums ORDER BY sort_order ASC, created_at ASC
     `).all(),
     env.DB.prepare(`
-      SELECT id, filename, mime_type, size_bytes, section_id, subsection_id, album_id, caption, kind,
+      SELECT id, filename, mime_type, size_bytes, section_id, subsection_id, album_id, content_id, caption, note, kind,
              visibility, preview_object_key, created_at, updated_at
       FROM media
       WHERE kind = 'photo'
       ORDER BY created_at DESC
     `).all(),
     env.DB.prepare(`
-      SELECT id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id,
+      SELECT id, section_id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id,
              created_at, updated_at
       FROM asset_folders ORDER BY sort_order ASC, created_at ASC
     `).all(),
@@ -1793,7 +1935,7 @@ async function publicBootstrap(request, env) {
     ))
     .map(([sectionKey]) => sectionKey);
   const sectionRows = rows(sections).map((item) => (
-    item.id === RESOURCE_SECTION_ID ? { ...item, kind: "resources" } : item
+    item.id === RESOURCE_SECTION_ID || item.category === "resources" ? { ...item, kind: "resources" } : item
   ));
   const visibleSections = sectionRows.filter((item) => (
     adminAccess || visibleToWebsite(item.visibility, fullAccess, allowedSectionIds.has(item.id), ownerAccess)
@@ -1801,7 +1943,7 @@ async function publicBootstrap(request, env) {
   const visibleSectionIds = new Set(visibleSections.map((item) => item.id));
   const gallerySectionIds = new Set(visibleSections.filter((item) => item.kind === "gallery").map((item) => item.id));
   const contentSectionIds = new Set(visibleSections.filter((item) => item.kind === "content").map((item) => item.id));
-  const resourceSectionVisible = visibleSectionIds.has(RESOURCE_SECTION_ID);
+  const resourceSectionVisible = visibleSections.some(item => item.kind === "resources");
   const visibleSubsections = rows(subsections).filter((item) => (
     visibleSectionIds.has(item.section_id)
     && (adminAccess || visibleToWebsite(
@@ -1865,7 +2007,7 @@ async function publicBootstrap(request, env) {
   ));
   const visibleAssetIds = new Set(visibleAssets.map((item) => item.id));
 
-  return {
+  const response = {
     settings: publicSettingsObject(settings, visibleProfileSections),
     access: { authenticated: Boolean(sessionUser), fullAccess, ownerAccess },
     changelogs: rows(changelogs),
@@ -1887,7 +2029,7 @@ async function publicBootstrap(request, env) {
      * 下载权限在服务端再次核对；这里的 canDownload 只负责让前端正确显示按钮。
      * 公开下载的文件游客可下载，其余文件仅审核通过的登录用户可下载。
      */
-    assets: visibleAssets.filter((item) => item.scope === "library" && item.section_id === RESOURCE_SECTION_ID).map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
+    assets: visibleAssets.filter((item) => item.scope === "library").map((item) => assetDto(item, variantsByAsset.get(item.id) || [], {
       includeDownload: canDownloadAsset(item),
     })),
     galleryAssets: visibleAssets.filter((item) => item.scope === "gallery" && gallerySectionIds.has(item.section_id)).map((item) => assetDto(
@@ -1906,6 +2048,21 @@ async function publicBootstrap(request, env) {
       },
     )),
   };
+  // Reuse this request's listing/ACL rows: do not scan all seven tables twice.
+  // This also leaves headroom under D1's per-invocation query limit.
+  const security = await contentSecurity(request, env, {
+    context: { ...context, user: sessionUser, guestMode: Boolean(guestSession) },
+    records: { section: rows(sections), subsection: rows(subsections), content: rows(content),
+      media: rows(media), album: rows(albums), assetFolder: rows(assetFolders), asset: rows(assets) },
+    access: [["content", contentAccess], ["media", mediaAccess], ["section", sectionAccess],
+      ["subsection", subsectionAccess], ["album", albumAccess], ["assetFolder", folderAccess], ["asset", assetAccess]]
+      .flatMap(([kind, result]) => rows(result).map(row => ({ kind, id: row[ACCESS_TABLES[kind].targetColumn] }))),
+  });
+  for (const [key, kind] of Object.entries({ sections: "section", subsections: "subsection", content: "content", media: "media",
+    albums: "album", assetFolders: "assetFolder", assets: "asset", galleryAssets: "asset", sectionAssets: "asset", articleAssets: "asset" })) {
+    response[key] = response[key].filter(item => security.canView(kind, item.id)).map(item => security.decorate(kind, item));
+  }
+  return response;
 }
 
 /*
@@ -1921,18 +2078,24 @@ async function publicEntryBackground(env) {
     WHERE m.kind = 'photo' AND m.visibility = 'public' AND s.visibility = 'public'
       AND (m.subsection_id IS NULL OR ss.visibility = 'public')
       AND (m.album_id IS NULL OR a.visibility = 'public')
+      AND NOT EXISTS (SELECT 1 FROM content_locks l WHERE l.enabled=1 AND
+        ((l.target_kind='media' AND l.target_id=m.id) OR (l.target_kind='section' AND l.target_id=m.section_id)
+        OR (l.target_kind='subsection' AND (l.target_id=m.subsection_id OR l.target_id=ss.parent_id))))
+      AND (ss.parent_id IS NULL OR EXISTS (SELECT 1 FROM portfolio_subsections parent WHERE parent.id=ss.parent_id AND parent.visibility='public'))
     ORDER BY m.created_at DESC
     LIMIT 40
   `).all();
   return {
     photos: rows(result).map((item) => ({
-      // 登录背景直接读取公开原片，避免 2K/4K 屏幕把压缩预览再次放大。
+      // 背景与照片共用预览和权限校验，不通过背景入口暴露原片。
       url: `/media/${item.id}?background=1&v=${encodeURIComponent(String(item.updated_at || item.created_at || "1"))}`,
     })),
   };
 }
 
 async function getPublicContent(request, env, id) {
+  const security = await contentSecurity(request, env);
+  security.requireView("content", id, { download: new URL(request.url).searchParams.get("download") === "1" });
   const item = await env.DB.prepare(`
     SELECT c.id, c.type, c.section_id, c.subsection_id, c.title, c.slug, c.excerpt, c.body_html,
            c.cover_media_id, c.published_at, c.created_at, c.updated_at,
@@ -1956,8 +2119,31 @@ async function getPublicContent(request, env, id) {
       throw new HttpError(404, "内容不存在或尚未发布");
     }
   }
+  const inlineMedia = [];
+  const contentResponse = new HTMLRewriter().on("img", {
+    element(element) {
+      const src = element.getAttribute("src") || "";
+      let source;
+      try { source = new URL(src, request.url); } catch { return; }
+      if (source.origin !== new URL(request.url).origin) return;
+      const mediaId = source.pathname.match(/^\/media\/([a-zA-Z0-9_-]{1,80})$/)?.[1];
+      if (!mediaId) return;
+      if (!security.canView("media", mediaId)) {
+        element.setAttribute("src", "/protected-image.svg");
+        element.setAttribute("alt", "无权查看此图片");
+        element.removeAttribute("srcset");
+        return;
+      }
+      const info = security.decorate("media", { id: mediaId, url: `/media/${mediaId}?preview=1`, previewUrl: `/media/${mediaId}?preview=1` });
+      inlineMedia.push(info);
+      element.setAttribute("src", info.previewUrl);
+      element.setAttribute("data-media-id", mediaId);
+      element.removeAttribute("srcset");
+    },
+  }).transform(new Response(item.body_html));
   return {
     ...item,
+    body_html: await contentResponse.text(), inlineMedia, canDownload: security.canDownload("content", id),
     coverUrl: item.cover_media_id ? `/media/${item.cover_media_id}?preview=1` : null,
   };
 }
@@ -3625,27 +3811,35 @@ async function buildAiContext(request, env) {
    * member / selected / excluded / private 数据即使当前账号可见，也不会发送到外部模型。
    */
   const bootstrap = await publicBootstrap(request, env);
+  const security = await contentSecurity(request, env);
+  const safeForAi = (kind, id) => {
+    const path = security.chain(kind, id);
+    return Boolean(path && path.every(node => normalizedVisibility(node.access_mode || node.visibility) === "public"
+      && !security.locks.has(`${node.targetKind}:${node.id}`)));
+  };
   const allSettings = await settingsObject(env);
   const publicProfileSections = Object.entries(PROFILE_SECTION_DEFINITIONS)
     .filter(([, definition]) => normalizedVisibility(allSettings[definition.visibilityKey]) === "public")
     .map(([sectionKey]) => sectionKey);
   const strictlyPublicSettings = publicSettingsObject(allSettings, publicProfileSections);
-  const publicSections = bootstrap.sections.filter((item) => normalizedVisibility(item.visibility) === "public");
+  const publicSections = bootstrap.sections.filter((item) => safeForAi("section", item.id));
   const publicSectionIds = new Set(publicSections.map((item) => item.id));
   const publicSubsections = bootstrap.subsections.filter((item) => (
-    publicSectionIds.has(item.section_id) && normalizedVisibility(item.visibility) === "public"
+    publicSectionIds.has(item.section_id) && safeForAi("subsection", item.id)
   ));
   const publicSubsectionIds = new Set(publicSubsections.map((item) => item.id));
   const publicAlbums = bootstrap.albums.filter((item) => (
-    publicSectionIds.has(item.section_id) && normalizedVisibility(item.visibility) === "public"
+    publicSectionIds.has(item.section_id) && safeForAi("album", item.id)
   ));
   const publicAlbumIds = new Set(publicAlbums.map((item) => item.id));
   const published = bootstrap.content.filter((item) => (
+    safeForAi("content", item.id) &&
     publicSectionIds.has(item.section_id)
     && (!item.subsection_id || publicSubsectionIds.has(item.subsection_id))
     && normalizedVisibility(item.visibility) === "public"
   )).slice(0, 30);
   const media = bootstrap.media.filter((item) => (
+    safeForAi("media", item.id) &&
     publicSectionIds.has(item.section_id)
     && (!item.subsection_id || publicSubsectionIds.has(item.subsection_id))
     && (!item.album_id || publicAlbumIds.has(item.album_id))
@@ -3926,6 +4120,15 @@ async function askAiStream(request, env, sessionUser) {
 
 async function serveMedia(request, env, id) {
   if (!env.BUCKET) throw new HttpError(503, "R2 存储桶尚未绑定");
+  const security = await contentSecurity(request, env);
+  const requestParams = new URL(request.url).searchParams;
+  security.requireView("media", id, { allowLocked: requestParams.get("mosaic") === "1" });
+  if (requestParams.get("mosaic") === "1") {
+    const row = await env.DB.prepare("SELECT mosaic_object_key FROM media WHERE id=?").bind(id).first();
+    const mosaic = row?.mosaic_object_key ? await env.BUCKET.get(row.mosaic_object_key) : null;
+    return mosaic ? new Response(mosaic.body, { headers: { ...SECURITY_HEADERS, "Content-Type": "image/webp", "Cache-Control": "private, no-store" } })
+      : new Response(PROTECTED_IMAGE_SVG, { headers: { ...SECURITY_HEADERS, "Content-Type": "image/svg+xml", "Cache-Control": "private, no-store" } });
+  }
   const media = await env.DB.prepare(`
     SELECT m.id, m.section_id, m.subsection_id, m.album_id, m.object_key, m.preview_object_key,
            m.filename, m.mime_type, m.kind, m.visibility AS media_visibility,
@@ -3941,7 +4144,7 @@ async function serveMedia(request, env, id) {
   const wantsDownload = params.get("download") === "1";
   /*
    * 只有 ?preview=1 属于普通网站预览。去掉 preview 参数、直接访问 /media/id
-   * 或使用 download=1 都是在请求原片，必须是审核通过的账号或 Studio 管理员。
+   * 或使用 download=1 都是在请求原片，必须通过独立的下载权限校验。
    * 这样即使游客手工修改地址，也不能绕过前端隐藏的下载按钮。
    */
   const isPublicBackground = params.get("background") === "1";
@@ -3964,12 +4167,13 @@ async function serveMedia(request, env, id) {
       throw new HttpError(404, "图片不存在");
     }
   }
-  // 即使图片本身是公开的，读取或下载原片也只开放给审核通过的登录用户。
-  if (requestsOriginal && !context.adminAccess && !context.ownerAccess && !context.fullAccess) {
-    await requireApprovedUser(request, env);
-  }
+  // 公开查看不等于公开下载，读取原片仍须满足全部下载限制。
+  if (requestsOriginal) security.requireView("media", id, { download: true });
   // 下载操作永远使用 object_key；只有普通展示请求才允许读取 WebP 预览件。
-  const servesPreview = !wantsDownload && params.get("preview") === "1" && Boolean(media.preview_object_key);
+  const servesPreview = !wantsDownload && (params.get("preview") === "1" || isPublicBackground) && Boolean(media.preview_object_key);
+  if (!requestsOriginal && !media.preview_object_key && !security.canDownload("media", id)) {
+    return new Response(PROTECTED_IMAGE_SVG, { headers: { ...SECURITY_HEADERS, "Content-Type": "image/svg+xml", "Cache-Control": "private, no-store" } });
+  }
   const object = await env.BUCKET.get(servesPreview ? media.preview_object_key : media.object_key);
   if (!object) throw new HttpError(404, "图片文件不存在");
   const headers = new Headers(SECURITY_HEADERS);
@@ -3978,12 +4182,7 @@ async function serveMedia(request, env, id) {
   headers.set("ETag", object.httpEtag);
   headers.set(
     "Cache-Control",
-    (isProtected || requestsOriginal)
-      ? "private, no-store"
-      // 旧照片尚无预览时只短暂缓存原片；补建成功后相同地址会很快切换到 WebP。
-      : (params.get("preview") === "1" && !servesPreview
-        ? "public, max-age=300"
-        : "public, max-age=31536000, immutable"),
+    "private, no-store",
   );
   const previewName = media.filename.replace(/\.[^.]+$/, "") + "-preview.webp";
   headers.set(
@@ -4013,83 +4212,16 @@ function parseByteRange(header, totalSize) {
 }
 
 async function assetAccessContext(request, env, asset) {
-  const folderResult = await env.DB.prepare(`
-    SELECT id, parent_id, visibility, access_mode FROM asset_folders
-  `).all();
-  const folderMap = new Map(rows(folderResult).map((item) => [item.id, item]));
-  let folder = asset.folder_id ? folderMap.get(asset.folder_id) : null;
-  const context = await websiteAccessContext(request, env);
-  let isPublicChain = normalizedAssetVisibility(asset.access_mode || asset.visibility) === "public";
-  let effectiveDownloadPolicy = normalizedDownloadPolicy(asset.download_policy);
-  if ((asset.scope || "library") === "library") {
-    const resourceSection = await env.DB.prepare("SELECT id, visibility FROM portfolio_sections WHERE id = ?")
-      .bind(RESOURCE_SECTION_ID).first();
-    if (!resourceSection || !(await canAccessTarget(
-      env, "section", RESOURCE_SECTION_ID, resourceSection.visibility, context,
-    ))) {
-      throw new HttpError(404, "文件不存在");
-    }
-    isPublicChain = isPublicChain && normalizedVisibility(resourceSection.visibility) === "public";
-  }
-  const visited = new Set();
-  while (folder) {
-    if (visited.has(folder.id)) throw new HttpError(500, "文件夹层级存在循环，请在后台修复");
-    visited.add(folder.id);
-    const folderVisibility = normalizedAssetVisibility(folder.access_mode || folder.visibility);
-    isPublicChain = isPublicChain && folderVisibility === "public";
-    if (!(await canAccessTarget(env, "assetFolder", folder.id, folderVisibility, context))) {
-      throw new HttpError(404, "文件不存在");
-    }
-    folder = folder.parent_id ? folderMap.get(folder.parent_id) : null;
-  }
-  if (asset.section_id) {
-    const section = await env.DB.prepare("SELECT id, visibility FROM portfolio_sections WHERE id = ?")
-      .bind(asset.section_id).first();
-    if (!section || !(await canAccessTarget(env, "section", section.id, section.visibility, context))) {
-      throw new HttpError(404, "文件不存在");
-    }
-    isPublicChain = isPublicChain && normalizedVisibility(section.visibility) === "public";
-  }
-  if (asset.subsection_id) {
-    const subsection = await env.DB.prepare(
-      "SELECT id, visibility, download_policy FROM portfolio_subsections WHERE id = ? AND section_id = ?",
-    ).bind(asset.subsection_id, asset.section_id).first();
-    if (!subsection || !(await canAccessTarget(env, "subsection", subsection.id, subsection.visibility, context))) {
-      throw new HttpError(404, "文件不存在");
-    }
-    isPublicChain = isPublicChain && normalizedVisibility(subsection.visibility) === "public";
-    if (normalizedDownloadPolicy(subsection.download_policy) === "member") effectiveDownloadPolicy = "member";
-  }
-  if (asset.album_id) {
-    const album = await env.DB.prepare("SELECT id, visibility FROM albums WHERE id = ?").bind(asset.album_id).first();
-    if (!album || !(await canAccessTarget(env, "album", album.id, album.visibility, context))) {
-      throw new HttpError(404, "文件不存在");
-    }
-    isPublicChain = isPublicChain && normalizedVisibility(album.visibility) === "public";
-  }
-  if (asset.content_id) {
-    await getPublicContent(request, env, asset.content_id);
-    const content = await env.DB.prepare("SELECT visibility FROM content WHERE id = ?").bind(asset.content_id).first();
-    isPublicChain = isPublicChain && normalizedVisibility(content?.visibility) === "public";
-  }
-  const assetVisibility = normalizedAssetVisibility(asset.access_mode || asset.visibility);
-  if (!(await canAccessTarget(env, "asset", asset.id, assetVisibility, context))) {
-    throw new HttpError(404, "文件不存在");
-  }
-
+  const security = await contentSecurity(request, env);
   const wantsDownload = new URL(request.url).searchParams.get("download") === "1"
     || asset.kind === "archive" || asset.kind === "file";
-  if (wantsDownload && effectiveDownloadPolicy !== "public"
-    && !context.adminAccess && !context.ownerAccess) {
-    await requireApprovedUser(request, env);
-  }
+  security.requireView("asset", asset.id, { download: wantsDownload });
   return {
-    inheritedVisibility: isPublicChain ? "public" : "protected",
-    downloadPolicy: effectiveDownloadPolicy,
-    adminAccess: context.adminAccess,
-    wantsDownload,
+    inheritedVisibility: "protected", downloadPolicy: security.canDownload("asset", asset.id) ? "public" : "member",
+    adminAccess: (await websiteAccessContext(request, env)).adminAccess, wantsDownload,
   };
 }
+
 
 /*
  * R2 文件统一通过 Worker 读取，避免公开存储桶地址绕过会员与私密权限。
@@ -4173,10 +4305,10 @@ async function serveAsset(request, env, id) {
 async function portfolioSectionRecord(env, requestedId) {
   if (!validId(requestedId)) throw new HttpError(400, "请选择有效的大板块");
   const section = await env.DB.prepare(
-    "SELECT id, kind, visibility FROM portfolio_sections WHERE id = ?",
+    "SELECT id, kind, category, visibility FROM portfolio_sections WHERE id = ?",
   ).bind(String(requestedId)).first();
   if (!section) throw new HttpError(400, "请选择有效的大板块");
-  return section;
+  return section.id === RESOURCE_SECTION_ID || section.category === "resources" ? { ...section, kind: "resources" } : section;
 }
 
 async function subsectionIdForSection(env, requestedId, sectionId) {
@@ -4192,7 +4324,7 @@ async function contentSectionId(env, requestedId, legacyType = "article") {
   const fallback = legacyType === "guide" ? "section-guides" : "section-essays";
   const sectionId = validId(requestedId) ? String(requestedId) : fallback;
   const section = await env.DB.prepare(
-    "SELECT id FROM portfolio_sections WHERE id = ? AND kind = 'content' AND id <> ?",
+    "SELECT id FROM portfolio_sections WHERE id = ? AND kind = 'content' AND COALESCE(category,'') <> 'resources' AND id <> ?",
   ).bind(sectionId, RESOURCE_SECTION_ID).first();
   if (!section) throw new HttpError(400, "请选择有效的文章类板块");
   return sectionId;
@@ -4282,6 +4414,15 @@ async function migrateLegacyEmbeddedArticleAssets(env, timestamp) {
 
 async function syncEmbeddedArticleAssets(env, content, bodyHtml, timestamp) {
   await moveLegacyAssetsIntoArticle(env, content, embeddedAssetIdsFromHtml(bodyHtml), timestamp);
+  await syncInlineMediaOwnership(env, content, bodyHtml);
+}
+
+async function syncInlineMediaOwnership(env, content, bodyHtml) {
+  const ids = inlineMediaIdsFromHtml(bodyHtml);
+  if (!ids.length) return;
+  await env.DB.prepare(`UPDATE media SET content_id=?,section_id=?,subsection_id=?
+    WHERE kind='inline' AND id IN (SELECT value FROM json_each(?)) AND (content_id IS NULL OR content_id=?)`)
+    .bind(content.id, content.section_id, content.subsection_id || null, JSON.stringify(ids), content.id).run();
 }
 
 async function deleteRemovedArticleAssets(env, contentId, bodyHtml, requestedIds) {
@@ -4315,41 +4456,6 @@ async function deleteRemovedArticleAssets(env, contentId, bodyHtml, requestedIds
   return { deletedAssetIds, failedDeleteAssetIds };
 }
 
-async function syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds = []) {
-  const ids = inlineMediaIdsFromHtml(bodyHtml);
-  if (!ids.length) return;
-  const timestamp = nowIso();
-  const mediaIdsJson = JSON.stringify(ids);
-  const statements = [
-    env.DB.prepare(`
-      UPDATE media
-      SET visibility = ?, updated_at = ?
-      WHERE kind = 'inline'
-        AND id IN (SELECT value FROM json_each(?))
-    `).bind(visibility, timestamp, mediaIdsJson),
-    env.DB.prepare(`
-      DELETE FROM media_access_users
-      WHERE media_id IN (
-        SELECT id FROM media
-        WHERE kind = 'inline'
-          AND id IN (SELECT value FROM json_each(?))
-      )
-    `).bind(mediaIdsJson),
-  ];
-  // 文章内图片沿用文章白名单，防止通过复制 /media/:id 地址绕过正文权限。
-  if (["selected", "excluded"].includes(visibility) && allowedUserIds.length) {
-    statements.push(env.DB.prepare(`
-      INSERT INTO media_access_users (media_id, user_id, created_at)
-      SELECT media.id, users.id, ?
-      FROM media, users
-      WHERE media.kind = 'inline'
-        AND media.id IN (SELECT value FROM json_each(?))
-        AND users.status = 'approved'
-        AND users.id IN (SELECT value FROM json_each(?))
-    `).bind(timestamp, mediaIdsJson, JSON.stringify(allowedUserIds)));
-  }
-  await env.DB.batch(statements);
-}
 
 /* ---------- 个人空间大板块：新增、改名、排序、删除。 ---------- */
 async function adminSections(request, env, id) {
@@ -4365,16 +4471,14 @@ async function adminSections(request, env, id) {
       ORDER BY s.sort_order ASC, s.created_at ASC
     `).all());
     const withAccess = await attachAllowedUserIds(env, "section", items);
-    return withAccess.map((item) => item.id === RESOURCE_SECTION_ID ? { ...item, kind: "resources" } : item);
+    return withAccess.map((item) => item.id === RESOURCE_SECTION_ID || item.category === "resources" ? { ...item, kind: "resources" } : item);
   }
 
   if (request.method === "POST" || request.method === "PUT") {
     const input = await readJson(request);
     const name = clampText(input.name, 80);
     const resourceSection = id === RESOURCE_SECTION_ID;
-    if (input.kind === "resources" && !resourceSection) {
-      throw new HttpError(400, "文件资源板块为固定板块，不能重复新建");
-    }
+    const category = resourceSection || input.kind === "resources" ? "resources" : input.kind === "gallery" ? "gallery" : "content";
     const kind = resourceSection ? "content" : (input.kind === "gallery" ? "gallery" : "content");
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
@@ -4388,17 +4492,17 @@ async function adminSections(request, env, id) {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
         INSERT INTO portfolio_sections
-          (id, name, kind, description, sort_order, show_all, visibility, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, name, kind, description, sortOrder, showAll, visibility, timestamp, timestamp).run();
+          (id, name, kind, category, description, sort_order, show_all, visibility, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, name, kind, category, description, sortOrder, showAll, visibility, timestamp, timestamp).run();
       await replaceAllowedUsers(env, "section", newId, allowedUserIds, timestamp);
       return { id: newId, allowed_user_ids: allowedUserIds };
     }
 
     if (!validId(id)) throw new HttpError(400, "板块 ID 错误");
-    const existing = await env.DB.prepare("SELECT id, kind FROM portfolio_sections WHERE id = ?").bind(id).first();
+    const existing = await env.DB.prepare("SELECT id, kind, category FROM portfolio_sections WHERE id = ?").bind(id).first();
     if (!existing) throw new HttpError(404, "板块不存在");
-    if (existing.kind !== kind) {
+    if (existing.kind !== kind || (existing.category || (id === RESOURCE_SECTION_ID ? "resources" : existing.kind)) !== category) {
       const used = await env.DB.prepare(`
         SELECT
           (SELECT COUNT(*) FROM content WHERE section_id = ?) +
@@ -4411,9 +4515,9 @@ async function adminSections(request, env, id) {
     }
     await env.DB.prepare(`
       UPDATE portfolio_sections
-      SET name = ?, kind = ?, description = ?, sort_order = ?, show_all = ?, visibility = ?, updated_at = ?
+      SET name = ?, kind = ?, category = ?, description = ?, sort_order = ?, show_all = ?, visibility = ?, updated_at = ?
       WHERE id = ?
-    `).bind(name, kind, description, sortOrder, showAll, visibility, timestamp, id).run();
+    `).bind(name, kind, category, description, sortOrder, showAll, visibility, timestamp, id).run();
     await replaceAllowedUsers(env, "section", id, allowedUserIds, timestamp);
     return { id, allowed_user_ids: allowedUserIds };
   }
@@ -4474,6 +4578,14 @@ async function adminSubsections(request, env, id) {
   if (request.method === "POST" || request.method === "PUT") {
     const input = await readJson(request);
     const sectionId = (await portfolioSectionRecord(env, input.sectionId)).id;
+    const current = id ? await env.DB.prepare("SELECT * FROM portfolio_subsections WHERE id=?").bind(id).first() : null;
+    const parentId = Object.prototype.hasOwnProperty.call(input, "parentId") ? input.parentId || null : current?.parent_id || null;
+    if (parentId !== null) {
+      if (typeof parentId !== "string" || !validId(parentId) || parentId === id) throw new HttpError(400, "上级小板块无效");
+      const parent = await env.DB.prepare("SELECT * FROM portfolio_subsections WHERE id=? AND section_id=?").bind(parentId, sectionId).first();
+      if (!parent || parent.parent_id) throw new HttpError(400, "最多支持大板块、小板块、小小板块三级，请选择同一大板块下的小板块");
+      if (id && await env.DB.prepare("SELECT id FROM portfolio_subsections WHERE parent_id=? LIMIT 1").bind(id).first()) throw new HttpError(409, "已有小小板块，不能再降低此板块的层级");
+    }
     const name = clampText(input.name, 80);
     const description = clampText(input.description, 500);
     const sortOrder = Number.isFinite(Number(input.sortOrder)) ? Number(input.sortOrder) : 0;
@@ -4483,6 +4595,7 @@ async function adminSubsections(request, env, id) {
       : null;
     const allowedUserIds = await validatedAllowedUserIds(env, visibility, input.allowedUserIds);
     await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
+    if (parentId) await validateChildAccessSubset(env, "subsection", parentId, visibility, allowedUserIds);
     if (!name) throw new HttpError(400, "小板块名称不能为空");
     const timestamp = nowIso();
     if (request.method === "POST") {
@@ -4490,9 +4603,9 @@ async function adminSubsections(request, env, id) {
       const downloadPolicy = requestedDownloadPolicy || "public";
       await env.DB.prepare(`
         INSERT INTO portfolio_subsections
-          (id, section_id, name, description, sort_order, visibility, download_policy, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(newId, sectionId, name, description, sortOrder, visibility, downloadPolicy, timestamp, timestamp).run();
+          (id, section_id, parent_id, name, description, sort_order, visibility, download_policy, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(newId, sectionId, parentId, name, description, sortOrder, visibility, downloadPolicy, timestamp, timestamp).run();
       await replaceAllowedUsers(env, "subsection", newId, allowedUserIds, timestamp);
       return { id: newId, allowed_user_ids: allowedUserIds };
     }
@@ -4503,6 +4616,7 @@ async function adminSubsections(request, env, id) {
     if (!existing) throw new HttpError(404, "小板块不存在");
     const downloadPolicy = requestedDownloadPolicy || normalizedDownloadPolicy(existing.download_policy);
     if (existing.section_id !== sectionId) {
+      if (await env.DB.prepare("SELECT id FROM portfolio_subsections WHERE parent_id=? LIMIT 1").bind(id).first()) throw new HttpError(409, "请先移动或删除下级板块");
       const usage = await env.DB.prepare(`
         SELECT
           (SELECT COUNT(*) FROM content WHERE subsection_id = ?) +
@@ -4513,14 +4627,15 @@ async function adminSubsections(request, env, id) {
     }
     await env.DB.prepare(`
       UPDATE portfolio_subsections
-      SET section_id = ?, name = ?, description = ?, sort_order = ?, visibility = ?, download_policy = ?, updated_at = ?
+      SET section_id = ?, parent_id = ?, name = ?, description = ?, sort_order = ?, visibility = ?, download_policy = ?, updated_at = ?
       WHERE id = ?
-    `).bind(sectionId, name, description, sortOrder, visibility, downloadPolicy, timestamp, id).run();
+    `).bind(sectionId, parentId, name, description, sortOrder, visibility, downloadPolicy, timestamp, id).run();
     await replaceAllowedUsers(env, "subsection", id, allowedUserIds, timestamp);
     return { id, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     if (!validId(id)) throw new HttpError(400, "小板块 ID 错误");
+    if (await env.DB.prepare("SELECT id FROM portfolio_subsections WHERE parent_id=? LIMIT 1").bind(id).first()) throw new HttpError(409, "请先处理下属小小板块");
     await env.DB.batch([
       env.DB.prepare("UPDATE content SET subsection_id = NULL WHERE subsection_id = ?").bind(id),
       env.DB.prepare("UPDATE media SET subsection_id = NULL WHERE subsection_id = ?").bind(id),
@@ -4585,7 +4700,6 @@ async function adminContent(request, env, id) {
       await syncEmbeddedArticleAssets(env, {
         id: newId, type, section_id: sectionId, subsection_id: subsectionId,
       }, bodyHtml, timestamp);
-      await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
       if (status === "published") await notifyArticlePublished(env, newId, title);
       return { id: newId };
     }
@@ -4608,7 +4722,6 @@ async function adminContent(request, env, id) {
       WHERE scope = 'article' AND content_id = ?
     `).bind(sectionId, subsectionId, timestamp, id).run();
     await replaceAllowedUsers(env, "content", id, allowedUserIds, timestamp);
-    await syncInlineMediaVisibility(env, bodyHtml, visibility, allowedUserIds);
     const attachmentDeletion = await deleteRemovedArticleAssets(env, id, bodyHtml, body.deleteAssetIds);
     if (status === "published" && existing.status !== "published") {
       await notifyArticlePublished(env, id, title);
@@ -4752,6 +4865,12 @@ async function adminAssetFolders(request, env, id) {
     const name = clampText(body.name, 120);
     const description = clampText(body.description, 800);
     const parentId = validId(body.parentId) ? String(body.parentId) : null;
+    const oldFolder = id ? await env.DB.prepare("SELECT section_id FROM asset_folders WHERE id=?").bind(id).first() : null;
+    const parentFolder = parentId ? await env.DB.prepare("SELECT section_id FROM asset_folders WHERE id=?").bind(parentId).first() : null;
+    const sectionId = body.sectionId || parentFolder?.section_id || oldFolder?.section_id || RESOURCE_SECTION_ID;
+    if ((await portfolioSectionRecord(env, sectionId)).kind !== "resources") throw new HttpError(400, "请选择文件与视频大板块");
+    if (parentFolder && parentFolder.section_id !== sectionId) throw new HttpError(400, "文件夹必须属于同一大板块");
+    if (oldFolder && oldFolder.section_id !== sectionId) throw new HttpError(409, "文件夹暂不支持跨大板块移动");
     const visibility = normalizedAssetVisibility(body.visibility);
     const legacyVisibility = legacyAssetVisibility(visibility);
     const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
@@ -4763,12 +4882,12 @@ async function adminAssetFolders(request, env, id) {
       if (!parent) throw new HttpError(400, "上级文件夹不存在");
       await validateChildAccessSubset(env, "assetFolder", parentId, visibility, allowedUserIds);
     } else {
-      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
+      await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
     }
     if (archiveAssetId) {
       const archive = await env.DB.prepare(
         "SELECT id, kind FROM assets WHERE id = ? AND scope = 'library' AND section_id = ?",
-      ).bind(archiveAssetId, RESOURCE_SECTION_ID).first();
+      ).bind(archiveAssetId, sectionId).first();
       if (!archive || archive.kind !== "archive") throw new HttpError(400, "整包下载文件必须是已经上传的压缩包");
     }
     const timestamp = nowIso();
@@ -4776,10 +4895,10 @@ async function adminAssetFolders(request, env, id) {
       const newId = crypto.randomUUID();
       await env.DB.prepare(`
         INSERT INTO asset_folders
-          (id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, section_id, parent_id, name, description, visibility, access_mode, sort_order, archive_asset_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        newId, parentId, name, description, legacyVisibility, visibility,
+        newId, sectionId, parentId, name, description, legacyVisibility, visibility,
         sortOrder, archiveAssetId, timestamp, timestamp,
       ).run();
       await replaceAllowedUsers(env, "assetFolder", newId, allowedUserIds, timestamp);
@@ -4977,8 +5096,9 @@ async function adminAssets(request, env, id, action = "") {
         : (validId(body.folderId) ? String(body.folderId) : existing.folder_id))
       : null;
     if (folderId) {
-      const folder = await env.DB.prepare("SELECT id FROM asset_folders WHERE id = ?").bind(folderId).first();
+      const folder = await env.DB.prepare("SELECT id, section_id FROM asset_folders WHERE id = ?").bind(folderId).first();
       if (!folder) throw new HttpError(400, "目标文件夹不存在");
+      if ((folder.section_id || RESOURCE_SECTION_ID) !== (existing.section_id || RESOURCE_SECTION_ID)) throw new HttpError(400, "文件夹不属于当前大板块");
     }
     const visibility = normalizedAssetVisibility(body.visibility ?? existing.access_mode ?? existing.visibility);
     const legacyVisibility = legacyAssetVisibility(visibility);
@@ -4994,7 +5114,7 @@ async function adminAssets(request, env, id, action = "") {
       : existing.subsection_id;
     if (folderId) await validateChildAccessSubset(env, "assetFolder", folderId, visibility, allowedUserIds);
     if ((existing.scope || "library") === "library") {
-      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
+      await validateChildAccessSubset(env, "section", existing.section_id || RESOURCE_SECTION_ID, visibility, allowedUserIds);
     }
     if (existing.section_id) await validateChildAccessSubset(env, "section", existing.section_id, visibility, allowedUserIds);
     if (subsectionId) await validateChildAccessSubset(env, "subsection", subsectionId, visibility, allowedUserIds);
@@ -5135,11 +5255,13 @@ async function createAssetUpload(request, env) {
       subsectionId = content.subsection_id;
       await validateChildAccessSubset(env, "content", contentId, visibility, allowedUserIds);
     } else {
-      sectionId = RESOURCE_SECTION_ID;
+      sectionId = validId(body.sectionId) ? body.sectionId : RESOURCE_SECTION_ID;
+      if ((await portfolioSectionRecord(env, sectionId)).kind !== "resources") throw new HttpError(400, "文件上传请选择文件与视频大板块");
       subsectionId = await subsectionIdForSection(env, body.subsectionId, sectionId);
-      await validateChildAccessSubset(env, "section", RESOURCE_SECTION_ID, visibility, allowedUserIds);
+      await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
       if (subsectionId) await validateChildAccessSubset(env, "subsection", subsectionId, visibility, allowedUserIds);
       if (folderId) await validateChildAccessSubset(env, "assetFolder", folderId, visibility, allowedUserIds);
+      if (folderId && !(await env.DB.prepare("SELECT id FROM asset_folders WHERE id=? AND section_id=?").bind(folderId, sectionId).first())) throw new HttpError(400, "文件夹不属于当前大板块");
     }
     await env.DB.prepare(`
       INSERT INTO assets
@@ -5421,9 +5543,28 @@ async function uploadMedia(request, env) {
   const form = await request.formData();
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) throw new HttpError(400, "请选择图片文件");
-  const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
-  if (!allowedTypes.has(file.type)) throw new HttpError(400, "仅支持 JPG、PNG、WebP、GIF 或 AVIF 图片");
+  const heic = /\.(heic|heif)$/i.test(file.name) || ["image/heic", "image/heif"].includes(file.type);
+  const mimeType = heic ? "image/heic" : file.type;
+  const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic"]);
+  if (!allowedTypes.has(mimeType)) throw new HttpError(400, "支持 JPG、PNG、WebP、GIF、AVIF、HEIC/HEIF 图片");
   if (file.size > MAX_IMAGE_BYTES) throw new HttpError(413, "单张图片不能超过 20MB");
+  if (heic) {
+    const header = new TextDecoder("latin1").decode(await file.slice(0, 80).arrayBuffer());
+    if (header.slice(4, 8) !== "ftyp" || !/(heic|heix|hevc|hevx|mif1|msf1)/.test(header.slice(8))) throw new HttpError(400, "文件不是有效的 HEIC/HEIF 容器");
+  }
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())), n => n.toString(16).padStart(2, "0")).join("");
+  const uploadToken = form.get("uploadToken");
+  if (uploadToken && (typeof uploadToken !== "string" || !/^[a-f0-9-]{36}$/.test(uploadToken))) throw new HttpError(400, "上传标识无效");
+  if (uploadToken) {
+    if (await env.DB.prepare("SELECT token FROM photo_upload_cancellations WHERE token=?").bind(uploadToken).first()) throw new HttpError(409, "上传已取消");
+    const existingUpload = await env.DB.prepare("SELECT * FROM media WHERE upload_token=?").bind(uploadToken).first();
+    if (existingUpload) {
+      if (existingUpload.sha256 !== digest) throw new HttpError(409, "上传标识与文件不匹配");
+      return mediaDto(existingUpload);
+    }
+  }
+  const duplicate = await env.DB.prepare("SELECT id,filename FROM media WHERE sha256=? LIMIT 1").bind(digest).first();
+  if (duplicate && form.get("allowDuplicate") !== "1") throw new HttpError(409, `检测到重复图片“${duplicate.filename}”，请确认是否仍要上传`);
 
   /*
    * 预览件由后台页面从同一原图生成。Worker 只接受 WebP，并独立限制体积；
@@ -5433,11 +5574,16 @@ async function uploadMedia(request, env) {
   const previewFile = preview instanceof File && preview.size ? preview : null;
   if (previewFile && previewFile.type !== "image/webp") throw new HttpError(400, "压缩预览必须是 WebP 图片");
   if (previewFile && previewFile.size > MAX_PREVIEW_BYTES) throw new HttpError(413, "压缩预览不能超过 4MB");
+  if (heic && !previewFile) throw new HttpError(400, "HEIC 原片需要同时生成浏览器可显示的预览，请等待转换完成后上传");
+  const mosaic = form.get("mosaic");
+  const mosaicFile = mosaic instanceof File && mosaic.size ? mosaic : null;
+  if (mosaicFile && (mosaicFile.type !== "image/webp" || mosaicFile.size > 64 * 1024)) throw new HttpError(400, "马赛克预览格式或大小无效");
 
   const id = crypto.randomUUID();
   const safeName = file.name.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(-120) || `${id}.img`;
   const objectKey = `media/${new Date().toISOString().slice(0, 10)}/${id}-${safeName}`;
   const previewObjectKey = previewFile ? `previews/${new Date().toISOString().slice(0, 10)}/${id}.webp` : null;
+  const mosaicObjectKey = mosaicFile ? `mosaics/${id}.webp` : null;
   const albumId = validId(form.get("albumId")) ? String(form.get("albumId")) : null;
   let subsectionId = validId(form.get("subsectionId")) ? String(form.get("subsectionId")) : null;
   const caption = clampText(form.get("caption"), 500);
@@ -5446,6 +5592,7 @@ async function uploadMedia(request, env) {
   const visibility = normalizedVisibility(form.get("visibility"));
   const allowedUserIds = await validatedAllowedUserIds(env, visibility, form.get("allowedUserIds"));
   let sectionId = null;
+  let contentId = null;
   if (kind === "photo") {
     if (albumId) {
       const album = await env.DB.prepare("SELECT section_id FROM albums WHERE id = ?").bind(albumId).first();
@@ -5459,13 +5606,19 @@ async function uploadMedia(request, env) {
     await validateChildAccessSubset(env, "section", sectionId, visibility, allowedUserIds);
     if (subsectionId) await validateChildAccessSubset(env, "subsection", subsectionId, visibility, allowedUserIds);
     if (albumId) await validateChildAccessSubset(env, "album", albumId, visibility, allowedUserIds);
+  } else if (form.get("contentId")) {
+    if (!validId(form.get("contentId"))) throw new HttpError(400, "文章 ID 无效");
+    const article = await env.DB.prepare("SELECT id,section_id,subsection_id FROM content WHERE id=?").bind(form.get("contentId")).first();
+    if (!article) throw new HttpError(400, "所属文章不存在，请先保存文章");
+    contentId = article.id; sectionId = article.section_id; subsectionId = article.subsection_id;
+    await validateChildAccessSubset(env, "content", contentId, visibility, allowedUserIds);
   }
   const timestamp = nowIso();
 
   try {
     // 原片永远单独保存，下载接口不会被预览图替代。
     await env.BUCKET.put(objectKey, file.stream(), {
-      httpMetadata: { contentType: file.type },
+      httpMetadata: { contentType: mimeType },
       customMetadata: { originalName: file.name, kind },
     });
     if (previewFile) {
@@ -5474,27 +5627,37 @@ async function uploadMedia(request, env) {
         customMetadata: { originalMediaId: id, purpose: "preview" },
       });
     }
-    await env.DB.prepare(`
+    if (mosaicFile) await env.BUCKET.put(mosaicObjectKey, mosaicFile.stream(), { httpMetadata: { contentType: "image/webp" } });
+    const inserted = await env.DB.prepare(`
       INSERT INTO media
         (id, object_key, preview_object_key, filename, mime_type, size_bytes, section_id,
-         subsection_id, album_id, caption, kind, visibility, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         subsection_id, album_id, caption, kind, visibility, created_at, updated_at, sha256, upload_token, mosaic_object_key, content_id)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM photo_upload_cancellations WHERE token=?)
     `).bind(
-      id, objectKey, previewObjectKey, file.name.slice(0, 240), file.type, file.size,
-      sectionId, subsectionId, albumId, caption, kind, visibility, timestamp, timestamp,
+      id, objectKey, previewObjectKey, file.name.slice(0, 240), mimeType, file.size,
+      sectionId, subsectionId, albumId, caption, kind, visibility, timestamp, timestamp, digest, uploadToken || null, mosaicObjectKey, contentId, uploadToken || "",
     ).run();
+    if (!inserted.meta.changes) throw new HttpError(409, "上传已取消");
     await replaceAllowedUsers(env, "media", id, allowedUserIds, timestamp);
   } catch (error) {
     // 任一步失败都清理已经写入的对象，避免 R2 留下数据库无法管理的孤立文件。
     await env.BUCKET.delete(objectKey).catch(() => null);
     if (previewObjectKey) await env.BUCKET.delete(previewObjectKey).catch(() => null);
+    if (mosaicObjectKey) await env.BUCKET.delete(mosaicObjectKey).catch(() => null);
     await env.DB.prepare("DELETE FROM media_access_users WHERE media_id = ?").bind(id).run().catch(() => null);
     await env.DB.prepare("DELETE FROM media WHERE id = ?").bind(id).run().catch(() => null);
+    // A timed-out request and its retry may finish together. Keep the first
+    // committed image and return it, rather than create a duplicate.
+    if (uploadToken) {
+      const completed = await env.DB.prepare("SELECT * FROM media WHERE upload_token=? AND sha256=?").bind(uploadToken, digest).first();
+      if (completed) return mediaDto(completed);
+    }
     throw error;
   }
   return mediaDto({
-    id, preview_object_key: previewObjectKey, filename: file.name, mime_type: file.type,
-    size_bytes: file.size, section_id: sectionId, subsection_id: subsectionId, album_id: albumId, caption, kind,
+    id, preview_object_key: previewObjectKey, mosaic_object_key: mosaicObjectKey, filename: file.name, mime_type: mimeType,
+    size_bytes: file.size, section_id: sectionId, subsection_id: subsectionId, album_id: albumId, content_id: contentId, caption, kind,
     visibility, allowed_user_ids: allowedUserIds, created_at: timestamp, updated_at: timestamp,
   });
 }
@@ -5531,14 +5694,133 @@ async function updateMediaPreview(request, env, id) {
   return mediaDto({ ...media, preview_object_key: previewObjectKey, updated_at: timestamp });
 }
 
+async function mediaDuplicates(request, env) {
+  if (request.method !== "POST") throw new HttpError(405, "不支持的请求方法");
+  const input = await readJson(request);
+  if (!Array.isArray(input.files) || input.files.length > 100) throw new HttpError(400, "一次最多检查 100 张照片");
+  const existing = rows(await env.DB.prepare("SELECT id,filename,size_bytes,sha256 FROM media").all());
+  return input.files.map(file => {
+    const match = existing.find(row => /^[a-f0-9]{64}$/.test(file.sha256) && row.sha256 === file.sha256)
+      || existing.find(row => !row.sha256 && row.filename === file.name && row.size_bytes === file.size);
+    return { sha256: file.sha256, duplicate: Boolean(match), exact: Boolean(match?.sha256), name: match?.filename || "" };
+  });
+}
+
+// Only handleAdmin can reach these byte routes. Public/guest routes never use
+// the Studio cookie to bypass the visitor's explicitly selected guest identity.
+async function studioMediaSource(request, env, id) {
+  if (!["GET", "HEAD"].includes(request.method)) throw new HttpError(405, "不支持的请求方法");
+  const row = await env.DB.prepare("SELECT object_key,preview_object_key,mime_type,filename FROM media WHERE id=?").bind(id).first();
+  if (!row) throw new HttpError(404, "图片不存在");
+  const params = new URL(request.url).searchParams;
+  const preview = params.get("preview") === "1" && row.preview_object_key;
+  const object = await env.BUCKET.get(preview || row.object_key);
+  if (!object) throw new HttpError(404, "图片文件不存在");
+  return new Response(request.method === "HEAD" ? null : object.body, { headers: {
+    ...SECURITY_HEADERS, "Content-Type": preview ? "image/webp" : row.mime_type,
+    "Cache-Control": "private, no-store",
+    "Content-Disposition": `${params.get("download") === "1" ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(row.filename)}`,
+  } });
+}
+
+async function updateMediaMosaic(request, env, id) {
+  if (request.method !== "POST") throw new HttpError(405, "不支持的请求方法");
+  const row = await env.DB.prepare("SELECT id,mosaic_object_key FROM media WHERE id=?").bind(id).first();
+  if (!row) throw new HttpError(404, "图片不存在");
+  const mosaic = (await request.formData()).get("mosaic");
+  if (!(mosaic instanceof File) || !mosaic.size || mosaic.size > 64 * 1024 || mosaic.type !== "image/webp") throw new HttpError(400, "马赛克预览格式或大小无效");
+  const key = `mosaics/${id}-${crypto.randomUUID()}.webp`;
+  await env.BUCKET.put(key, mosaic.stream(), { httpMetadata: { contentType: "image/webp" } });
+  try {
+    const result = await env.DB.prepare("UPDATE media SET mosaic_object_key=? WHERE id=?").bind(key, id).run();
+    if (!result.meta.changes) throw new HttpError(409, "图片已删除，请刷新列表");
+  } catch (error) { await env.BUCKET.delete(key).catch(() => null); throw error; }
+  if (row.mosaic_object_key) await env.BUCKET.delete(row.mosaic_object_key).catch(() => null);
+  return { ok: true, hasMosaic: true };
+}
+
+async function moveMediaBatch(request, env, suppliedInput) {
+  if (request.method !== "POST") throw new HttpError(405, "移动照片请使用 POST 请求");
+  const input = suppliedInput || await readJson(request);
+  if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some(id => typeof id !== "string" || !validId(id))) throw new HttpError(400, "请勾选 1–200 张照片");
+  const ids = [...new Set(input.ids)];
+  const section = await portfolioSectionRecord(env, input.sectionId);
+  if (section.kind !== "gallery") throw new HttpError(400, "照片只能移动到图片类大板块");
+  if (!Object.prototype.hasOwnProperty.call(input, "subsectionId") || (input.subsectionId && (typeof input.subsectionId !== "string" || !validId(input.subsectionId)))) throw new HttpError(400, "请选择有效的目标小板块");
+  const subsectionId = await subsectionIdForSection(env, input.subsectionId, section.id);
+  const items = rows(await env.DB.prepare(`SELECT m.* FROM media m JOIN portfolio_sections s ON s.id=m.section_id
+    WHERE m.id IN (SELECT value FROM json_each(?)) AND m.kind='photo'`).bind(JSON.stringify(ids)).all());
+  if (items.length !== ids.length) throw new HttpError(409, "部分照片已删除或不属于图片板块，请刷新后重新选择");
+  const withAccess = await attachAllowedUserIds(env, "media", items);
+  const parents = [{ ...section, targetKind: "section" }];
+  let cursor = subsectionId;
+  while (cursor) {
+    const parent = await env.DB.prepare("SELECT * FROM portfolio_subsections WHERE id=? AND section_id=?").bind(cursor, section.id).first();
+    if (!parent || parents.some(item => item.id === cursor)) throw new HttpError(400, "目标板块层级无效");
+    parents.push({ ...parent, targetKind: "subsection" }); cursor = parent.parent_id;
+  }
+  for (const parent of parents) {
+    const [accessParent] = await attachAllowedUserIds(env, parent.targetKind, [parent]);
+    for (const item of withAccess.filter(photo => photo.visibility === "selected")) {
+      const allowed = new Set(accessParent.allowed_user_ids);
+      if (parent.visibility === "private" || (parent.visibility === "selected" && item.allowed_user_ids.some(id => !allowed.has(id)))
+        || (parent.visibility === "excluded" && item.allowed_user_ids.some(id => allowed.has(id)))) throw new HttpError(400, "目标板块的查看范围不包含照片的全部指定用户，请先调整权限");
+    }
+  }
+  const timestamp = nowIso();
+  const snapshot = JSON.stringify(items.map(item => ({ id: item.id, updated: item.updated_at })));
+  const updated = await env.DB.prepare(`UPDATE media SET section_id=?,subsection_id=?,album_id=NULL,updated_at=?
+    WHERE id IN (SELECT value FROM json_each(?)) AND
+      (SELECT COUNT(*) FROM media m JOIN json_each(?) snapshot ON m.id=json_extract(snapshot.value,'$.id')
+        AND m.updated_at=json_extract(snapshot.value,'$.updated'))=?`)
+    .bind(section.id, subsectionId, timestamp, JSON.stringify(ids), snapshot, ids.length).run();
+  if (updated.meta.changes !== ids.length) throw new HttpError(409, "照片在移动前已被修改，请刷新后重试；本次没有移动照片");
+  return { moved: ids.length, ids, section_id: section.id, subsection_id: subsectionId, updated_at: timestamp };
+}
+
+async function moveMediaPhoto(request, env, id) {
+  if (request.method !== "POST") throw new HttpError(405, "移动照片请使用 POST 请求");
+  if (!validId(id)) throw new HttpError(400, "图片 ID 错误");
+  const existing = await env.DB.prepare("SELECT * FROM media WHERE id = ?").bind(id).first();
+  if (!existing) throw new HttpError(404, "图片不存在");
+  if (existing.kind !== "photo") throw new HttpError(400, "文章内的插图不能通过此入口移动");
+  const section = await portfolioSectionRecord(env, existing.section_id);
+  if (section.kind !== "gallery") throw new HttpError(400, "此入口只用于图片板块中的照片");
+
+  const body = await readJson(request);
+  if (!Object.prototype.hasOwnProperty.call(body, "subsectionId")) throw new HttpError(400, "请选择目标小板块，或选择未分类");
+  const requestedId = body.subsectionId;
+  if (requestedId !== null && requestedId !== "" && (typeof requestedId !== "string" || !validId(requestedId))) {
+    throw new HttpError(400, "目标小板块 ID 错误");
+  }
+  const subsectionId = await subsectionIdForSection(env, requestedId, section.id);
+  // Single and batch moves share the complete three-level validation.
+  const moved = await moveMediaBatch(request, env, { ids: [id], sectionId: section.id, subsectionId });
+  const subsection = subsectionId
+    ? await env.DB.prepare("SELECT name FROM portfolio_subsections WHERE id = ?").bind(subsectionId).first()
+    : null;
+  const subsectionCounts = rows(await env.DB.prepare(`
+    SELECT ss.id, (SELECT COUNT(*) FROM media m WHERE m.subsection_id = ss.id AND m.kind = 'photo') AS media_count
+    FROM portfolio_subsections ss WHERE ss.id IN (?, ?)
+  `).bind(existing.subsection_id, subsectionId).all());
+  return {
+    id, section_id: section.id, subsection_id: subsectionId, subsection_name: subsection?.name || null,
+    album_id: null, updated_at: moved.updated_at, subsectionCounts,
+  };
+}
+
 async function adminMedia(request, env, id, action = "") {
+  if (id === "batch-move") return moveMediaBatch(request, env);
+  if (id === "duplicates") return mediaDuplicates(request, env);
+  if (action === "source") return studioMediaSource(request, env, id);
+  if (action === "mosaic") return updateMediaMosaic(request, env, id);
+  if (action === "move") return moveMediaPhoto(request, env, id);
   if (action === "preview") return updateMediaPreview(request, env, id);
   if (request.method === "GET") {
     const items = rows(await env.DB.prepare(`
       SELECT m.*, a.name AS album_name, ss.name AS subsection_name
       FROM media m LEFT JOIN albums a ON a.id = m.album_id
       LEFT JOIN portfolio_subsections ss ON ss.id = m.subsection_id
-      WHERE m.kind = 'photo'
       ORDER BY m.created_at DESC
     `).all());
     return (await attachAllowedUserIds(env, "media", items)).map(mediaDto);
@@ -5555,11 +5837,13 @@ async function adminMedia(request, env, id, action = "") {
     let subsectionId = Object.prototype.hasOwnProperty.call(body, "subsectionId")
       ? (validId(body.subsectionId) ? String(body.subsectionId) : null)
       : existing.subsection_id;
-    const caption = clampText(body.caption, 500);
-    const kind = body.kind === "inline" ? "inline" : "photo";
-    const visibility = normalizedVisibility(body.visibility);
-    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds);
-    let sectionId = null;
+    const caption = clampText(body.caption ?? existing.caption, 500);
+    const note = clampMultilineText(body.note ?? existing.note, 600);
+    const kind = existing.kind; // Metadata edits never convert article images to gallery photos.
+    const visibility = normalizedVisibility(body.visibility ?? existing.visibility);
+    const currentIds = rows(await env.DB.prepare("SELECT user_id FROM media_access_users WHERE media_id=?").bind(id).all()).map(row => row.user_id);
+    const allowedUserIds = await validatedAllowedUserIds(env, visibility, body.allowedUserIds ?? currentIds);
+    let sectionId = existing.section_id;
     if (kind === "photo") {
       if (albumId) {
         const album = await env.DB.prepare("SELECT section_id FROM albums WHERE id = ?").bind(albumId).first();
@@ -5574,18 +5858,19 @@ async function adminMedia(request, env, id, action = "") {
       if (subsectionId) await validateChildAccessSubset(env, "subsection", subsectionId, visibility, allowedUserIds);
       if (albumId) await validateChildAccessSubset(env, "album", albumId, visibility, allowedUserIds);
     }
-    await env.DB.prepare("UPDATE media SET section_id = ?, subsection_id = ?, album_id = ?, caption = ?, kind = ?, visibility = ?, updated_at = ? WHERE id = ?")
-      .bind(sectionId, subsectionId, albumId, caption, kind, visibility, nowIso(), id).run();
+    await env.DB.prepare("UPDATE media SET section_id = ?, subsection_id = ?, album_id = ?, caption = ?, note = ?, kind = ?, visibility = ?, updated_at = ? WHERE id = ?")
+      .bind(sectionId, subsectionId, albumId, caption, note, kind, visibility, nowIso(), id).run();
     await replaceAllowedUsers(env, "media", id, allowedUserIds);
-    return { id, allowed_user_ids: allowedUserIds };
+    return { id, note, visibility, allowed_user_ids: allowedUserIds };
   }
   if (request.method === "DELETE") {
     const media = await env.DB.prepare(
-      "SELECT object_key, preview_object_key FROM media WHERE id = ?",
+      "SELECT object_key, preview_object_key, mosaic_object_key FROM media WHERE id = ?",
     ).bind(id).first();
     if (media) {
       await env.BUCKET.delete(media.object_key);
       if (media.preview_object_key) await env.BUCKET.delete(media.preview_object_key);
+      if (media.mosaic_object_key) await env.BUCKET.delete(media.mosaic_object_key);
     }
     await env.DB.batch([
       env.DB.prepare("UPDATE content SET cover_media_id = NULL WHERE cover_media_id = ?").bind(id),
@@ -6120,11 +6405,19 @@ async function handleAdmin(request, env, url) {
   }
   if (resource === "dashboard" && request.method === "GET") return adminDashboard(env);
   if (resource === "sections") return adminSections(request, env, id);
+  if (resource === "security") return adminSecurity(request, env, id, action);
   if (resource === "subsections") return adminSubsections(request, env, id);
   if (resource === "content") return adminContent(request, env, id);
   if (resource === "changelogs") return adminChangelogs(request, env, id);
   if (resource === "albums") return adminAlbums(request, env, id);
   if (resource === "media") return adminMedia(request, env, id, action);
+  if (resource === "photo-uploads" && request.method === "DELETE") {
+    if (!/^[a-f0-9-]{36}$/.test(id)) throw new HttpError(400, "上传标识无效");
+    await env.DB.prepare("INSERT OR IGNORE INTO photo_upload_cancellations(token,created_at) VALUES(?,?)").bind(id, nowIso()).run();
+    const media = await env.DB.prepare("SELECT id FROM media WHERE upload_token=?").bind(id).first();
+    if (media) await adminMedia(request, env, media.id);
+    return { ok: true };
+  }
   if (resource === "asset-folders") return adminAssetFolders(request, env, id);
   if (resource === "assets") return adminAssets(request, env, id, action);
   if (resource === "asset-uploads") return adminAssetUploads(request, env, id, action, detail);
@@ -6322,6 +6615,23 @@ async function handleApi(request, env, url, ctx) {
   if (url.pathname === "/api/bootstrap" && request.method === "GET") {
     await requireWebsiteVisitor(request, env);
     return json(await publicBootstrap(request, env));
+  }
+  if (url.pathname === "/api/content-unlock" && request.method === "POST") {
+    await requireWebsiteVisitor(request, env);
+    return json(await unlockContent(request, env));
+  }
+  if (url.pathname === "/api/content-release" && request.method === "POST") {
+    await requireWebsiteVisitor(request, env);
+    return json(await releaseContentGrants(request, env));
+  }
+  if (url.pathname.startsWith("/api/content-access/") && request.method === "GET") {
+    await requireWebsiteVisitor(request, env);
+    const [, , , kind, id] = url.pathname.split("/");
+    if (!SECURITY_TABLES[kind] || !validId(id)) throw new HttpError(400, "内容参数无效");
+    const security = await contentSecurity(request, env);
+    security.requireView(kind, id, { allowLocked: true });
+    const access = security.decorate(kind, { id });
+    return json({ id, locked: access.locked, locks: access.locks, canDownload: access.canDownload });
   }
   if (url.pathname.startsWith("/api/content/") && request.method === "GET") {
     await requireWebsiteVisitor(request, env);

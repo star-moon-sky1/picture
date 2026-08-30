@@ -3,6 +3,7 @@
   "version": "2.2.0",
   "private": true,
   "scripts": {
+    "build:assets": "node scripts/prepare-heic.mjs",
     "dev": "wrangler dev",
     "check": "node --check src/worker.js && wrangler deploy --dry-run",
     "test:studio": "node test/studio-ui.mjs",
@@ -10,10 +11,15 @@
     "test:upload": "node test/resumable-upload.mjs",
     "test:glass": "node test/glass-motion.mjs",
     "test:i18n": "node test/i18n.mjs",
-    "test": "npm run test:studio && npm run test:glass && npm run test:i18n && npm run test:access && npm run test:upload",
+    "test:organize": "node test/content-organize.mjs && node test/organize-ui.mjs",
+    "test": "npm run test:studio && npm run test:glass && npm run test:i18n && npm run test:access && npm run test:upload && npm run test:organize",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
+    "linkedom": "0.18.12",
     "wrangler": "^4.30.0"
+  },
+  "dependencies": {
+    "heic-to": "1.5.2"
   }
 }

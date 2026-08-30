@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const studioHtml = await readFile(new URL("../public/studio.html", import.meta.url), "utf8");
+const photoScript = await readFile(new URL("../public/studio-organize.js", import.meta.url), "utf8");
+new Function(photoScript);
 const inlineScripts = [...studioHtml.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
   .map((match) => match[1])
   .filter((source) => source.trim());
@@ -26,8 +28,13 @@ assert.match(studioHtml, /pause\.hidden=true/);
 assert.match(studioHtml, /setTimeout\(\(\)=>job\.remove\(\),600\)/);
 assert.match(studioHtml, /finish\(text\)\{[^}]*job\.remove\(\)/);
 assert.match(studioHtml, /上传到图片小板块/);
-assert.match(studioHtml, /form\.append\("subsectionId", subsectionId\)/);
-assert.match(studioHtml, /refreshMediaSubsectionOptions\(sectionId,subsectionId\)/);
+assert.match(photoScript, /form\.append\("subsectionId", subsectionId\)/);
+assert.match(photoScript, /refreshMediaSubsectionOptions\(sectionId, subsectionId\)/);
+assert.match(studioHtml, /id="media-file"[^>]*multiple/);
+assert.match(studioHtml, /id="photo-selection-previews"/);
+assert.match(studioHtml, /id="photo-upload-queue"/);
+assert.match(photoScript, /uploadPartWithRetry\("\/api\/admin\/media"/);
+assert.match(photoScript, /entry\.allowDuplicate/);
 assert.match(studioHtml, /uploadTarget\.value=event\.target\.value/);
 for (const field of ["section-description", "subsection-description"]) {
   const input = studioHtml.match(new RegExp(`<input[^>]*id="${field}"[^>]*>`))?.[0];

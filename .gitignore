@@ -2,3 +2,6 @@
 .wrangler/
 node_modules/
 *.log
+public/vendor/heic-to.js
+public/vendor/heic-to.LICENSE
+public/vendor/heic-to.SOURCE.txt

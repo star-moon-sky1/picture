@@ -1515,6 +1515,7 @@
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/vnext.css">
   <link rel="stylesheet" href="/material.css">
+  <link rel="stylesheet" href="/organize.css">
 </head>
 <body>
   <!-- ========================================================
@@ -1952,6 +1953,7 @@
        页面 JavaScript
        负责读取 API、切换板块、渲染内容和绑定按钮事件。
        ======================================================== -->
+  <script src="/portfolio-organize.js"></script>
   <script>
     /* ---------- 01. 页面状态：保存从服务器读取的数据和当前打开的内容。 ---------- */
     const state = {
@@ -2123,11 +2125,15 @@
     }
 
     async function api(path, options = {}) {
+      const headers = new Headers(options.headers);
+      const tokens = contentGrantTokens(); if(tokens) headers.set("X-Content-Grants", tokens);
+      options = { ...options, headers };
       const response = await fetch(path, options);
       const contentType = response.headers.get("content-type") || "";
       const data = contentType.includes("application/json") ? await response.json() : null;
       if (!response.ok) {
         const error = new Error(data?.error || `请求失败（${response.status}）`);
+        error.status = response.status;
         error.code = data?.errorCode || "";
         if (error.code === "BOT_DETECTED") handleRuntimeBotDetected(error.message);
         throw error;
@@ -2446,11 +2452,11 @@
 
     /*
      * 下载权限同时控制三个入口：文章顶部 PDF、文章底部 PDF、图片原片。
-     * 只有审核通过的登录账号可以看到入口；图片还必须确实存在原片下载地址。
+     * 入口跟随服务端计算的逐项下载权限；图片还必须确实存在原片下载地址。
      * 后端会再次验证身份，因此手工取消 hidden 也不能绕过权限。
      */
     function syncProtectedDownloadControls() {
-      const fullAccess = hasFullAccess();
+      const fullAccess = Boolean(state.currentContent?.canDownload);
       document.querySelectorAll("#reader-print, #content-pdf").forEach((button) => {
         button.hidden = !fullAccess;
       });
@@ -2458,9 +2464,9 @@
       const download = document.getElementById("image-download");
       const currentPhoto = state.imageSequence[state.currentImageIndex];
       const downloadUrl = String(currentPhoto?.downloadUrl || "");
-      const canDownloadOriginal = fullAccess && Boolean(downloadUrl);
+      const canDownloadOriginal = Boolean(currentPhoto?.canDownload) && Boolean(downloadUrl);
       download.hidden = !canDownloadOriginal;
-      if (canDownloadOriginal) download.href = downloadUrl;
+      if (canDownloadOriginal) download.href = protectedMediaUrl(downloadUrl);
       else download.removeAttribute("href");
     }
 
@@ -2579,11 +2585,13 @@
 
     function navigateSection(id, { historyMode = "push", animate = true } = {}) {
       if (id === "account") id = "settings";
-      if (id === "resources") { state.activePortfolioSection = "section-resources"; renderPortfolio(); id = "portfolio"; }
+      if (id === "resources") { activePortfolioCategory = "resources"; state.activePortfolioSection = "section-resources"; renderPortfolio(); id = "portfolio"; }
       if (id === "contact") id = "about";
       if (id === "ai-helper" && !hasFullAccess()) { showAuthLock("ai"); return; }
       if (id === "account" && !state.auth.authenticated) { showAuthLock("account"); return; }
+      const leavingPortfolio = state.activeSection === "portfolio" && id !== "portfolio";
       if (showSection(id, { animate })) {
+        if (leavingPortfolio) closeProtectedView("");
         if (state.runtimeSecurity.started) state.runtimeSecurity.counters.navigations += 1;
         updateSectionHistory(id, historyMode);
         scheduleGuestSectionTrack(id);
@@ -2654,166 +2662,10 @@
       return card;
     }
 
-    function renderGallerySection(host, section) {
-      const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
-      const validSubsectionIds = new Set(subsections.map((item) => item.id));
-      let activeSubsection = state.activeSubsections[section.id];
-      if (!activeSubsection || (activeSubsection !== "all" && !validSubsectionIds.has(activeSubsection))) {
-        activeSubsection = (Number(section.show_all) || !subsections.length) ? "all" : subsections[0].id;
-        state.activeSubsections[section.id] = activeSubsection;
-      }
 
-      const tabs = document.createElement("div"); tabs.className = "album-tabs";
-      const selectSubsection = (subsectionId) => { state.activeSubsections[section.id] = subsectionId; renderPortfolioPanel(); };
-      if (Number(section.show_all)) {
-        const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-        all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
-        all.addEventListener("click", () => selectSubsection("all")); tabs.append(all);
-      }
-      subsections.forEach((subsection) => {
-        const button = document.createElement("button"); button.type = "button"; button.textContent = subsection.name;
-        button.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
-        button.title = subsection.description || subsection.name;
-        button.addEventListener("click", () => selectSubsection(subsection.id)); tabs.append(button);
-      });
-      if (subsections.length) host.append(tabs);
+    function renderPortfolioPanel() { renderOrganizedPanel(); }
 
-      const gallery = document.createElement("div"); gallery.className = "gallery"; host.append(gallery);
-      const photos = (state.data?.media || []).filter((item) => {
-        return item.section_id === section.id
-          && (activeSubsection === "all" || item.subsection_id === activeSubsection);
-      });
-      const files = (state.data?.galleryAssets || []).filter((item) => item.section_id === section.id
-        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      if (!photos.length && !files.length) { gallery.append(empty("这个图片板块还没有上传图片或文件。")); return; }
-      photos.forEach((photo) => {
-        const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
-        card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
-        const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || "照片";
-        // 图片网格只展示照片本身，不显示上传文件名、文件编号或说明文字。
-        card.append(image); card.addEventListener("click", () => openImage(photo, photos));
-        card.addEventListener("keydown", (event) => { if (event.key === "Enter") openImage(photo, photos); }); gallery.append(card);
-      });
-      files.filter((asset) => asset.kind === "video").forEach((asset) => {
-        const card = document.createElement("div"); card.className = "photo-card gallery-video-card"; card.tabIndex = 0;
-        card.setAttribute("role", "button"); card.setAttribute("aria-label", `播放视频：${asset.display_name}`);
-        const video = document.createElement("video"); video.preload = "metadata"; video.muted = true; video.playsInline = true;
-        video.src = asset.url; if (asset.poster_url) video.poster = asset.poster_url;
-        const badge = document.createElement("span"); badge.className = "gallery-video-badge"; badge.textContent = "▶ 视频";
-        const open = () => openResourceAsset(asset);
-        card.append(video, badge); card.addEventListener("click", open);
-        card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
-      });
-      files.filter((asset) => asset.kind !== "video").forEach((asset) => gallery.append(resourceCardForAsset(asset)));
-    }
-
-    function renderPortfolioPanel() {
-      const sections = portfolioSections();
-      const section = sections.find((item) => item.id === state.activePortfolioSection) || sections[0];
-      const host = document.getElementById("portfolio-panel-host"); host.replaceChildren();
-      if (!section) { host.append(empty("还没有个人空间板块，请在站长后台新建。")); return; }
-      state.activePortfolioSection = section.id;
-      if (section.kind === "gallery") { renderGallerySection(host, section); return; }
-      if (section.kind === "resources") {
-        const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
-        const canShowAll = Number(section.show_all) || !subsections.length;
-        let activeSubsection = state.activeSubsections[section.id] || (canShowAll ? "all" : subsections[0]?.id);
-        if ((activeSubsection === "all" && !canShowAll)
-          || (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection))) {
-          activeSubsection = canShowAll ? "all" : subsections[0]?.id;
-        }
-        state.activeSubsections[section.id] = activeSubsection;
-        state.resourceRootLocked = false;
-        if (subsections.length) {
-          const tabs = document.createElement("div"); tabs.className = "portfolio-subtabs";
-          const selectSubsection = (subsectionId) => {
-            state.activeSubsections[section.id] = subsectionId;
-            state.currentResourceFolder = "";
-            renderPortfolioPanel();
-          };
-          if (canShowAll) {
-            const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-            all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
-            all.addEventListener("click", () => selectSubsection("all")); tabs.append(all);
-          }
-          subsections.forEach((subsection) => {
-            const button = document.createElement("button"); button.type = "button"; button.textContent = subsection.name;
-            button.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
-            button.title = subsection.description || subsection.name;
-            button.addEventListener("click", () => selectSubsection(subsection.id)); tabs.append(button);
-          });
-          host.append(tabs);
-        }
-        state.resourcePanelNode ||= document.querySelector("#resources .section-inner");
-        if (state.resourcePanelNode) host.append(state.resourcePanelNode);
-        renderResources(activeSubsection);
-        return;
-      }
-
-      const subsections = (state.data?.subsections || []).filter((item) => item.section_id === section.id);
-      const canShowAll = Number(section.show_all) || !subsections.length;
-      let activeSubsection = state.activeSubsections[section.id] || (canShowAll ? "all" : subsections[0]?.id);
-      if ((activeSubsection === "all" && !canShowAll)
-        || (activeSubsection !== "all" && !subsections.some((item) => item.id === activeSubsection))) {
-        activeSubsection = canShowAll ? "all" : subsections[0]?.id;
-      }
-      state.activeSubsections[section.id] = activeSubsection;
-      if (subsections.length) {
-        const subTabs = document.createElement("div"); subTabs.className = "portfolio-subtabs";
-        const selectSubsection = (subsectionId) => { state.activeSubsections[section.id] = subsectionId; renderPortfolioPanel(); };
-        if (canShowAll) {
-          const all = document.createElement("button"); all.type = "button"; all.textContent = "全部";
-          all.className = `tab-button${activeSubsection === "all" ? " active" : ""}`;
-          all.addEventListener("click", () => selectSubsection("all")); subTabs.append(all);
-        }
-        subsections.forEach((subsection) => {
-          const control = document.createElement("button"); control.type = "button"; control.textContent = subsection.name;
-          control.className = `tab-button${activeSubsection === subsection.id ? " active" : ""}`;
-          control.title = subsection.description || subsection.name;
-          control.addEventListener("click", () => selectSubsection(subsection.id)); subTabs.append(control);
-        });
-        host.append(subTabs);
-      }
-
-      const grid = document.createElement("div"); grid.className = "content-grid"; host.append(grid);
-      const items = (state.data?.content || []).filter((item) => contentBelongsToSection(item, section)
-        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      const photos = (state.data?.media || []).filter((item) => item.section_id === section.id
-        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      const files = (state.data?.sectionAssets || []).filter((item) => item.section_id === section.id
-        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      if (!items.length && !photos.length && !files.length) grid.append(empty(`“${section.name}”尚未发布内容。`));
-      else items.forEach((item) => grid.append(contentCard(item, section)));
-      if (photos.length) {
-        const gallery = document.createElement("div"); gallery.className = "gallery";
-        photos.forEach((photo) => {
-          const card = document.createElement("div"); card.className = "photo-card"; card.tabIndex = 0;
-          card.setAttribute("role", "button"); card.setAttribute("aria-label", photo.caption ? `查看照片：${photo.caption}` : "查看照片");
-          const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || "照片";
-          const open = () => openImage(photo, photos); card.append(image); card.addEventListener("click", open);
-          card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); gallery.append(card);
-        });
-        host.append(gallery);
-      }
-      if (files.length) {
-        const resources = document.createElement("div"); resources.className = "resource-grid";
-        files.forEach((asset) => resources.append(resourceCardForAsset(asset))); host.append(resources);
-      }
-    }
-
-    function renderPortfolio() {
-      const sections = portfolioSections();
-      const tabs = document.getElementById("portfolio-tabs"); tabs.replaceChildren();
-      if (!sections.some((item) => item.id === state.activePortfolioSection)) state.activePortfolioSection = sections[0]?.id || null;
-      sections.forEach((section) => {
-        const button = document.createElement("button"); button.type = "button"; button.textContent = section.name;
-        button.className = `tab-button${section.id === state.activePortfolioSection ? " active" : ""}`;
-        button.title = section.description || section.name;
-        button.addEventListener("click", () => { state.activePortfolioSection = section.id; renderPortfolio(); });
-        tabs.append(button);
-      });
-      renderPortfolioPanel();
-    }
+    function renderPortfolio() { renderOrganizedPortfolio(); }
 
     /* ---------- 06. 文件目录、文档阅读和视频清晰度。 ---------- */
     function formatBytes(value) {
@@ -2849,10 +2701,12 @@
       const type = document.createElement("span"); type.className = "resource-badge"; type.textContent = "文件夹"; badges.append(type);
       if (folder.archive_asset_id && (state.data?.assets || []).some((asset) => asset.id === folder.archive_asset_id)) { const zip = document.createElement("span"); zip.className = "resource-badge"; zip.textContent = "支持整包下载"; badges.append(zip); }
       card.append(icon, title, description, badges);
-      const open = () => {
-        state.currentResourceFolder = folder.id; renderResources();
+      const open = async () => {
+        if (!(await ensureContentUnlocked("assetFolder", folder))) return;
+        state.currentResourceFolder = folder.id;
         const reader = document.getElementById("reader-dialog"); if (reader.open) reader.close();
-        state.activePortfolioSection = "section-resources";
+        state.activePortfolioSection = folder.section_id || "section-resources";
+        activePortfolioCategory = "resources";
         if (state.activeSection !== "portfolio") navigateSection("portfolio");
         renderPortfolio();
       };
@@ -2871,10 +2725,11 @@
       if ((asset.variants || []).length) { const versions = document.createElement("span"); versions.className = "resource-badge"; versions.textContent = `${asset.variants.length} 个版本`; badges.append(versions); }
       if (!asset.canDownload) { const lock = document.createElement("span"); lock.className = "resource-badge"; lock.textContent = "登录后下载"; badges.append(lock); }
       card.append(icon, title, description, badges);
-      const open = () => {
+      const open = async () => {
+        if (!(await ensureContentUnlocked("asset", asset))) return;
         if (asset.kind === "archive") {
           if (!asset.downloadUrl) { showAuthLock("download"); return; }
-          location.href = asset.downloadUrl; return;
+          location.href = protectedMediaUrl(asset.downloadUrl); return;
         }
         openResourceAsset(asset);
       };
@@ -2883,44 +2738,7 @@
       return card;
     }
 
-    function renderResources(requestedSubsection = null) {
-      const folders = state.data?.assetFolders || [];
-      const assets = state.data?.assets || [];
-      const resourceSection = portfolioSections().find((item) => item.kind === "resources");
-      const activeSubsection = requestedSubsection || state.activeSubsections[resourceSection?.id] || "all";
-      if (state.currentResourceFolder && !folders.some((item) => item.id === state.currentResourceFolder)) state.currentResourceFolder = "";
-      state.resourceRootLocked = false;
-      const current = state.currentResourceFolder || null;
-      document.getElementById("resource-path").textContent = resourceFolderPath(current);
-      const currentFolder = folders.find((item) => item.id === current);
-      const up = document.getElementById("resource-up");
-      up.hidden = !current || (state.resourceRootLocked && !currentFolder?.parent_id);
-      const folderArchive = currentFolder?.archive_asset_id
-        ? assets.find((item) => item.id === currentFolder.archive_asset_id && item.kind === "archive"
-          && (activeSubsection === "all" || item.subsection_id === activeSubsection))
-        : null;
-      const folderDownload = document.getElementById("resource-folder-download");
-      folderDownload.hidden = !folderArchive;
-      folderDownload.dataset.assetId = folderArchive?.id || "";
-      const grid = document.getElementById("resource-grid"); grid.replaceChildren();
-      folders.filter((item) => (item.parent_id || null) === current).forEach((folder) => grid.append(resourceCardForFolder(folder)));
-      const visibleAssets = assets.filter((item) => item.status === "ready" && (item.folder_id || null) === current
-        && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-      visibleAssets.forEach((asset) => grid.append(resourceCardForAsset(asset)));
-      if (!current) {
-        const photos = (state.data?.media || []).filter((item) => item.section_id === resourceSection?.id
-          && (activeSubsection === "all" || item.subsection_id === activeSubsection));
-        photos.forEach((photo) => {
-          const card = document.createElement("article"); card.className = "resource-card"; card.tabIndex = 0; card.setAttribute("role", "button");
-          const image = document.createElement("img"); image.loading = "lazy"; image.src = photo.previewUrl || photo.url; image.alt = photo.caption || photo.filename;
-          image.style.cssText = "width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:14px";
-          const title = document.createElement("h3"); title.textContent = photo.caption || photo.filename;
-          const open = () => openImage(photo, photos); card.append(image, title); card.addEventListener("click", open);
-          card.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); }); grid.append(card);
-        });
-      }
-      if (!grid.childElementCount) grid.append(empty("这个文件夹暂时没有可见资源。"));
-    }
+    function renderResources(requestedSubsection = null) { renderOrganizedResources(requestedSubsection); }
 
     function resourceDownloadButton(label, url) {
       if (!url) {
@@ -3007,7 +2825,9 @@
       event.preventDefault();
     }
 
-    function openResourceAsset(asset) {
+    async function openResourceAsset(asset) {
+      if (!(await ensureContentUnlocked("asset", asset))) return;
+      asset = { ...asset, url:protectedMediaUrl(asset.url), downloadUrl:protectedMediaUrl(asset.downloadUrl), poster_url:protectedMediaUrl(asset.poster_url), variants:(asset.variants||[]).map(item=>({...item,url:protectedMediaUrl(item.url),downloadUrl:protectedMediaUrl(item.downloadUrl)})) };
       state.activeResourceAsset = asset;
       state.activeResourceVideo = null;
       const dialog = document.getElementById("resource-dialog");
@@ -3021,6 +2841,7 @@
       const variants = (asset.variants || []).filter((item) => item.status === "ready");
       if (asset.kind === "video") {
         const video = document.createElement("video"); video.controls = true; video.playsInline = true; video.preload = "metadata";
+        video.setAttribute("controlsList", "nodownload noremoteplayback"); video.disablePictureInPicture = true;
         video.tabIndex = 0;
         video.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
         video.setAttribute("aria-label", `播放视频：${asset.display_name}`);
@@ -3226,7 +3047,7 @@
         const previewUrl = new URL(source, location.href);
         previewUrl.searchParams.delete("download");
         previewUrl.searchParams.set("preview", "1");
-        image.setAttribute("src", `${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`);
+        image.setAttribute("src", protectedMediaUrl(`${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`));
       });
 
       /*
@@ -3252,12 +3073,15 @@
         const source = image.getAttribute("src") || image.src;
         const mediaId = mediaIdFromUrl(source);
         const caption = String(image.getAttribute("alt") || image.getAttribute("title") || "").trim();
+        const access = (state.currentContent?.inlineMedia || []).find(item => item.id === mediaId);
         return {
+          ...(access || {}), mediaId,
           // 同一张图片可能在一篇文章出现多次，因此预览序列使用“文章 + 位置”作为唯一编号。
           id: `reader-${state.currentContent?.id || "content"}-${index}`,
           previewUrl: source,
           url: source,
-          downloadUrl: mediaId ? `/media/${encodeURIComponent(mediaId)}?download=1` : "",
+          canDownload: Boolean(access?.canDownload),
+          downloadUrl: access?.canDownload && mediaId ? `/media/${encodeURIComponent(mediaId)}?download=1` : "",
           caption,
         };
       });
@@ -3383,24 +3207,34 @@
       });
     }
 
-    function showImageAt(index) {
+    async function showImageAt(index) {
       const photos = state.imageSequence;
       if (!photos.length) return;
-      state.currentImageIndex = clampNumber(index, 0, photos.length - 1);
-      const photo = photos[state.currentImageIndex];
+      const nextIndex = clampNumber(index, 0, photos.length - 1);
+      const photo = photos[nextIndex];
+      const previous = photos[state.currentImageIndex];
+      if (previous && previous.id !== photo.id) await releaseViewGrants(`media:${previous.mediaId || previous.id}`);
+      const mediaId = photo.mediaId || mediaIdFromUrl(photo.previewUrl || photo.url) || photo.id;
+      if (mediaId && !String(mediaId).startsWith("reader-")) {
+        const target = { ...photo, id:mediaId };
+        if (!(await ensureContentUnlocked("media", target))) return false;
+        Object.assign(photo,target,{id:photo.id,mediaId});
+      }
+      state.currentImageIndex = nextIndex;
       hideImageBoundaryNotice();
       resetImageZoom();
       // 弹窗展示压缩预览；只有“下载原片”链接会请求 download=1。
-      document.getElementById("image-preview").src = photo.previewUrl || photo.url;
+      document.getElementById("image-preview").src = protectedMediaUrl(photo.previewUrl || photo.url);
       document.getElementById("image-preview").alt = photo.caption || "照片预览";
       // 可以显示站长填写的说明，但绝不使用内部文件名或文件编号兜底。
-      document.getElementById("image-caption").textContent = photo.caption || "";
+      document.getElementById("image-caption").textContent = `${photo.caption || photo.filename || ""}${photo.note ? ` · ${photo.note}` : ""}`;
       const hasMultiple = photos.length > 1;
       document.getElementById("image-previous").hidden = !hasMultiple;
       document.getElementById("image-next").hidden = !hasMultiple;
       syncProtectedDownloadControls();
       // 当前图显示后立即准备前后两张，切换时通常可以直接从浏览器缓存读取。
       preloadAdjacentImages();
+      return true;
     }
 
     function stepImage(offset) {
@@ -3417,11 +3251,11 @@
       showImageAt(nextIndex);
     }
 
-    function openImage(photo, photos = [photo]) {
+    async function openImage(photo, photos = [photo]) {
       state.imageSequence = photos.length ? photos : [photo];
       const selectedIndex = state.imageSequence.findIndex((item) => item.id === photo.id);
-      showImageAt(selectedIndex >= 0 ? selectedIndex : 0);
-      document.getElementById("image-dialog").showModal();
+      if (!(await showImageAt(selectedIndex >= 0 ? selectedIndex : 0))) return;
+      if (!document.getElementById("image-dialog").open) document.getElementById("image-dialog").showModal();
       requestAnimationFrame(renderImageZoom);
     }
 
@@ -3638,6 +3472,7 @@
 
     /* ---------- 08. 文章阅读器、点赞/点踩和评论回复。 ---------- */
     async function openContent(id) {
+      if (!(await ensureContentUnlocked("content", {id}))) return;
       const dialog = document.getElementById("reader-dialog");
       state.currentContent = null;
       syncProtectedDownloadControls();
@@ -3858,7 +3693,7 @@
 
     async function downloadCurrentContentPdf(button) {
       // 前端隐藏只是界面层保护；这里再次校验，防止通过控制台直接调用函数。
-      if (!hasFullAccess()) { showAuthLock("download"); return; }
+      if (!state.currentContent?.canDownload) { showAuthLock("download"); return; }
       if (!state.currentContent || state.pdfDownloading) return;
 
       const originalLabel = button.textContent;
@@ -3869,6 +3704,7 @@
       button.textContent = "生成中…";
 
       try {
+        const exportContent = await api(`/api/content/${encodeURIComponent(state.currentContent.id)}?download=1`);
         button.textContent = "加载组件…";
         await ensurePdfLibrary();
         button.textContent = "生成中…";
@@ -3892,6 +3728,14 @@
         const body = document.getElementById("reader-body").cloneNode(true);
         body.removeAttribute("id");
         body.classList.add("pdf-body");
+        // PDF permission does not silently export separately protected images.
+        body.querySelectorAll("img").forEach(image => {
+          const mediaId = image.dataset.mediaId || mediaIdFromUrl(image.getAttribute("src"));
+          if (mediaId && !(exportContent.inlineMedia || []).some(item => item.id === mediaId && item.canDownload && !item.locked)) {
+            const placeholder = document.createElement("p"); placeholder.textContent = "此图片未开放下载"; image.replaceWith(placeholder);
+          }
+        });
+        body.querySelectorAll("video,audio,iframe,.resource-card").forEach(item => item.remove());
         exportRoot.append(kind, title, meta, body);
         document.body.append(exportRoot);
 
@@ -4353,16 +4197,19 @@
       navigateSection(button.dataset.section);
     }));
     document.querySelectorAll("[data-login-required]").forEach((button) => button.addEventListener("click", () => showAuthLock("account")));
-    document.getElementById("resource-up").addEventListener("click", () => {
+    document.getElementById("resource-up").addEventListener("click", async () => {
       const current = (state.data?.assetFolders || []).find((item) => item.id === state.currentResourceFolder);
       if (state.resourceRootLocked && current && !current.parent_id) return;
-      state.currentResourceFolder = current?.parent_id || "";
-      renderPortfolioPanel();
+      try {
+        if (current && await releaseViewGrants(`assetFolder:${current.id}`)) await refreshProtectedContent();
+        state.currentResourceFolder = current?.parent_id || "";
+        renderPortfolioPanel();
+      } catch (error) { alert(error.message); }
     });
     document.getElementById("resource-folder-download").addEventListener("click", (event) => {
       const asset = (state.data?.assets || []).find((item) => item.id === event.currentTarget.dataset.assetId);
       if (!asset?.downloadUrl) { showAuthLock("download"); return; }
-      location.href = asset.downloadUrl;
+      location.href = protectedMediaUrl(asset.downloadUrl);
     });
 
     const sidebarToggle = document.getElementById("sidebar-toggle");
@@ -4697,6 +4544,7 @@
       if (event.target === dialog) dialog.close();
     }));
 
+    initializeContentLocks();
     /* 命中过运行时拦截的同一标签页刷新后仍保持关闭状态，不能靠刷新绕过。 */
     if (sessionStorage.getItem("xyj_runtime_blocked") === "1") {
       handleRuntimeBotDetected("本标签页此前因异常自动化行为被终止，请将其关闭后重新访问。");

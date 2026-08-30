@@ -3,6 +3,7 @@
   "name": "xingyueji",
   "main": "src/worker.js",
   "compatibility_date": "2026-08-06",
+  "build": { "command": "npm run build:assets" },
 
   // 正式站只允许通过自定义域名访问，关闭 workers.dev 与临时预览入口。
   "workers_dev": false,

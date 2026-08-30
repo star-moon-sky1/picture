@@ -258,7 +258,7 @@ assert.match(indexHtml, /resourceDialog\.addEventListener\("keydown", handleReso
 assert.match(indexHtml, /state\.activeResourceVideo = null;[\s\S]*?state\.hlsPlayer\?\.destroy/);
 
 const videoKeyboardSource = indexHtml.match(
-  /const RESOURCE_VIDEO_SEEK_SECONDS = 5;[\s\S]*?(?=\n    function openResourceAsset)/,
+  /const RESOURCE_VIDEO_SEEK_SECONDS = 5;[\s\S]*?(?=\n    (?:async )?function openResourceAsset)/,
 )?.[0];
 assert.ok(videoKeyboardSource, "resource video keyboard controller must remain extractable");
 const activeResourceVideo = {
