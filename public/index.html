@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="/assets/avatar-glass.png?v=312c1e75">
   <!-- PWA 清单决定安装后的名称、图标、启动地址与独立窗口外观。 -->
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#f6efe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111b21" media="(prefers-color-scheme: dark)">
   <!-- iOS/部分安卓浏览器从主屏幕启动时使用独立应用外观；不影响普通网页访问。 -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -60,7 +60,7 @@
        ========================================================= */
     * { box-sizing: border-box; }
     :root {
-      --cream: #faf8f4;
+      --cream: #ffffff;
       --paper: #ffffff;
       --ink: #203037;
       --muted: #718087;
@@ -1525,7 +1525,7 @@
        ======================================================== -->
   <!-- 默认 hidden 可避免已登录用户刷新时短暂闪过登录框；boot() 完成会话检查后再决定显示哪一层。 -->
   <section id="entry-screen" class="entry-screen" aria-labelledby="entry-title" hidden>
-    <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留纯米白底色。 -->
+    <!-- 仅公开照片会被 JavaScript 放入这里；没有照片或接口失败时保留纯白底色。 -->
     <div id="entry-photo-background" class="entry-photo-background" aria-hidden="true"></div>
     <!-- 单一开关同时控制白天与夜览，不再展开多级主题菜单。 -->
     <div class="night-mode-control floating-night-mode-control" data-theme-switch>

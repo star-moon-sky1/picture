@@ -29,5 +29,13 @@ assert.match(studioHtml, /上传到图片小板块/);
 assert.match(studioHtml, /form\.append\("subsectionId", subsectionId\)/);
 assert.match(studioHtml, /refreshMediaSubsectionOptions\(sectionId,subsectionId\)/);
 assert.match(studioHtml, /uploadTarget\.value=event\.target\.value/);
+for (const field of ["section-description", "subsection-description"]) {
+  const input = studioHtml.match(new RegExp(`<input[^>]*id="${field}"[^>]*>`))?.[0];
+  assert.ok(input, `${field} must remain editable`);
+  assert.doesNotMatch(input, /\brequired\b/, `${field} must be optional`);
+  assert.match(input, /placeholder="可留空"/);
+  assert.match(studioHtml, new RegExp(`<label for="${field}">[^<]*选填[^<]*</label>`));
+}
+assert.match(studioHtml, /prompt\("小板块说明（选填，可留空）"\)/);
 
 console.log("studio UI regression passed");

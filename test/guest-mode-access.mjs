@@ -5,6 +5,7 @@ const baseUrl = "http://localhost";
 const userAgent = "xingyueji-access-regression";
 const miniflare = new Miniflare({
   modules: true,
+  cf: false, // Use built-in request metadata; regression tests must not fetch external cf.json.
   scriptPath: "src/worker.js",
   compatibilityDate: "2026-08-06",
   d1Databases: ["DB"],
@@ -91,6 +92,32 @@ try {
   });
   assert.equal(adminResponse.status, 200);
   const adminCookie = cookieValue(adminResponse, "xyj_admin");
+
+  // 说明不是必填字段：各类板块允许省略、填写后清空，名称仍然必须填写。
+  for (const [path, payload] of [
+    ["/api/admin/sections", { name: "无说明文章板块", kind: "content", visibility: "public" }],
+    ["/api/admin/sections", { name: "无说明图片板块", kind: "gallery", visibility: "public" }],
+    ["/api/admin/subsections", { name: "无说明小板块", sectionId: "section-photos", visibility: "public" }],
+  ]) {
+    const headers = { Cookie: adminCookie, "Content-Type": "application/json" };
+    const created = await request(path, { method: "POST", headers, body: JSON.stringify(payload) });
+    assert.equal(created.status, 200, `${path} must accept an omitted description`);
+    const { id } = await created.json();
+    const list = await request(path, { headers });
+    assert.equal((await list.json()).find((item) => item.id === id)?.description, "");
+    for (const description of ["暂时填写的说明", "", "   "]) {
+      const saved = await request(`${path}/${id}`, {
+        method: "PUT", headers, body: JSON.stringify({ ...payload, description }),
+      });
+      assert.equal(saved.status, 200, `${path} must allow clearing a saved description`);
+      const savedList = await request(path, { headers });
+      assert.equal((await savedList.json()).find((item) => item.id === id)?.description, description.trim());
+    }
+    const missingName = await request(path, {
+      method: "POST", headers, body: JSON.stringify({ ...payload, name: "" }),
+    });
+    assert.equal(missingName.status, 400, "making the description optional must not make the name optional");
+  }
 
   const photoForm = new FormData();
   photoForm.append("file", new File([new Uint8Array([137, 80, 78, 71])], "subsection-photo.png", { type: "image/png" }));

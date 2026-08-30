@@ -14,7 +14,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="星月集">
-  <meta name="theme-color" content="#f6efe4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111b21" media="(prefers-color-scheme: dark)">
   <script src="/pwa.js"></script>
   <script src="/theme.js"></script>
@@ -431,7 +431,7 @@
             <div class="form-grid">
               <div class="field"><label>板块名称</label><input id="section-name" maxlength="80" required placeholder="例如 随笔"></div>
               <div class="field"><label>板块类型</label><select id="section-kind"><option value="content">文章类</option><option value="gallery">图片类</option><option value="resources" disabled>文件资源类（固定）</option></select></div>
-              <div class="field wide"><label>板块说明</label><input id="section-description" maxlength="500"></div>
+              <div class="field wide"><label for="section-description">板块说明（选填）</label><input id="section-description" maxlength="500" placeholder="可留空"></div>
               <div class="field"><label>排序（数字越小越靠前）</label><input id="section-sort" type="number" value="0"></div>
               <div class="field"><label>访问权限</label><select id="section-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="section-user-picker" class="audience-picker hidden"></div></div>
               <label class="checkbox-field"><input id="section-show-all" type="checkbox" checked>显示“全部”小板块</label>
@@ -452,7 +452,7 @@
               <div class="field"><label>排序</label><input id="subsection-sort" type="number" value="0"></div>
               <div class="field"><label>访问权限</label><select id="subsection-visibility"><option value="public">公开</option><option value="member">仅审核用户</option><option value="selected">仅指定用户</option><option value="excluded">不给指定用户看</option><option value="private">仅本人可见</option></select><div id="subsection-user-picker" class="audience-picker hidden"></div></div>
               <div class="field"><label>小板块文件下载权限</label><select id="subsection-download-policy"><option value="public">游客可下载其中允许公开下载的文件</option><option value="member">仅审核用户可下载</option></select><small>这是小板块总开关；设为“仅审核用户”后，即使单个文件允许游客下载，游客也不能下载。</small></div>
-              <div class="field wide"><label>说明</label><input id="subsection-description" maxlength="500"></div>
+              <div class="field wide"><label for="subsection-description">小板块说明（选填）</label><input id="subsection-description" maxlength="500" placeholder="可留空"></div>
             </div>
             <div class="actions"><button class="btn" type="submit">保存小板块</button><button id="delete-subsection" class="btn danger hidden" type="button">删除</button><span id="subsection-notice" class="status"></span></div>
           </form>
@@ -2114,7 +2114,7 @@
       const picker=document.getElementById("media-user-picker");
       picker.classList.toggle("hidden",!visibilityUsesAudience(document.getElementById("media-visibility").value));
     });
-    document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新图片小板块名称");if(!name)return;const description=prompt("小板块说明")||"";const parent=app.sections.find(item=>item.id===sectionId);const choice=await openVisibilityEditor(`设置小板块“${name}”的权限`,parent?.visibility||"public",parent?.allowed_user_ids||[]);if(!choice)return;await api("/api/admin/subsections",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId,...choice})});await loadSubsections();renderAlbums()});
+    document.getElementById("add-album").addEventListener("click",async()=>{const sectionId=document.getElementById("media-section").value;if(!sectionId){alert("请先新建一个图片类大板块");return}const name=prompt("新图片小板块名称");if(!name)return;const description=prompt("小板块说明（选填，可留空）")||"";const parent=app.sections.find(item=>item.id===sectionId);const choice=await openVisibilityEditor(`设置小板块“${name}”的权限`,parent?.visibility||"public",parent?.allowed_user_ids||[]);if(!choice)return;await api("/api/admin/subsections",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,description,sectionId,...choice})});await loadSubsections();renderAlbums()});
     document.getElementById("media-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       // currentTarget 只在事件派发期间可靠；异步压缩/上传后它可能已变为 null。

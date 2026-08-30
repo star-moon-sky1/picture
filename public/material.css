@@ -5,7 +5,8 @@
  * 边缘的光学高光和折射遮罩中，不再作为页面或按钮的彩色填充。
  */
 :root {
-  --xyj-page-cream: #f6efe4;
+  --xyj-page-cream: #ffffff;
+  --xyj-sidebar-light: rgba(232, 232, 232, .88);
   --xyj-night-page: #111b21;
   --xyj-blue: #0f6baa;
   --xyj-teal: #246f84;
@@ -77,11 +78,13 @@
   --xyj-glass-line: rgba(205, 238, 239, .20);
 }
 
-/* 页面大底：白天为纯米白，夜览为单一深蓝黑，不使用环境渐变。 */
+/* 页面大底：白天为纯白，夜览为单一深蓝黑，不使用环境渐变。 */
+:root[data-theme="light"],
 :root[data-theme="light"] :is(body, .app-shell, .main, .content-section, .workspace, .login-shell) {
   background-color: var(--xyj-page-cream) !important;
   background-image: none !important;
 }
+:root[data-theme="dark"],
 :root[data-theme="dark"] :is(body, .app-shell, .main, .content-section, .workspace, .login-shell) {
   background-color: var(--xyj-night-page) !important;
   background-image: none !important;
@@ -98,7 +101,7 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(223, 215, 201, .72) !important;
+  background-color: var(--xyj-sidebar-light) !important;
   background-image: none !important;
   border-color: rgba(255, 255, 255, .58) !important;
   box-shadow:
@@ -120,13 +123,17 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background-color: rgba(27, 67, 73, .95) !important;
+  color: var(--ink);
+  background-color: var(--xyj-sidebar-light) !important;
   background-image: none !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.16);
   backdrop-filter: blur(24px) saturate(1.16);
 }
 :root[data-theme="dark"] .studio .side {
   background-color: rgba(17, 39, 45, .96) !important;
+}
+.studio .side :is(.side-brand small, .side-nav-group-title) {
+  color: var(--muted);
 }
 .sidebar::before,
 .studio .side::before {
@@ -607,6 +614,7 @@
 :root[data-theme="light"] :is(
   .app-shell .main,
   .sidebar,
+  .studio .side,
   .entry-card,
   .auth-card,
   .login-card,
@@ -617,6 +625,7 @@
 :root[data-theme="dark"] :is(
   .app-shell .main,
   .sidebar,
+  .studio .side,
   .entry-card,
   .auth-card,
   .login-card,
@@ -624,7 +633,7 @@
   body > .shell,
   dialog:not(.image-dialog)
 ) :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #f4f7f7 !important; }
-:is(.studio .side, .image-dialog) :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #fff !important; }
+.image-dialog :is(h1, h2, h3, h4, h5, h6, .section-title) { color: #fff !important; }
 
 /* ========================= 夜览模式滑动开关 ========================= */
 .night-mode-control {
@@ -1494,6 +1503,49 @@
     opacity: 1 !important;
   }
   .app-shell.sidebar-collapsed #sidebar-toggle::before { content: "▼" !important; }
+}
+
+/* 照片查看器始终是暗底，与页面当前主题无关。这里用查看器 ID 加作用域
+   权重覆盖通用玻璃按钮（包括多重 :not 状态选择器），避免白字再次被
+   日间深色字覆盖。按压时也限制高光亮度，保持文字与玻璃底的对比度。 */
+#image-dialog :is(#xyj-photo-control-specificity, button, a.btn) {
+  color: #fff !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .86) !important;
+}
+#image-dialog :is(#xyj-photo-control-specificity, button, a.btn) :is(span, strong, small) {
+  color: inherit !important;
+  text-shadow: inherit !important;
+}
+#image-dialog :is(#xyj-photo-control-specificity, button, a.btn):is(.active, .selected, .is-selected, [aria-selected="true"], [aria-pressed="true"], [aria-current="page"]):not(.is-control-pressed):not(.control-bounce-release) {
+  color: #172a32 !important;
+  background-color: #fff !important;
+  background-image: none !important;
+  text-shadow: none !important;
+}
+#image-dialog :is(#xyj-photo-control-specificity, button, a.btn):is(.is-control-pressed, .control-bounce-release) {
+  color: #fff !important;
+  background-color: rgba(0, 0, 0, .10) !important;
+  background-image: linear-gradient(104deg, transparent 18%, rgba(255,255,255,.16) 46%, transparent 72%) !important;
+}
+#image-dialog :is(#xyj-photo-control-specificity, button, a.btn):disabled {
+  opacity: .75 !important;
+}
+/* 左右切换键叠在照片上：深色中性玻璃保证白色照片上也能看清白箭头，
+   不修改 transform，因此仍固定在图片左右两侧的垂直中心。 */
+#image-dialog :is(#xyj-photo-control-specificity, .image-nav) {
+  background-color: rgba(0, 0, 0, .62) !important;
+  background-image: none !important;
+  opacity: 1;
+}
+#image-dialog :is(#xyj-photo-control-specificity, .image-nav):active {
+  background-color: rgba(0, 0, 0, .58) !important;
+}
+#image-dialog #image-boundary-notice {
+  background-color: rgba(0, 0, 0, .72);
+}
+#image-dialog :is(#image-zoom-level, #image-caption, #image-boundary-message) {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .86);
 }
 
 @media (prefers-reduced-motion: reduce) {

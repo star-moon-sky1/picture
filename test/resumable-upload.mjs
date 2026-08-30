@@ -6,6 +6,7 @@ const maxFileBytes = 100 * 1024 * 1024 * 1024;
 const expectedPartBytes = 64 * 1024 * 1024;
 const miniflare = new Miniflare({
   modules: true,
+  cf: false, // Keep upload regression tests independent of external environment metadata.
   scriptPath: "src/worker.js",
   compatibilityDate: "2026-08-06",
   d1Databases: ["DB"],

@@ -9,6 +9,8 @@ const vnext = await readFile(new URL("public/vnext.css", root), "utf8");
 const deepseekWhale = await readFile(new URL("public/deepseek-whale.svg", root), "utf8");
 const envelope = await readFile(new URL("public/envelope-line.svg", root), "utf8");
 const bell = await readFile(new URL("public/bell-line.svg", root), "utf8");
+const documentViewer = await readFile(new URL("public/document-viewer.html", root), "utf8");
+const manifest = JSON.parse(await readFile(new URL("public/manifest.webmanifest", root), "utf8"));
 const pages = await Promise.all([
   "public/index.html",
   "public/login.html",
@@ -17,7 +19,12 @@ const pages = await Promise.all([
 
 assert.match(css, /--xyj-motion-rebound:\s*\.74s/);
 assert.match(css, /--xyj-motion-settle:\s*\.64s/);
-assert.match(css, /--xyj-page-cream:\s*#f6efe4/);
+assert.match(css, /--xyj-page-cream:\s*#ffffff/);
+assert.equal(manifest.background_color, "#ffffff", "installed app launch background must match the white page");
+assert.equal(manifest.theme_color, "#ffffff", "installed app chrome must match the white daytime theme");
+assert.match(documentViewer, /href="\/vnext\.css"[\s\S]*href="\/material\.css"/, "document previews must load the final theme after older styles");
+assert.match(css, /:root\[data-theme="light"\],\s*:root\[data-theme="light"\] :is\(body,[\s\S]*?background-color:\s*var\(--xyj-page-cream\)\s*!important/);
+assert.match(css, /:root\[data-theme="dark"\],\s*:root\[data-theme="dark"\] :is\(body,[\s\S]*?background-color:\s*var\(--xyj-night-page\)\s*!important/, "white daytime must preserve dark-mode backgrounds");
 assert.match(css, /background-image:\s*none\s*!important/);
 assert.match(css, /--xyj-frost-grain-opacity:\s*\.40/);
 assert.match(css, /feTurbulence/);
@@ -34,7 +41,9 @@ for (const color of ["--xyj-blue", "--xyj-teal", "--xyj-amber", "--xyj-coral", "
 assert.match(css, /--xyj-blue:\s*#0f6baa/);
 assert.match(css, /--xyj-teal:\s*#246f84/);
 assert.match(css, /--xyj-coral:\s*#a9454f/);
-assert.match(css, /\.sidebar\s*\{[\s\S]*?background-color:\s*rgba\(223, 215, 201, \.72\)/);
+assert.match(css, /--xyj-sidebar-light:\s*rgba\(232, 232, 232, \.88\)/);
+assert.match(css, /\.sidebar\s*\{[\s\S]*?background-color:\s*var\(--xyj-sidebar-light\)/);
+assert.match(css, /\.studio \.side\s*\{[\s\S]*?background-color:\s*var\(--xyj-sidebar-light\)/);
 assert.doesNotMatch(css, /background-color:\s*rgba\(76, 147, 184, \.72\)/);
 assert.match(css, /background-color:\s*rgba\(15, 78, 116, \.88\)/);
 assert.doesNotMatch(css, /--xyj-(?:violet|green)|rgba\(109,\s*80,\s*189|rgba\(0,\s*105,\s*99/);
@@ -56,6 +65,16 @@ assert.match(css.slice(neutralControlLayer), /\.sidebar \.nav-label[\s\S]*?font-
 const mobileControlLayer = css.indexOf("手机入口、统一圆角与二级控件精修");
 assert.ok(mobileControlLayer > neutralControlLayer, "mobile and subsection refinements must override the canonical control layer");
 const mobileControlCss = css.slice(mobileControlLayer);
+const photoControlCss = css.slice(css.indexOf("照片查看器始终是暗底"));
+assert.ok(photoControlCss.length > 0 && photoControlCss.length < css.length);
+assert.match(photoControlCss, /#image-dialog :is\(#xyj-photo-control-specificity, button, a\.btn\)\s*\{\s*color:\s*#fff\s*!important/);
+assert.match(photoControlCss, /:is\(\.is-control-pressed, \.control-bounce-release\)\s*\{\s*color:\s*#fff\s*!important/);
+assert.match(photoControlCss, /background-color:\s*#fff\s*!important/);
+assert.match(photoControlCss, /color:\s*#172a32\s*!important/);
+assert.match(photoControlCss, /:disabled\s*\{\s*opacity:\s*\.75\s*!important/);
+assert.match(photoControlCss, /\.image-nav\)\s*\{\s*background-color:\s*rgba\(0, 0, 0, \.62\)\s*!important/);
+assert.match(photoControlCss, /#image-boundary-notice\s*\{\s*background-color:\s*rgba\(0, 0, 0, \.72\)/);
+assert.doesNotMatch(photoControlCss, /transform\s*:/, "photo navigation must keep its original vertical centering");
 assert.match(mobileControlCss, /--xyj-login-control-radius:\s*999px/);
 assert.match(mobileControlCss, /\.entry-card \.entry-field input[\s\S]*?\.sidebar \.nav button[\s\S]*?#portfolio \.tab-button[\s\S]*?border-radius:\s*var\(--xyj-login-control-radius\)\s*!important/);
 assert.match(mobileControlCss, /#notification-bell\s*\{[\s\S]*?display:\s*grid;[\s\S]*?place-items:\s*center\s*!important;[\s\S]*?padding:\s*0\s*!important/);
@@ -170,6 +189,7 @@ for (const [path, html] of pages) {
   for (const source of inlineScripts) new Function(source);
 
   assert.match(html, /href="\/material\.css"/, `${path} must load the final material layer`);
+  assert.match(html, /name="theme-color" content="#ffffff" media="\(prefers-color-scheme: light\)"/);
   assert.match(html, /class="night-mode-control/, `${path} must expose the night-mode control`);
   assert.match(html, /role="switch" aria-checked="false"/, `${path} must use an accessible binary switch`);
   assert.match(html, /data-theme-switch-button/, `${path} must connect the switch to theme.js`);
