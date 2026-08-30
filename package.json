@@ -12,7 +12,8 @@
     "test:glass": "node test/glass-motion.mjs",
     "test:i18n": "node test/i18n.mjs",
     "test:organize": "node test/content-organize.mjs && node test/organize-ui.mjs",
-    "test": "npm run test:studio && npm run test:glass && npm run test:i18n && npm run test:access && npm run test:upload && npm run test:organize",
+    "test:background": "node test/entry-background.mjs && node test/entry-background-ui.mjs",
+    "test": "npm run test:studio && npm run test:glass && npm run test:i18n && npm run test:access && npm run test:upload && npm run test:organize && npm run test:background",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {

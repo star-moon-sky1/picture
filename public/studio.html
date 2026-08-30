@@ -347,6 +347,7 @@
   <link rel="stylesheet" href="/vnext.css">
   <link rel="stylesheet" href="/material.css">
   <link rel="stylesheet" href="/organize.css">
+  <link rel="stylesheet" href="/studio-background.css">
 </head>
 <body>
   <!-- ==================== 后台登录界面 ==================== -->
@@ -689,6 +690,45 @@
 
       <!-- ==================== 网站公开资料设置 ==================== -->
       <section id="view-settings" class="view">
+        <form id="entry-background-form" class="panel entry-background-settings" aria-labelledby="entry-background-heading">
+          <h2 id="entry-background-heading">登录／注册背景轮播</h2>
+          <p class="status">登录页和注册页共用以下范围。这里只展示公开、未上锁且有预览的照片；选择背景不会改变照片或板块的权限。</p>
+          <fieldset id="entry-background-controls" disabled>
+            <div class="field">
+              <label for="entry-background-mode">轮播图片范围</label>
+              <select id="entry-background-mode">
+                <option value="all">全部可用公开照片（默认）</option>
+                <option value="sections">按大板块／小板块／小小板块选择</option>
+                <option value="photos">逐张选择照片</option>
+                <option value="off">关闭图片轮播，使用纯色背景</option>
+              </select>
+              <small>按范围取最新的最多 40 张照片；只选一张时固定显示。未选中照片或范围内没有可用照片时使用纯色背景。</small>
+            </div>
+            <div id="entry-background-section-panel" hidden>
+              <p class="status">可以多选。勾选上级板块会包含它的全部下级板块；今后在该范围内新增的公开照片也会自动加入。</p>
+              <div id="entry-background-sections" class="entry-background-sections" role="group" aria-label="选择轮播来源板块"></div>
+            </div>
+            <div id="entry-background-photo-panel" hidden>
+              <div class="entry-background-filters">
+                <div class="field"><label for="entry-background-filter">筛选所属板块</label><select id="entry-background-filter"><option value="">所有板块</option></select></div>
+                <div class="field"><label for="entry-background-search">查找照片</label><input id="entry-background-search" type="search" placeholder="按照片名或文件名查找" maxlength="160"></div>
+              </div>
+              <p class="status">点击缩略图或复选框即可多选，最多 40 张；筛选只影响当前列表，不会清除已选照片。</p>
+              <div id="entry-background-photos" class="entry-background-photos" role="group" aria-label="选择轮播照片"></div>
+              <button id="entry-background-more" class="btn small ghost" type="button" hidden>显示更多照片</button>
+            </div>
+            <div id="entry-background-unavailable" class="entry-background-unavailable" hidden>
+              <p id="entry-background-unavailable-text" class="status"></p>
+              <button id="entry-background-clear-unavailable" class="btn small ghost" type="button">清除不可用选择</button>
+            </div>
+            <p id="entry-background-summary" class="status" aria-live="polite"></p>
+            <div class="actions">
+              <button id="entry-background-save" class="btn" type="submit">保存背景轮播</button>
+              <button id="entry-background-clear" class="btn ghost" type="button" hidden>清空当前选择</button>
+            </div>
+          </fieldset>
+          <div class="actions"><button id="entry-background-refresh" class="btn small ghost" type="button">刷新图片列表</button><span id="entry-background-notice" class="status" role="status" aria-live="polite">打开网站设置后加载。</span></div>
+        </form>
         <form id="settings-form" class="panel" style="margin-top:0;max-width:760px">
           <div class="form-grid">
             <div class="field"><label>网站名称</label><input id="setting-site-title" maxlength="80"></div>
@@ -745,6 +785,7 @@
 
   <!-- 后台 JavaScript：登录验证、读取数据、保存内容和上传图片。 -->
   <script src="/studio-organize.js"></script>
+  <script src="/studio-background.js"></script>
   <script>
     const app = {
       sections: [], subsections: [], content: [], changelogs: [], albums: [], media: [], assetFolders: [], assets: [], comments: [], feedback: [], guestAnalytics: null,
@@ -764,7 +805,7 @@
       messages:["用户私信","使用绑定的站长账号查看和发送站内私信。"],
       visitors:["游客统计","按日查看游客数量、页面访问、脱敏 IP、大致地区和设备信息。"],
       users:["用户与审核","审核注册申请、查看在线状态与登录痕迹、处理密码重置。"],
-      settings:["网站设置","修改主页公开资料、本站使用说明和左下角版本号。"],
+      settings:["网站设置","选择登录／注册背景，修改主页公开资料和本站使用说明。"],
     };
 
     // 所有板块与文件共用同一套五级权限名称。
@@ -1033,6 +1074,7 @@
       document.querySelectorAll(".side-nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===name));
       document.getElementById("view-title").textContent=viewInfo[name][0];document.getElementById("view-desc").textContent=viewInfo[name][1];
       if(name==="messages")loadStudioMessages().catch(error=>{document.getElementById("studio-message-title").textContent=error.message});
+      if(name==="settings")loadEntryBackgroundSettings();
     }
 
     async function loadAll(){
@@ -2257,7 +2299,7 @@
 
     // 用户在线状态每60秒更新一次；未登录后台时不会发起刷新请求。
     window.setInterval(()=>{if(!document.getElementById("studio").classList.contains("hidden"))loadUsers().catch(()=>null)},60_000);
-    initializePhotoManagement();resetSectionForm();resetSubsectionForm();resetContentForm();resetChangelog();checkSession();
+    initializePhotoManagement();initializeEntryBackgroundSettings();resetSectionForm();resetSubsectionForm();resetContentForm();resetChangelog();checkSession();
   </script>
   <script src="/experience.js"></script>
 </body>

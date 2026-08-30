@@ -5,6 +5,8 @@
  * 部署版本可通过 /api/health 查看，排查 Cloudflare 是否已更新。
  */
 import { initializeContentSecurity, createContentSecurity, SECURITY_TABLES } from "./content-security.mjs";
+import { ENTRY_BACKGROUND_SETTING, normalizeEntryBackgroundConfig, readEntryBackgroundConfig,
+  entryBackgroundPhotos, entryBackgroundChoices, entryBackgroundSelectionAvailable } from "./entry-background.mjs";
 
 const APP_VERSION = "2.2.0.0";
 const DEFAULT_CANONICAL_HOSTNAME = "xingyueji.com.cn";
@@ -2070,23 +2072,10 @@ async function publicBootstrap(request, env) {
  * 它只返回公开照片的背景展示地址，不返回标题、说明、文章或下载地址。
  */
 async function publicEntryBackground(env) {
-  const result = await env.DB.prepare(`
-    SELECT m.id, m.updated_at, m.created_at
-    FROM media m JOIN portfolio_sections s ON s.id = m.section_id
-    LEFT JOIN portfolio_subsections ss ON ss.id = m.subsection_id
-    LEFT JOIN albums a ON a.id = m.album_id
-    WHERE m.kind = 'photo' AND m.visibility = 'public' AND s.visibility = 'public'
-      AND (m.subsection_id IS NULL OR ss.visibility = 'public')
-      AND (m.album_id IS NULL OR a.visibility = 'public')
-      AND NOT EXISTS (SELECT 1 FROM content_locks l WHERE l.enabled=1 AND
-        ((l.target_kind='media' AND l.target_id=m.id) OR (l.target_kind='section' AND l.target_id=m.section_id)
-        OR (l.target_kind='subsection' AND (l.target_id=m.subsection_id OR l.target_id=ss.parent_id))))
-      AND (ss.parent_id IS NULL OR EXISTS (SELECT 1 FROM portfolio_subsections parent WHERE parent.id=ss.parent_id AND parent.visibility='public'))
-    ORDER BY m.created_at DESC
-    LIMIT 40
-  `).all();
+  const { config } = await readEntryBackgroundConfig(env);
+  const photos = await entryBackgroundPhotos(env, config);
   return {
-    photos: rows(result).map((item) => ({
+    photos: photos.map((item) => ({
       // 背景与照片共用预览和权限校验，不通过背景入口暴露原片。
       url: `/media/${item.id}?background=1&v=${encodeURIComponent(String(item.updated_at || item.created_at || "1"))}`,
     })),
@@ -4155,6 +4144,14 @@ async function serveMedia(request, env, id) {
     .map(normalizedVisibility);
   const isProtected = modes.some((mode) => mode !== "public");
   if (isPublicBackground && isProtected) throw new HttpError(404, "图片不存在");
+  if (isPublicBackground) {
+    const { config } = await readEntryBackgroundConfig(env);
+    // Recheck the scope and public ancestors on every image request, including
+    // old carousel URLs. Admin/member sessions and redeemed locks cannot widen it.
+    if (wantsDownload || !(await entryBackgroundPhotos(env, config, { id, limit: 1 })).length) {
+      throw new HttpError(404, "图片不在当前背景轮播范围内");
+    }
+  }
   const context = await websiteAccessContext(request, env);
   const layers = [
     ["section", media.section_id, media.section_visibility],
@@ -6050,6 +6047,23 @@ async function adminSettingsObject(env) {
   return settings;
 }
 
+async function adminEntryBackground(request, env) {
+  if (request.method === "GET") return entryBackgroundChoices(env);
+  if (request.method !== "PUT") throw new HttpError(405, "不支持的请求方法");
+  const input = await readJson(request);
+  let config;
+  try { config = normalizeEntryBackgroundConfig(input); }
+  catch (error) { throw new HttpError(400, error.message); }
+  const choices = await entryBackgroundChoices(env);
+  if (!entryBackgroundSelectionAvailable(config, choices)) {
+    throw new HttpError(409, "部分选择已不可用，请刷新图片列表并清除不可用选择后再保存；仅能选择公开、未上锁且有预览的照片及公开板块");
+  }
+  await env.DB.prepare(`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .bind(ENTRY_BACKGROUND_SETTING, JSON.stringify(config), nowIso()).run();
+  return { ...choices, config, invalidConfig: false };
+}
+
 async function adminSettings(request, env) {
   if (request.method === "GET") return adminSettingsObject(env);
   if (request.method === "PUT") {
@@ -6429,6 +6443,7 @@ async function handleAdmin(request, env, url) {
   if (resource === "guest-analytics") return adminGuestAnalytics(request, env, url);
   if (resource === "messages") return adminMessages(request, env, id);
   if (resource === "settings") return adminSettings(request, env);
+  if (resource === "entry-background" && !id) return adminEntryBackground(request, env);
   throw new HttpError(404, "后台接口不存在");
 }
 

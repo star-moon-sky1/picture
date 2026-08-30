@@ -53,6 +53,7 @@ const subsections = [
 const studioHtml = await readFile("public/studio.html", "utf8");
 const studio = domContext(studioHtml);
 studio.run(await readFile("public/studio-organize.js", "utf8"));
+studio.run(await readFile("public/studio-background.js", "utf8"));
 const main = [...studioHtml.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
   .map(match => match[1]).find(source => source.includes("const app ="));
 assert.ok(main);
