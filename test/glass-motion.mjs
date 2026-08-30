@@ -88,6 +88,33 @@ assert.match(mobileControlCss, /#xyj-main-content-control-specificity[\s\S]*?\.a
 assert.match(mobileControlCss, /#xyj-content-frame-radius-specificity[\s\S]*?\.app-shell \.main \.usage-guide[\s\S]*?dialog \.reader-wrap[\s\S]*?border-radius:\s*var\(--xyj-content-radius\)\s*!important/);
 assert.match(mobileControlCss, /#xyj-chatgpt-reading-specificity[\s\S]*?#usage-guide-content[\s\S]*?\.timeline-item p[\s\S]*?\.reader-body[\s\S]*?font-family:\s*var\(--xyj-chatgpt-reading-font\)\s*!important/);
 assert.match(mobileControlCss, /#notification-dialog[\s\S]*?font-family:\s*var\(--font-kai\)\s*!important/);
+const tabSizingStart = css.indexOf("个人空间按钮尺寸层级");
+const tabSizingEnd = css.indexOf("/* 通知信箱", tabSizingStart);
+assert.ok(tabSizingStart > mobileControlLayer && tabSizingEnd > tabSizingStart);
+const tabSizingCss = css.slice(tabSizingStart, tabSizingEnd);
+const topLevelSize = tabSizingCss.match(/#portfolio #portfolio-tabs > \.tab-button\s*\{([^}]+)\}/)?.[1];
+const subsectionSize = tabSizingCss.match(/#portfolio #portfolio-panel-host :is\(\.portfolio-subtabs, \.album-tabs\) > \.tab-button\s*\{([^}]+)\}/)?.[1];
+assert.ok(topLevelSize && subsectionSize, "all subsection types must have a distinct size from top-level sections");
+const numericProperty = (declarations, property) => Number(declarations.match(new RegExp(`${property}:\\s*([\\d.]+)`))?.[1]);
+for (const property of ["min-height", "font-size"]) {
+  assert.ok(numericProperty(subsectionSize, property) < numericProperty(topLevelSize, property), `${property} must be smaller for subsections`);
+}
+const paddingValues = (declarations) => declarations.match(/padding:\s*([\d.]+)px\s+([\d.]+)px/)?.slice(1).map(Number);
+const primaryPadding = paddingValues(topLevelSize);
+const secondaryPadding = paddingValues(subsectionSize);
+assert.ok(primaryPadding && secondaryPadding);
+assert.ok(secondaryPadding.every((value, index) => value < primaryPadding[index]), "subsection padding must be smaller on both axes");
+const touchSizing = tabSizingCss.slice(tabSizingCss.indexOf("@media (pointer: coarse)"));
+const touchHeights = [...touchSizing.matchAll(/min-height:\s*(\d+)px/g)].map((match) => Number(match[1]));
+assert.equal(touchHeights.length, 2);
+assert.ok(touchHeights[1] >= 44 && touchHeights[1] < touchHeights[0], "touch targets must remain usable while preserving the size hierarchy");
+assert.doesNotMatch(tabSizingCss, /(?:font-family|border-radius|background|color|transform|transition|animation)\s*:/, "tab sizing must preserve the existing glass appearance and rebound");
+const publicIndex = pages.find(([path]) => path === "public/index.html")[1];
+const resourceSection = publicIndex.match(/<section id="resources"[^>]*>[\s\S]*?<\/section>/)?.[0];
+assert.ok(resourceSection, "file resources must remain available");
+assert.match(resourceSection, /<h1>文件资源<\/h1>\s*<div class="resource-toolbar">/);
+assert.doesNotMatch(resourceSection, /class="section-desc"/, "the resource intro must be absent even when the panel moves into personal space");
+assert.match(resourceSection, /id="resource-grid"/);
 assert.match(mobileControlCss, /#entry-screen\s*\{[\s\S]*?overflow-y:\s*auto\s*!important/);
 assert.match(mobileControlCss, /#entry-screen \.entry-card\s*\{[\s\S]*?max-height:\s*none\s*!important/);
 assert.match(mobileControlCss, /#entry-screen \.entry-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)\s*!important/);

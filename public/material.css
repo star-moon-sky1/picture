@@ -1370,6 +1370,26 @@
     inset 0 -2px 3px rgba(0,0,0,.34) !important;
 }
 
+/* 个人空间按钮尺寸层级：文章、图片和文件资源的小板块统一更紧凑。
+   这里只调整字号与留白，字体、圆角、玻璃层和回弹继续沿用共同样式。 */
+#portfolio #portfolio-tabs > .tab-button {
+  min-height: 46px;
+  padding: 10px 18px;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+#portfolio #portfolio-panel-host :is(.portfolio-subtabs, .album-tabs) > .tab-button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: .875rem;
+  line-height: 1.4;
+}
+/* 触屏保留至少 44px 的点击高度，大板块仍高于小板块。 */
+@media (pointer: coarse) {
+  #portfolio #portfolio-tabs > .tab-button { min-height: 52px; }
+  #portfolio #portfolio-panel-host :is(.portfolio-subtabs, .album-tabs) > .tab-button { min-height: 44px; }
+}
+
 /* 通知信箱由脚本在页面载入后创建，因此按对话框作用域统一其按钮文字。 */
 #notification-dialog :is(button, .btn, .tab-button, .message-contact),
 #notification-dialog :is(button, .btn, .tab-button, .message-contact) :is(span, strong, small) {
